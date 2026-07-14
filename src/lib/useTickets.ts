@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Ticket } from '../board-data';
+import { isConfigured } from './supabase';
 import {
   createTicket, deleteTicket, findOrCreateCustomer, listTickets, subscribeToTickets, updateTicket,
 } from './db';
@@ -27,6 +28,8 @@ export function useTickets() {
   }, []);
 
   useEffect(() => {
+    if (!isConfigured) { setLoading(false); return; }   // App shows the setup screen instead
+
     let alive = true;
 
     refetch()

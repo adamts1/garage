@@ -3,8 +3,10 @@ import Board from './Board';
 import CustomersPage from './CustomersPage';
 import ItemsPage from './ItemsPage';
 import ReportsPage from './ReportsPage';
+import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
+import { isConfigured } from './lib/supabase';
 import { useTickets } from './lib/useTickets';
 import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from './catalog';
 import { IconBoard, IconCar, IconCustomers, IconParts, IconPin, IconReports, IconTickets } from './icons';
@@ -201,7 +203,9 @@ function App() {
         <section className="panel">
           {error && <div className="db-error">שגיאת Supabase: {error}</div>}
 
-          {loading ? (
+          {!isConfigured ? (
+            <SetupNotice />
+          ) : loading ? (
             <div className="db-loading">טוען נתונים מ‑Supabase…</div>
           ) : showForm ? (
             <form
