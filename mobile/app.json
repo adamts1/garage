@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "מוסך",
+    "slug": "garage-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.adam-tsityat.garage-mobile",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "garage",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "561269a8-1e84-41a9-9ebd-a9cb496afbee"
+      }
+    },
+    "owner": "adam-tsityat"
+  }
+}
