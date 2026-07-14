@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+# secrets — never commit; .env.local.example is the template
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+*.log
