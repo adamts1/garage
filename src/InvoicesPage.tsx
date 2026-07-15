@@ -42,10 +42,10 @@ export interface Invoice {
 }
 
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400000);
-const fmt = (d?: Date) => (d ? d.toLocaleDateString('he-IL') : '—');
+const fmt = (d?: Date) => (d ? d.toLocaleDateString('he-IL') : '-');
 
 /**
- * An invoice is a *view* of a billed ticket — CloseTicketDrawer is what stamps
+ * An invoice is a *view* of a billed ticket - CloseTicketDrawer is what stamps
  * doc / paid / payMethod / reference onto it. A ticket with no doc was never
  * billed, so it has no invoice.
  */
@@ -76,7 +76,7 @@ export function invoiceFrom(t: Ticket, now: Date): Invoice {
     customer: t.customer,
     car: t.car,
     plate: t.plate,
-    type: t.doc ?? '—',
+    type: t.doc ?? '-',
     status,
     issued,
     issuedLabel: fmt(issued),
@@ -247,7 +247,7 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
                     <td className="muted-cell">{i.type}</td>
                     <td><strong>{shekel(i.total)}</strong></td>
                     <td><StatusPill status={i.status} /></td>
-                    <td className="muted-cell">{i.method ?? '—'}</td>
+                    <td className="muted-cell">{i.method ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -281,9 +281,9 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
               <dt><IconClock /> תאריך הנפקה</dt><dd>{current.issuedLabel}</dd>
               <dt><IconClock /> תאריך פירעון</dt><dd>{current.dueLabel}</dd>
               <dt><IconCard /> אמצעי תשלום</dt>
-              <dd>{current.method ?? <span className="kv-empty">—</span>}</dd>
+              <dd>{current.method ?? <span className="kv-empty">-</span>}</dd>
               <dt><IconDoc /> אסמכתא</dt>
-              <dd>{current.reference ?? <span className="kv-empty">—</span>}</dd>
+              <dd>{current.reference ?? <span className="kv-empty">-</span>}</dd>
             </dl>
 
             <div className="sum inv-sum">

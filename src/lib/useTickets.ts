@@ -18,7 +18,7 @@ export function useTickets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const current = useRef<Ticket[]>([]);   // what we last showed — the base for the next diff
+  const current = useRef<Ticket[]>([]);   // what we last showed - the base for the next diff
   const writing = useRef(0);              // >0 while our own writes are in flight
 
   const refetch = useCallback(async () => {
@@ -36,7 +36,7 @@ export function useTickets() {
       .catch((e) => alive && setError(e.message ?? String(e)))
       .finally(() => alive && setLoading(false));
 
-    // someone else changed something — pull it in, unless we're mid-write ourselves
+    // someone else changed something - pull it in, unless we're mid-write ourselves
     const unsubscribe = subscribeToTickets(() => {
       if (writing.current === 0) void refetch().catch(() => {});
     });
@@ -64,7 +64,7 @@ export function useTickets() {
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
-      await refetch().catch(() => {});   // our optimistic state may be a lie now — resync
+      await refetch().catch(() => {});   // our optimistic state may be a lie now - resync
     } finally {
       writing.current--;
     }

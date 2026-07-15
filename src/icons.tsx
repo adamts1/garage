@@ -1,5 +1,5 @@
 /* Line icons drawn with currentColor, so they always match the colour of the
-   label beside them — including :hover and .active states. */
+   label beside them - including :hover and .active states. */
 
 const base = {
   width: 19,

@@ -4,11 +4,11 @@
     'Segoe UI', sans-serif;
 
   /* palette */
-  --ink: #0d1321;        /* darkest — text, sidebar base */
+  --ink: #0d1321;        /* darkest - text, sidebar base */
   --navy: #1d2d44;       /* sidebar, primary surfaces */
   --slate: #3e5c76;      /* primary action */
   --steel: #748cab;      /* muted text, borders, accents */
-  --sand: #f0ebd8;       /* cream — highlights, badges */
+  --sand: #f0ebd8;       /* cream - highlights, badges */
 
   /* semantic */
   --bg: #eae7dd;
@@ -24,7 +24,7 @@
   --muted-d: #52708f;
   --shadow: 0 10px 30px rgba(13, 19, 33, 0.08);
 
-  /* status — muted to sit inside the palette */
+  /* status - muted to sit inside the palette */
   --ok: #4f7a5b;
   --ok-soft: #e6ede6;
   --warn: #b58a3c;
@@ -614,7 +614,7 @@ tbody tr:hover {
   }
 }
 
-/* ===================== לוח בקרה — agile ticket board ===================== */
+/* ===================== לוח בקרה - agile ticket board ===================== */
 .jb-spacer { flex: 1; }
 
 .jb-bar {
@@ -1036,6 +1036,9 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 }
 .cell-input.code { width: 110px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
 .cell-input.wide { width: 100%; min-width: 180px; }
+.name-cell { display: flex; align-items: center; gap: 8px; }
+.name-cell .cell-input { flex: 1; min-width: 0; }
+.name-cell .badge-new { flex: none; margin-inline-start: 0; }
 .badge-new {
   display: inline-block;
   margin-inline-start: 8px;
@@ -1154,7 +1157,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 /* ===================== collapsible sidebar (hover to expand, pin to keep) ===================== */
 /* The sidebar stays IN the grid, so it and the content are siblings of equal height and the
    expanded panel pushes the content instead of covering it. It grows leftward (RTL), away from
-   the pointer, so the edge under the cursor never moves — that was the old flicker. */
+   the pointer, so the edge under the cursor never moves - that was the old flicker. */
 .app-shell {
   height: 100vh;
   align-items: stretch;
@@ -1216,7 +1219,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 
 
 /* ============================================================================
-   THEME — 0D1321 / 1D2D44 / 3E5C76 / 748CAB / F0EBD8
+   THEME - 0D1321 / 1D2D44 / 3E5C76 / 748CAB / F0EBD8
    Flat surfaces, thin borders, one accent. No gradients, no candy colors.
    ========================================================================= */
 
@@ -1230,7 +1233,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   padding: 22px 24px;
 }
 
-/* sidebar — solid ink, not a gradient */
+/* sidebar - solid ink, not a gradient */
 .sidebar {
   background: var(--ink);
   border-radius: 22px;
@@ -1273,7 +1276,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .footer-note { color: var(--steel); font-size: 12px; text-align: center; }
 .pin { color: var(--sand); }
 
-/* buttons — flat */
+/* buttons - flat */
 .btn { border-radius: 10px; padding: 10px 16px; font-size: 13.5px; }
 .btn.primary { background: var(--navy); color: var(--sand); }
 .btn.primary:hover:not(:disabled) { background: var(--slate); }
@@ -1301,7 +1304,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .jb-col.wip-over { background: var(--danger-soft); border-color: var(--danger); }
 .jb-wip { background: var(--danger-soft); color: var(--danger); }
 
-/* ticket card — flat, priority reads as a dot in the footer, not a stripe */
+/* ticket card - flat, priority reads as a dot in the footer, not a stripe */
 .tkt {
   border: 1px solid var(--border-soft);
   border-inline-start: 1px solid var(--border-soft);
@@ -1434,10 +1437,26 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .intake-form .stepper { margin-bottom: 14px; }
 .intake-form .stepper li { padding: 9px 14px; font-size: 13px; }
 .intake-form .form-actions { margin-top: 14px; }
-.intake-form .key-cell { display: flex; flex-direction: column; justify-content: flex-end; }
-.intake-form .key-cell .checkbox-label { height: 35px; white-space: nowrap; }
+.intake-form .key-cell { display: flex; flex-direction: column; }
+.intake-form .key-cell .checkbox-label {
+  height: 35px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  white-space: nowrap;
+  justify-content: flex-end;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.intake-form .key-cell .checkbox-label:hover { border-color: var(--primary); }
+.intake-form .key-cell .checkbox-label:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.intake-form .key-cell .checkbox-label input[type="checkbox"] { width: 18px; height: 18px; }
 
-/* ===================== step 2 — works & items (per mock) ===================== */
+/* ===================== step 2 - works & items (per mock) ===================== */
 .works-step { display: flex; flex-direction: column; gap: 16px; }
 
 .works-panel,
@@ -1747,7 +1766,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .intake-form .form-section .form-group input::placeholder,
 .intake-form .form-section .form-group select { color: var(--muted); }
 .intake-form .form-section .form-group select:valid { color: var(--text); }
-/* the wrapper is just a grid container — the frames live on the two cards */
+/* the wrapper is just a grid container - the frames live on the two cards */
 .works-wrap {
   background: transparent !important;
   border: none !important;
@@ -1939,7 +1958,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   position: relative;
   overflow: hidden;
 }
-/* one continuous track drawn on the container — a per-<li> connector would paint over the
+/* one continuous track drawn on the container - a per-<li> connector would paint over the
    previous step's circle, since each <li> makes its own stacking context. */
 .cd-steps::before,
 .cd-steps::after {
@@ -2091,7 +2110,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .cd-foot .btn { justify-content: center; padding: 13px; font-size: 14px; }
 .cd-next:disabled { background: var(--border); color: var(--steel); cursor: not-allowed; }
 
-/* WhatsApp — the one place a brand colour is warranted */
+/* WhatsApp - the one place a brand colour is warranted */
 .btn.whatsapp {
   background: #25d366;
   color: #fff;
@@ -2549,16 +2568,16 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 
 .setup-notice a { color: #3e5c76; font-weight: 600; }
 
-/* ==================== ticket page — polish pass ==================== */
+/* ==================== ticket page - polish pass ==================== */
 
 /* header sticks, so the step nav and back action stay reachable on a long ticket.
-   the scroll container is .main-content (22px/24px padding) — content scrolls up
+   the scroll container is .main-content (22px/24px padding) - content scrolls up
    *through* that padding, so the header must bleed over it and be fully opaque,
    or rows show above and through it. */
 .tp {
   --tp-head-h: 140px;      /* sticky header, incl. its 1px bottom border */
   --tp-row-gap: 16px;      /* the gap between .tp's children */
-  --tp-scroll-pad: 22px;   /* .main-content's padding-top — see .tp-head below */
+  --tp-scroll-pad: 22px;   /* .main-content's padding-top - see .tp-head below */
 }
 .tp-head {
   position: sticky;
@@ -2580,7 +2599,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 /* anchors clear the sticky header when a step is clicked */
 #tp-details, #tp-works, #tp-summary { scroll-margin-top: calc(var(--tp-head-h) + 12px); }
 
-/* status badge takes its colour from the board column, so 'חסום — חלקים'
+/* status badge takes its colour from the board column, so 'חסום - חלקים'
    no longer wears the same amber as 'בעבודה' */
 .tp-status {
   display: inline-flex;
@@ -2600,7 +2619,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .tp-sub { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .tp-sep { color: var(--border); }
 
-/* summary rail pins directly under the header — 116px was shorter than the
+/* summary rail pins directly under the header - 116px was shorter than the
    header itself, so it slid underneath */
 /* The rail must pin exactly where it already rests, or it visibly jumps once
    before locking. Its resting offset from the scrollport top is:
@@ -2672,17 +2691,17 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .works-table td, .works-table th { text-align: right; }
 .works-table td strong { font-variant-numeric: tabular-nums; }
 
-/* side-by-side gave each 6-column table ~400px — the job name was down to 'א...'.
+/* side-by-side gave each 6-column table ~400px - the job name was down to 'א...'.
    stacked full-width (as in the mock) the name column gets ~530px, and the
    selected work now sits directly above the parts it owns */
 .ws-grid { grid-template-columns: 1fr; }
 
 /* auto layout treats the th widths as hints, so a long job name starved the
-   numeric columns down to empty boxes — fixed layout makes the widths binding */
+   numeric columns down to empty boxes - fixed layout makes the widths binding */
 .works-table { table-layout: fixed; }
 
 /* inputs carry a default intrinsic width (~177px) that blew out the columns and
-   crushed the name field down to 'אבח' — make them fill their cell instead */
+   crushed the name field down to 'אבח' - make them fill their cell instead */
 .works-table .cell-input {
   width: 100%;
   min-width: 0;
@@ -2703,10 +2722,10 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   color: var(--navy);
   font-size: 12px;
 }
-/* names are the one column allowed to run long — clip rather than push the table */
+/* names are the one column allowed to run long - clip rather than push the table */
 .works-table td .cell-input.wide { text-overflow: ellipsis; }
 
-/* the row is mostly read, occasionally edited — so the cells read as text and
+/* the row is mostly read, occasionally edited - so the cells read as text and
    only surface their input chrome on hover/focus (the code pill stays a pill) */
 .works-table .cell-input:not(.code) {
   background: transparent;
@@ -2738,7 +2757,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .works-table tfoot tr:hover { background: var(--surface-2); }
 .works-table tfoot strong { color: var(--navy); font-size: 13.5px; }
 
-/* the ✕ was shouting on every row — reveal it on hover/focus instead */
+/* the ✕ was shouting on every row - reveal it on hover/focus instead */
 .row-x { opacity: 0; transition: opacity 0.12s ease; }
 .works-table tbody tr:hover .row-x,
 .works-table tbody tr.is-selected .row-x,
@@ -2806,7 +2825,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .plate.sm { font-size: 11px; padding: 1px 6px; }
 .inv-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
 
-/* status pills — same colour language as the board columns */
+/* status pills - same colour language as the board columns */
 .inv-pill {
   display: inline-block;
   padding: 3px 10px;

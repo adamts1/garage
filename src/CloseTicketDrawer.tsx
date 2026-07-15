@@ -36,7 +36,7 @@ const METHODS: Method[] = [
   { id: 'bit', label: 'ביט / פייבוקס', icon: '📱', hint: 'העברה מיידית', ref: 'מספר אסמכתא', paid: true },
   { id: 'transfer', label: 'העברה בנקאית', icon: '🏦', hint: 'העברה לחשבון המוסך', ref: 'מספר אסמכתא', paid: true },
   { id: 'check', label: 'צ׳ק', icon: '🧾', hint: 'צ׳ק לפקודת המוסך', ref: 'מספר צ׳ק', paid: true },
-  { id: 'open', label: 'חיוב פתוח', icon: '🕓', hint: 'תשלום בהמשך — יתרה פתוחה', paid: false },
+  { id: 'open', label: 'חיוב פתוח', icon: '🕓', hint: 'תשלום בהמשך - יתרה פתוחה', paid: false },
 ];
 
 const STEPS = ['אמצעי תשלום', 'גבייה', 'סיכום'];
@@ -171,7 +171,7 @@ export default function CloseTicketDrawer({ ticket, total, onClose, onConfirm }:
               <div className={`cd-info${method.paid ? ' ok' : ''}`}>
                 <span className="cd-info-ic">{method.paid ? <IconCard /> : 'i'}</span>
                 <div>
-                  <b>{method.paid ? `יופק ${doc}` : 'יופק חשבונית מס — ללא קבלה'}</b>
+                  <b>{method.paid ? `יופק ${doc}` : 'יופק חשבונית מס - ללא קבלה'}</b>
                   <p>
                     {method.paid
                       ? 'המסמך יישלח ללקוח בסיום התהליך'

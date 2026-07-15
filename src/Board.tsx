@@ -18,17 +18,17 @@ interface Hover { col: Status; lane: string; index: number }
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
-type SortKey = 'k' | 'title' | 'customer' | 'who' | 'st' | 'prio' | 'due' | 'amount';
+type SortKey = 'k' | 'title' | 'customer' | 'plate' | 'car' | 'who' | 'st' | 'prio' | 'amount';
 const PRIO_RANK: Record<string, number> = { urgent: 0, high: 1, med: 2, low: 3 };
 
 const TABLE_COLS: { key: SortKey; label: string }[] = [
   { key: 'k', label: 'מספר' },
   { key: 'title', label: 'תיאור' },
-  { key: 'customer', label: 'לקוח / רכב' },
-  { key: 'prio', label: 'דחיפות' },
+  { key: 'customer', label: 'לקוח' },
+  { key: 'plate', label: 'מספר רישוי' },
+  { key: 'car', label: 'רכב' },
   { key: 'st', label: 'סטטוס' },
   { key: 'who', label: 'מכונאי' },
-  { key: 'due', label: 'יעד' },
   { key: 'amount', label: 'סכום' },
 ];
 export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }: BoardProps) {
@@ -301,16 +301,9 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
                       <span className="epic" style={{ background: e.bg, color: e.c }}>{e.t}</span>
                       {t.blocked && <span className="tbl-blocked">⛔ חסום</span>}
                     </td>
-                    <td>
-                      <div>{t.customer}</div>
-                      <div className="tbl-sub">
-                        <span className="plate">{t.plate}</span> {t.car}
-                      </div>
-                    </td>
-                    <td>
-                      <span className="prio-dot" style={{ background: PRIORITIES[t.prio].c }} />
-                      {PRIORITIES[t.prio].t}
-                    </td>
+                    <td>{t.customer}</td>
+                    <td><span className="plate">{t.plate}</span></td>
+                    <td>{t.car}</td>
                     <td>
                       <span className="st-pill">
                         <span className="prio-dot" style={{ background: col?.dot }} /> {col?.title}
@@ -319,8 +312,7 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
                     <td>
                       <span className="avatar-sm" style={{ background: m.bg }}>{m.ini}</span>
                     </td>
-                    <td className="tbl-sub">{t.due}</td>
-                    <td className="tbl-amount">{t.amount ? shekel(t.amount) : '—'}</td>
+                    <td className="tbl-amount">{t.amount ? shekel(t.amount) : '-'}</td>
                   </tr>
                 );
               })}

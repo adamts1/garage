@@ -7,7 +7,7 @@ import {
   type PartDef, type TicketWork, type WorkDef,
 } from './catalog';
 
-/* same format as the summary rail — a row reading ₪150 next to a total reading ₪150.00 looks like a bug */
+/* same format as the summary rail - a row reading ₪150 next to a total reading ₪150.00 looks like a bug */
 const shekel = (n: number) =>
   '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -147,7 +147,7 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                 className={w.uid === selected ? 'is-selected' : ''}
                 onClick={() => setSelected(w.uid)}
               >
-                {/* the inputs fill their cells, so they must not swallow the row click —
+                {/* the inputs fill their cells, so they must not swallow the row click -
                     clicking a field selects the work *and* focuses the field */}
                 <td>
                   <input
@@ -157,12 +157,14 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                   />
                 </td>
                 <td>
-                  <input
-                    className="cell-input wide"
-                    value={w.name}
-                    onChange={(e) => patchWork(w.uid, { name: e.target.value })}
-                  />
-                  {w.custom && <span className="badge-new">חדשה</span>}
+                  <div className="name-cell">
+                    <input
+                      className="cell-input wide"
+                      value={w.name}
+                      onChange={(e) => patchWork(w.uid, { name: e.target.value })}
+                    />
+                    {w.custom && <span className="badge-new">חדשה</span>}
+                  </div>
                 </td>
                 <td>
                   <input
@@ -189,7 +191,7 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
           </tbody>
           <tfoot>
             {/* the סה״כ column is labour + that work's parts, so this foots to the
-                pre-VAT subtotal — not to the summary's labour-only 'סה״כ עבודות' */}
+                pre-VAT subtotal - not to the summary's labour-only 'סה״כ עבודות' */}
             <tr>
               <td colSpan={4}>סה״כ עבודה וחלקים</td>
               <td><strong>{shekel(works.reduce((s, w) => s + workTotal(w), 0))}</strong></td>
@@ -242,7 +244,7 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
             <tbody>
               {current.items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty-note">אין חלקים לעבודה זו — עבודה בלבד.</td>
+                  <td colSpan={6} className="empty-note">אין חלקים לעבודה זו - עבודה בלבד.</td>
                 </tr>
               )}
               {current.items.map((i) => (
@@ -275,7 +277,7 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
               ))}
             </tbody>
             <tfoot>
-              {/* this table only ever shows the selected work's parts, so say so —
+              {/* this table only ever shows the selected work's parts, so say so -
                   the summary's 'סה״כ פריטים' is every work's parts together */}
               <tr>
                 <td colSpan={4}>סה״כ פריטים בעבודה זו</td>

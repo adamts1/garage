@@ -119,13 +119,13 @@ function App() {
       title: works.length
         ? works.map((w) => w.name).join(' + ')   // the works are what the ticket is about
         : 'כרטיס חדש',
-      plate: form.licensePlate || '—',
-      car: [form.manufacturer, form.model, form.year].filter(Boolean).join(' ') || '—',
+      plate: form.licensePlate || '-',
+      car: [form.manufacturer, form.model, form.year].filter(Boolean).join(' ') || '-',
       customer: form.customerName || 'לקוח מזדמן',
       amount: worksSummary(works).total,
       done: 0,
       subtasks,
-      due: form.targetDate ? form.targetDate.split('-').reverse().join('/') : '—',
+      due: form.targetDate ? form.targetDate.split('-').reverse().join('/') : '-',
       flags: [
         ...(form.customerType === 'עסקי' ? ['עסקי'] : []),
         ...(form.keyReceived ? ['מפתח התקבל'] : []),
@@ -168,7 +168,7 @@ function App() {
               <button
                 className={`pin${pinned ? ' on' : ''}`}
                 onClick={() => setPinned(!pinned)}
-                title={pinned ? 'בטל נעיצה — הסרגל יתכווץ' : 'נעץ את הסרגל פתוח'}
+                title={pinned ? 'בטל נעיצה - הסרגל יתכווץ' : 'נעץ את הסרגל פתוח'}
               >
                 <IconPin filled={pinned} />
               </button>
@@ -213,7 +213,7 @@ function App() {
               className="intake-form"
               onSubmit={onSubmit}
               onKeyDown={(e) => {
-                // Enter belongs to the tables' inputs — it must not submit the ticket
+                // Enter belongs to the tables' inputs - it must not submit the ticket
                 if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
                   e.preventDefault();
                 }
@@ -332,33 +332,11 @@ function App() {
                 <h3 className="section-title">סיווג ושיוך</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>סוג</label>
-                    <select value={form.type} onChange={(e) => set('type', e.target.value as TicketForm['type'])}>
-                      {Object.entries(TYPES).map(([id, t]) => (
-                        <option key={id} value={id}>{t.i} {t.t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>אפיק</label>
-                    <select value={form.epic} onChange={(e) => set('epic', e.target.value as TicketForm['epic'])}>
-                      {Object.entries(EPICS).map(([id, e2]) => (
-                        <option key={id} value={id}>{e2.t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
                     <label>דחיפות</label>
                     <select value={form.priority} onChange={(e) => set('priority', e.target.value as Priority)}>
                       {Object.entries(PRIORITIES).map(([id, p]) => (
                         <option key={id} value={id}>{p.t}</option>
                       ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>נקודות מאמץ</label>
-                    <select value={form.points} onChange={(e) => set('points', Number(e.target.value))}>
-                      {[1, 2, 3, 5, 8].map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
@@ -374,7 +352,7 @@ function App() {
                     <input type="date" value={form.targetDate} onChange={(e) => set('targetDate', e.target.value)} />
                   </div>
                   <div className="form-group key-cell">
-                    <label>&nbsp;</label>
+                    <label>מפתח רכב</label>
                     <label className="checkbox-label">
                       <input
                         type="checkbox"

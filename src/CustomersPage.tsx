@@ -83,43 +83,59 @@ export default function CustomersPage() {
         </div>
       )}
 
-      <ul className="customer-list">
-        {rows.map((c) => (
-          <li key={c.id} className="customer-row">
-            {editing === c.id ? (
-              <>
-                <div className="crud-form inline">
-                  <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-                  <input value={edit.phone ?? ''} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} />
-                  <input value={edit.email ?? ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
-                  <input value={edit.city ?? ''} onChange={(e) => setEdit({ ...edit, city: e.target.value })} />
-                  <select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
-                    <option>פרטי</option>
-                    <option>עסקי</option>
-                  </select>
-                </div>
-                <div className="row-actions">
-                  <button className="btn primary sm" onClick={() => save(c.id)}>שמור</button>
-                  <button className="btn ghost sm" onClick={() => setEditing(null)}>ביטול</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <strong>{c.name}</strong>
-                  <div className="text-muted">{c.phone || '—'} · {c.email || '—'}</div>
-                </div>
-                <div>{c.city || '—'}</div>
-                <div><span className="status-pill">{c.kind}</span></div>
-                <div className="row-actions">
-                  <button className="btn ghost sm" onClick={() => startEdit(c)}>ערוך</button>
-                  <button className="btn ghost sm danger" onClick={() => remove(c)}>מחק</button>
-                </div>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+      <section className="card rep-table-card">
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>שם</th>
+                <th>טלפון</th>
+                <th>דוא״ל</th>
+                <th>עיר</th>
+                <th>סוג</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((c) => (
+                editing === c.id ? (
+                  <tr key={c.id}>
+                    <td><input className="cell-input wide" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
+                    <td><input className="cell-input wide" value={edit.phone ?? ''} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} /></td>
+                    <td><input className="cell-input wide" value={edit.email ?? ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></td>
+                    <td><input className="cell-input wide" value={edit.city ?? ''} onChange={(e) => setEdit({ ...edit, city: e.target.value })} /></td>
+                    <td>
+                      <select className="cell-input" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
+                        <option>פרטי</option>
+                        <option>עסקי</option>
+                      </select>
+                    </td>
+                    <td className="row-actions">
+                      <button className="btn primary sm" onClick={() => save(c.id)}>שמור</button>
+                      <button className="btn ghost sm" onClick={() => setEditing(null)}>ביטול</button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={c.id}>
+                    <td><strong>{c.name}</strong></td>
+                    <td>{c.phone || '-'}</td>
+                    <td>{c.email || '-'}</td>
+                    <td>{c.city || '-'}</td>
+                    <td><span className="status-pill">{c.kind}</span></td>
+                    <td className="row-actions">
+                      <button className="btn ghost sm" onClick={() => startEdit(c)}>ערוך</button>
+                      <button className="btn ghost sm danger" onClick={() => remove(c)}>מחק</button>
+                    </td>
+                  </tr>
+                )
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={6} className="empty-note">לא נמצאו לקוחות</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </>
   );
 }

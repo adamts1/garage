@@ -7,7 +7,7 @@ const norm = (s: string) => s.trim().toLowerCase();
 
 interface Props {
   catalog: PartDef[];
-  taken?: string[];                 // SKUs already on the work — hidden from the list
+  taken?: string[];                 // SKUs already on the work - hidden from the list
   initialQuery?: string;
   onPick: (part: PartDef) => void;  // existing part chosen
   onCreate: (part: PartDef) => void;// brand-new part defined

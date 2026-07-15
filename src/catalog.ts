@@ -17,7 +17,7 @@ export interface WorkDef {
   items: PartRow[];       // parts this work requires
 }
 
-/** A work as attached to a ticket — a copy of the definition the user can edit. */
+/** A work as attached to a ticket - a copy of the definition the user can edit. */
 export interface TicketWork {
   uid: string;            // unique per ticket (same work can be added twice)
   code: string;
@@ -27,7 +27,7 @@ export interface TicketWork {
   custom?: boolean;       // true when it isn't in the catalog
 }
 
-export const VAT = 0.17;
+export const VAT = 0.18;
 
 export const WORK_CATALOG: WorkDef[] = [
   {
@@ -99,7 +99,7 @@ export const WORK_CATALOG: WorkDef[] = [
   },
 ];
 
-/** A part as it lives in the catalog (no quantity — that's per-work). */
+/** A part as it lives in the catalog (no quantity - that's per-work). */
 export type PartDef = Omit<PartRow, 'qty'>;
 
 /** Parts that can be added to any work. */

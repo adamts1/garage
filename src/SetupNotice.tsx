@@ -15,7 +15,7 @@ export default function SetupNotice() {
           פתח פרויקט חדש ב‑<a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">supabase.com/dashboard</a>
         </li>
         <li>
-          ב‑<b>SQL Editor</b> הדבק את כל <code>supabase/schema.sql</code> ולחץ <b>Run</b> —
+          ב‑<b>SQL Editor</b> הדבק את כל <code>supabase/schema.sql</code> ולחץ <b>Run</b> -
           זה יוצר את הטבלאות ומזין נתוני דמו
         </li>
         <li>
@@ -28,7 +28,7 @@ export default function SetupNotice() {
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}</pre>
 
       <p className="text-muted">
-        שים לב: Vite קורא את <code>.env.local</code> רק בעליית השרת — צריך להפעיל אותו מחדש אחרי השינוי.
+        שים לב: Vite קורא את <code>.env.local</code> רק בעליית השרת - צריך להפעיל אותו מחדש אחרי השינוי.
       </p>
     </div>
   );

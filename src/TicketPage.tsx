@@ -28,7 +28,7 @@ const waMessage = (t: Ticket, total: number) => {
     ...(t.works ?? []).map((w) => `• ${w.name}`),
     '',
     `סה״כ לתשלום: ${shekel(total)}`,
-    t.paid ? `שולם ב${t.payMethod} — תודה!` : 'התשלום יתבצע בעת האיסוף.',
+    t.paid ? `שולם ב${t.payMethod} - תודה!` : 'התשלום יתבצע בעת האיסוף.',
     '',
     'מוסך פרו · נשמח לראותך',
   ];
@@ -51,10 +51,10 @@ const STEPS = [
   { id: 'tp-summary', label: 'סיכום וסגירה' },
 ];
 
-/** '—' for anything the intake form never filled in, so blanks read as blank, not as data. */
+/** '-' for anything the intake form never filled in, so blanks read as blank, not as data. */
 const Val = ({ children }: { children?: string | number | null }) =>
   children === undefined || children === null || children === ''
-    ? <span className="kv-empty">—</span>
+    ? <span className="kv-empty">-</span>
     : <>{children}</>;
 
 export default function TicketPage({
@@ -192,13 +192,13 @@ export default function TicketPage({
               <h3 className="card-title"><IconClock /> היסטוריית פעולות</h3>
               <div className="log">
                 <div className="log-row">
-                  <div className="log-when">{ticket.createdAt ?? '—'}</div>
+                  <div className="log-when">{ticket.createdAt ?? '-'}</div>
                   <div className="log-who">{TEAM[ticket.who].n}</div>
                   <div className="log-what">כרטיס נפתח</div>
                 </div>
                 {works.length > 0 && (
                   <div className="log-row">
-                    <div className="log-when">—</div>
+                    <div className="log-when">-</div>
                     <div className="log-who">{TEAM[ticket.who].n}</div>
                     <div className="log-what">{works.length} עבודות נוספו לכרטיס</div>
                   </div>
@@ -244,7 +244,7 @@ export default function TicketPage({
             <h3 className="card-title"><IconCard /> מצב חיוב</h3>
             <div className={`bill-note${ticket.paid ? ' ok' : ''}`}>
               {ticket.doc
-                ? (ticket.paid ? 'שולם — הופקה חשבונית מס-קבלה' : 'הופקה חשבונית מס — יתרה פתוחה')
+                ? (ticket.paid ? 'שולם - הופקה חשבונית מס-קבלה' : 'הופקה חשבונית מס - יתרה פתוחה')
                 : 'לא הונפק מסמך / לא שולם'}
             </div>
             <dl className="kv">
@@ -253,8 +253,8 @@ export default function TicketPage({
                 <span className="prio-dot" style={{ background: column?.dot }} /> {column?.title}
               </dd>
               <dt>תשלום</dt>
-              <dd>{ticket.paid ? `שולם · ${ticket.payMethod}` : ticket.doc ? 'חיוב פתוח' : '—'}</dd>
-              <dt>מסמך</dt><dd>{ticket.doc ?? '—'}</dd>
+              <dd>{ticket.paid ? `שולם · ${ticket.payMethod}` : ticket.doc ? 'חיוב פתוח' : '-'}</dd>
+              <dt>מסמך</dt><dd>{ticket.doc ?? '-'}</dd>
             </dl>
 
             <button
@@ -303,7 +303,7 @@ export default function TicketPage({
             });
             setClosing(false);
             setToast(r.paid
-              ? `התשלום נקלט · ${r.method} · ${shekel(total)} — הופק ${r.doc}`
+              ? `התשלום נקלט · ${r.method} · ${shekel(total)} - הופק ${r.doc}`
               : `הכרטיס נסגר עם יתרה פתוחה · ${shekel(total)}`);
             setTimeout(() => setToast(null), 5000);
           }}
@@ -331,7 +331,7 @@ export default function TicketPage({
         <div className="foot-spacer" />
         <button className="btn ghost" onClick={onBack}>סגור</button>
         <button className="btn primary lg" onClick={() => scrollTo('tp-works')}>
-          המשך לעריכת עבודות ופריטים <span className="arrow">←</span>
+          שמור <span className="arrow">←</span>
         </button>
       </footer>
     </div>

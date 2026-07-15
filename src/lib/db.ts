@@ -1,5 +1,5 @@
 /* The one place that talks to Supabase.
-   The UI keeps using the `Ticket` shape it always had — everything below
+   The UI keeps using the `Ticket` shape it always had - everything below
    maps between that shape and the tickets / works / work_items rows. */
 
 import { supabase } from './supabase';

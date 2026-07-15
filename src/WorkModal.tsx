@@ -160,7 +160,7 @@ export default function WorkModal({ catalog, parts, addToParts, initialQuery = '
               </div>
 
               <h4 className="section-title">חלקים לעבודה</h4>
-              {items.length === 0 && <p className="empty-note">לא נוספו חלקים — עבודה בלבד.</p>}
+              {items.length === 0 && <p className="empty-note">לא נוספו חלקים - עבודה בלבד.</p>}
               {items.length > 0 && (
                 <table className="works-table">
                   <thead>
@@ -193,7 +193,7 @@ export default function WorkModal({ catalog, parts, addToParts, initialQuery = '
               )}
 
               <button type="button" className="add-part-row" onClick={() => setPickingItem(true)}>
-                ＋ הוסף חלק — הקלד מק״ט או שם…
+                ＋ הוסף חלק - הקלד מק״ט או שם…
               </button>
             </div>
 
