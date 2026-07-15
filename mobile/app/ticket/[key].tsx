@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,11 +8,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import { listItems, type Item } from '../../lib/db';
 import {
-  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, WORK_CATALOG,
+  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, WORK_CATALOG, VAT,
   fromCatalog, partsTotal, workTotal, worksSummary,
 } from '../../lib/types';
 import type { PartRow, Priority, Status, Ticket, TicketWork } from '../../lib/types';
 import { C, rtl, s } from '../../lib/theme';
+
+const money = (n: number) =>
+  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** 050-1234567 -> 972501234567 (wa.me wants digits only, with country code) */
+const waNumber = (phone?: string) => {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('972')) return digits;
+  return '972' + digits.replace(/^0/, '');
+};
+
+type Tab = 'details' | 'works' | 'history' | 'notes';
 
 export default function EditTicket() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -26,9 +40,10 @@ export default function EditTicket() {
   const [saving, setSaving] = useState(false);
   const [pickWork, setPickWork] = useState(false);
   const [pickPartFor, setPickPartFor] = useState<string | null>(null);   // work uid
+  const [tab, setTab] = useState<Tab>('works');
 
   // Load the ticket into an editable draft. Re-runs if realtime replaces the row
-  // while we have nothing pending — but never clobbers edits in progress.
+  // while we have nothing pending - but never clobbers edits in progress.
   useEffect(() => {
     if (ticket && !draft) setDraft(ticket);
   }, [ticket, draft]);
@@ -59,6 +74,10 @@ export default function EditTicket() {
 
   const works = draft.works ?? [];
   const sum = worksSummary(works);
+  const itemCount = works.reduce((n, w) => n + w.items.length, 0);
+  const column = COLUMNS.find((c) => c.id === draft.st);
+  const closed = draft.st === 'done';
+  const notesCount = [draft.notes, draft.blocked].filter(Boolean).length;
 
   /* The checklist is a prefix: the schema stores `done` as a count, not a flag per
      subtask (see supabase/schema.sql). Tapping row i means "the first i+1 are done";
@@ -68,7 +87,7 @@ export default function EditTicket() {
   const changeStatus = (st: Status) =>
     setDraft((d) => {
       if (!d) return d;
-      // Landing in Done ticks everything off — same rule as the web board (Board.tsx:67).
+      // Landing in Done ticks everything off - same rule as the web board (Board.tsx:67).
       return { ...d, st, done: st === 'done' ? d.subtasks.length : d.done };
     });
 
@@ -96,10 +115,26 @@ export default function EditTicket() {
     patchWork(uid, { items: w.items.filter((_, i) => i !== idx) });
   };
 
-  const save = async () => {
+  // "+ הוסף פריט" is global in the mock; a part still belongs to a work, so it
+  // attaches to the last work (or nudges you to add a work first).
+  const addPartGlobal = () => {
+    if (!works.length) return Alert.alert('אין עבודות', 'הוסף עבודה לפני הוספת פריט.');
+    setPickPartFor(works[works.length - 1].uid);
+  };
+
+  const editLabor = (w: TicketWork) => {
+    if (Platform.OS !== 'ios') return;
+    Alert.prompt('מחיר עבודה', w.name, (v) => {
+      const n = parseFloat((v ?? '').replace(',', '.'));
+      patchWork(w.uid, { labor: Number.isFinite(n) && n >= 0 ? n : w.labor });
+    }, 'plain-text', String(w.labor));
+  };
+
+  const saveWith = async (over?: Partial<Ticket>) => {
     setSaving(true);
+    const base: Ticket = { ...draft, ...over };
     // Keep the headline amount honest: if the ticket has works, it IS their total.
-    const next: Ticket = works.length ? { ...draft, amount: sum.total } : draft;
+    const next: Ticket = works.length ? { ...base, amount: sum.total } : base;
     await saveTicket(next, worksChanged);
     setSaving(false);
     setDraft(null);      // drop the draft so the screen re-syncs from the store
@@ -114,210 +149,358 @@ export default function EditTicket() {
     ]);
   };
 
+  const moreActions = () =>
+    Alert.alert('אפשרויות', '', [
+      { text: dirty ? 'שמור וצא' : 'סגור', onPress: () => saveWith() },
+      { text: 'ביטול', style: 'cancel' },
+    ]);
+
+  // WhatsApp: a ready-for-pickup notice once the car is prepared (status 'done'),
+  // otherwise a quote asking the customer to approve the works.
+  const total = works.length ? sum.total : draft.amount;
+  const waMessage = () => {
+    const car = `${draft.car || 'הרכב'} (${draft.plate || '-'})`;
+    if (closed) {
+      return [
+        `שלום ${draft.customer || ''},`,
+        `הרכב ${car} מוכן לאיסוף 🚗`,
+        '',
+        ...(works.length ? ['העבודות שבוצעו:', ...works.map((w) => `• ${w.name}`), ''] : []),
+        `סה״כ לתשלום: ${money(total)}`,
+        draft.paid ? `שולם ${draft.payMethod ? `ב${draft.payMethod} ` : ''}- תודה!` : 'התשלום יתבצע בעת האיסוף.',
+        '',
+        'מוסך פרו · נשמח לראותך',
+      ].join('\n');
+    }
+    return [
+      `שלום ${draft.customer || ''},`,
+      `לרכב ${car} נדרש אישורך לביצוע העבודות הבאות:`,
+      '',
+      ...(works.length
+        ? works.map((w) => `• ${w.name} - ${money(workTotal(w))}`)
+        : [`• ${draft.title || 'טיפול'}`]),
+      '',
+      `סה״כ לפני מע״מ: ${money(sum.net)}`,
+      `מע״מ (${Math.round(VAT * 100)}%): ${money(sum.vat)}`,
+      `סה״כ לתשלום: ${money(sum.total)}`,
+      '',
+      'נא אשרו לביצוע. תודה,',
+      'מוסך פרו',
+    ].join('\n');
+  };
+
+  const sendWhatsApp = () => {
+    const num = waNumber(draft.phone);
+    if (!num) return Alert.alert('אין מספר טלפון', 'לא הוזן מספר טלפון ללקוח בכרטיס.');
+    const url = `https://wa.me/${num}?text=${encodeURIComponent(waMessage())}`;
+    Linking.openURL(url).catch(() => Alert.alert('שגיאה', 'לא ניתן לפתוח את וואטסאפ במכשיר.'));
+  };
+
+  const TABS: { id: Tab; label: string; count?: number }[] = [
+    { id: 'details', label: 'פרטי כרטיס' },
+    { id: 'works', label: 'עבודות ופריטים' },
+    { id: 'history', label: 'היסטוריה' },
+    { id: 'notes', label: 'הערות', count: notesCount },
+  ];
+
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen
-        options={{
-          title: draft.k,
-          headerLeft: () => (
-            <Pressable onPress={confirmLeave} hitSlop={10}>
-              <Text style={{ color: '#fff', fontSize: 15 }}>חזרה</Text>
-            </Pressable>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
-        {/* ---------- what and for whom ---------- */}
-        <View style={[s.card, { gap: 10 }]}>
-          <Field label="תיאור התקלה">
-            <TextInput style={[s.input, { minHeight: 60 }]} multiline value={draft.title} onChangeText={(v) => set('title', v)} />
-          </Field>
-          <View style={s.row}>
-            <Field label="לקוח" flex>
-              <TextInput style={s.input} value={draft.customer} onChangeText={(v) => set('customer', v)} />
-            </Field>
-            <Field label="טלפון" flex>
-              <TextInput style={s.input} keyboardType="phone-pad" value={draft.phone ?? ''} onChangeText={(v) => set('phone', v)} />
-            </Field>
+      {/* ---------- custom header ---------- */}
+      <View style={{ backgroundColor: C.card, paddingTop: insets.top + 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
+        <View style={[s.row, { justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 4 }]}>
+          <Pressable onPress={moreActions} hitSlop={10}><Text style={{ fontSize: 22, color: C.ink }}>⋮</Text></Pressable>
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: C.ink }}>
+              כרטיס עבודה #{draft.k.includes('-') ? draft.k.split('-')[1] : draft.k}
+            </Text>
+            <View style={{
+              paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999,
+              backgroundColor: closed ? '#e6ede6' : C.sand,
+            }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: closed ? C.ok : '#8a6b28' }}>
+                {closed ? 'סגור' : 'פתוח'}
+              </Text>
+            </View>
           </View>
-          <View style={s.row}>
-            <Field label="רכב" flex>
-              <TextInput style={s.input} value={draft.car} onChangeText={(v) => set('car', v)} />
-            </Field>
-            <Field label="מספר רישוי" flex>
-              <TextInput style={s.input} value={draft.plate} onChangeText={(v) => set('plate', v)} />
-            </Field>
-          </View>
-          <View style={s.row}>
-            <Field label="קילומטראז'" flex>
-              <TextInput style={s.input} keyboardType="numeric" value={draft.km ?? ''} onChangeText={(v) => set('km', v)} />
-            </Field>
-            <Field label="שנה" flex>
-              <TextInput style={s.input} keyboardType="numeric" value={draft.year ?? ''} onChangeText={(v) => set('year', v)} />
-            </Field>
-            <Field label="יעד" flex>
-              <TextInput style={s.input} value={draft.due} onChangeText={(v) => set('due', v)} />
-            </Field>
-          </View>
+          <Pressable onPress={confirmLeave} hitSlop={10}><Text style={{ fontSize: 22, color: C.ink }}>›</Text></Pressable>
+        </View>
+        <Text style={[s.dim, { textAlign: 'center', paddingBottom: 10, fontSize: 11.5 }]}>
+          נוצר: {draft.createdAt || '-'} · {TEAM[draft.who].n}
+        </Text>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
+        {/* ---------- vehicle + customer, side by side ---------- */}
+        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+          <InfoCard title="פרטי רכב">
+            <View style={{ alignSelf: 'flex-end', backgroundColor: C.sand, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginBottom: 2 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink, ...rtl }}>{draft.plate || '-'}</Text>
+            </View>
+            <Text style={[s.body, { fontWeight: '600' }]}>{draft.car || '-'}</Text>
+            <Text style={s.dim}>{[draft.year, draft.km && `${draft.km} ק״מ`].filter(Boolean).join(' · ') || '-'}</Text>
+          </InfoCard>
+
+          <InfoCard title="לקוח">
+            <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink, ...rtl }}>{draft.customer || '-'}</Text>
+            <Text style={s.dim}>טל׳ {draft.phone || '-'}</Text>
+            <Text style={s.dim} numberOfLines={2}>{draft.address || '-'}</Text>
+          </InfoCard>
         </View>
 
-        {/* ---------- status ---------- */}
-        <View style={[s.card, { gap: 10 }]}>
-          <Field label="סטטוס">
-            <Chips
-              options={COLUMNS.map((c) => ({ id: c.id, label: c.title, color: c.dot }))}
-              value={draft.st}
-              onChange={(v) => changeStatus(v as Status)}
-            />
-          </Field>
-          <Field label="דחיפות">
-            <Chips
-              options={(Object.keys(PRIORITIES) as Priority[]).map((p) => ({ id: p, label: PRIORITIES[p].t, color: PRIORITIES[p].c }))}
-              value={draft.prio}
-              onChange={(v) => set('prio', v as Priority)}
-            />
-          </Field>
-          <Field label="אחראי">
-            <Chips
-              options={(Object.keys(TEAM) as (keyof typeof TEAM)[]).map((w) => ({ id: w, label: TEAM[w].n, color: TEAM[w].bg }))}
-              value={draft.who}
-              onChange={(v) => set('who', v as keyof typeof TEAM)}
-            />
-          </Field>
-          <Field label="תחום">
-            <Chips
-              options={(Object.keys(EPICS) as (keyof typeof EPICS)[]).map((e) => ({ id: e, label: EPICS[e].t, color: EPICS[e].c }))}
-              value={draft.epic}
-              onChange={(v) => set('epic', v as keyof typeof EPICS)}
-            />
-          </Field>
-          <Field label="סוג">
-            <Chips
-              options={(Object.keys(TYPES) as (keyof typeof TYPES)[]).map((t) => ({ id: t, label: `${TYPES[t].i} ${TYPES[t].t}` }))}
-              value={draft.type}
-              onChange={(v) => set('type', v as keyof typeof TYPES)}
-            />
-          </Field>
-        </View>
+        {/* ---------- whatsapp ---------- */}
+        <Pressable
+          onPress={sendWhatsApp}
+          style={{
+            flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8,
+            backgroundColor: '#25D366', paddingVertical: 13, borderRadius: 12,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>
+            {closed ? 'שלח עדכון: הרכב מוכן לאיסוף' : 'שלח הצעה לאישור הלקוח'}
+          </Text>
+        </Pressable>
 
-        {/* ---------- checklist ---------- */}
-        <View style={[s.card, { gap: 8 }]}>
-          <Text style={s.h2}>משימות ({draft.done}/{draft.subtasks.length})</Text>
-          {draft.subtasks.map((task, i) => {
-            const checked = i < draft.done;
+        {/* ---------- tab bar ---------- */}
+        <View style={{ flexDirection: 'row-reverse', borderBottomWidth: 1, borderBottomColor: C.line }}>
+          {TABS.map((t) => {
+            const on = t.id === tab;
             return (
-              <Pressable key={i} onPress={() => toggleSubtask(i)} style={[s.row, { paddingVertical: 8, gap: 10 }]}>
-                <View style={{
-                  width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-                  borderColor: checked ? C.ok : C.line,
-                  backgroundColor: checked ? C.ok : 'transparent',
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {checked ? <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text> : null}
-                </View>
-                <Text style={[s.body, { flex: 1, color: checked ? C.dim : C.text, textDecorationLine: checked ? 'line-through' : 'none' }]}>
-                  {task}
+              <Pressable key={t.id} onPress={() => setTab(t.id)} style={{ flex: 1, alignItems: 'center', paddingVertical: 12, gap: 6 }}>
+                <Text style={{ fontSize: 12.5, fontWeight: on ? '800' : '600', color: on ? C.ink : C.dim }}>
+                  {t.label}{t.count ? ` (${t.count})` : ''}
                 </Text>
+                <View style={{ height: 2, width: 28, backgroundColor: on ? C.ink : 'transparent', borderRadius: 2 }} />
               </Pressable>
             );
           })}
-          {!draft.subtasks.length ? <Text style={s.dim}>אין משימות</Text> : null}
-          <Text style={[s.dim, { fontSize: 11 }]}>
-            המשימות נסגרות לפי הסדר — המסד שומר מונה, לא סימון לכל שורה.
-          </Text>
         </View>
 
-        {/* ---------- works and parts ---------- */}
-        <View style={[s.card, { gap: 10 }]}>
-          <View style={[s.row, { justifyContent: 'space-between' }]}>
-            <Text style={s.h2}>עבודות</Text>
-            <Pressable onPress={() => setPickWork(true)} style={btn}>
-              <Text style={btnText}>+ הוסף עבודה</Text>
-            </Pressable>
-          </View>
-
-          {works.map((w) => (
-            <View key={w.uid} style={{ borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 10, gap: 8 }}>
-              <View style={[s.row, { justifyContent: 'space-between' }]}>
-                <Text style={[s.h2, { flex: 1 }]}>{w.name}</Text>
-                <Pressable onPress={() => removeWork(w.uid)} hitSlop={8}>
-                  <Text style={{ color: C.danger, fontSize: 13, fontWeight: '700' }}>מחק</Text>
-                </Pressable>
-              </View>
-
-              <View style={s.row}>
-                <Text style={[s.dim, { flex: 1 }]}>{w.code || 'ללא קוד'}</Text>
-                <Text style={s.dim}>עבודה: </Text>
-                <NumInput value={w.labor} onChange={(n) => patchWork(w.uid, { labor: n })} width={80} />
-              </View>
-
-              {w.items.map((p, i) => (
-                <View key={`${w.uid}-${i}`} style={[s.row, { gap: 6 }]}>
-                  <Text style={[s.body, { flex: 1, fontSize: 13 }]} numberOfLines={1}>{p.name}</Text>
-                  <NumInput value={p.qty} onChange={(n) => patchPart(w.uid, i, { qty: n })} width={48} />
-                  <Text style={s.dim}>×</Text>
-                  <NumInput value={p.price} onChange={(n) => patchPart(w.uid, i, { price: n })} width={64} />
-                  <Pressable onPress={() => removePart(w.uid, i)} hitSlop={8}>
-                    <Text style={{ color: C.danger, fontSize: 16 }}>×</Text>
-                  </Pressable>
+        {/* ================= WORKS + ITEMS ================= */}
+        {tab === 'works' && (
+          <>
+            {/* works */}
+            <SectionHead title="עבודות" count={works.length} action="הוסף עבודה" onAction={() => setPickWork(true)} />
+            {works.map((w) => (
+              <View key={w.uid} style={[s.card, { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }]}>
+                <Text style={{ color: C.dim, fontSize: 16 }}>⠿</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.h2]} numberOfLines={1}>{w.name}</Text>
+                  <View style={[s.row, { gap: 5, marginTop: 2 }]}>
+                    <Text style={{ color: C.ok, fontSize: 12, fontWeight: '700' }}>✓ תקין</Text>
+                  </View>
                 </View>
-              ))}
-
-              <View style={[s.row, { justifyContent: 'space-between' }]}>
-                <Pressable onPress={() => setPickPartFor(w.uid)} hitSlop={8}>
-                  <Text style={{ color: C.slate, fontSize: 13, fontWeight: '700' }}>+ הוסף חלק</Text>
+                <Pressable onPress={() => editLabor(w)}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink }}>{money(w.labor)}</Text>
                 </Pressable>
-                <Text style={[s.dim, { fontWeight: '700', color: C.ink }]}>
-                  חלקים ₪{partsTotal(w).toLocaleString('he-IL')} · סה״כ ₪{workTotal(w).toLocaleString('he-IL')}
-                </Text>
+                <Pressable
+                  onPress={() => Alert.alert(w.name, '', [
+                    { text: 'ערוך מחיר עבודה', onPress: () => editLabor(w) },
+                    { text: 'מחק עבודה', style: 'destructive', onPress: () => removeWork(w.uid) },
+                    { text: 'ביטול', style: 'cancel' },
+                  ])}
+                  hitSlop={8}
+                >
+                  <Text style={{ color: C.dim, fontSize: 18 }}>⋮</Text>
+                </Pressable>
+              </View>
+            ))}
+            {!works.length ? <Text style={[s.dim, { textAlign: 'center', paddingVertical: 8 }]}>לא הוזנו עבודות</Text> : null}
+
+            {/* items */}
+            <View style={{ height: 4 }} />
+            <SectionHead title="פריטים" count={itemCount} action="הוסף פריט" onAction={addPartGlobal} />
+            {itemCount ? (
+              <View style={s.card}>
+                <View style={[s.row, { paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line }]}>
+                  <Text style={[colName, s.dim]}>פריט</Text>
+                  <Text style={[colQty, s.dim, { textAlign: 'center' }]}>כמות</Text>
+                  <Text style={[colNum, s.dim, { textAlign: 'center' }]}>מחיר</Text>
+                  <Text style={[colNum, s.dim, { textAlign: 'center' }]}>סה״כ</Text>
+                  <View style={{ width: 24 }} />
+                </View>
+                {works.flatMap((w) => w.items.map((p, i) => (
+                  <View key={`${w.uid}-${i}`} style={[s.row, { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line }]}>
+                    <View style={colName}>
+                      <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
+                      <Text style={[s.dim, { fontSize: 11 }]} numberOfLines={1}>{p.sku}</Text>
+                    </View>
+                    <View style={colQty}>
+                      <Stepper value={p.qty} onChange={(n) => patchPart(w.uid, i, { qty: n })} />
+                    </View>
+                    <Pressable style={colNum} onPress={() => {
+                      if (Platform.OS !== 'ios') return;
+                      Alert.prompt('מחיר', p.name, (v) => {
+                        const n = parseFloat((v ?? '').replace(',', '.'));
+                        patchPart(w.uid, i, { price: Number.isFinite(n) && n >= 0 ? n : p.price });
+                      }, 'plain-text', String(p.price));
+                    }}>
+                      <Text style={{ ...rtl, textAlign: 'center', fontSize: 12.5, color: C.text }}>{money(p.price)}</Text>
+                    </Pressable>
+                    <Text style={[colNum, { ...rtl, textAlign: 'center', fontSize: 12.5, fontWeight: '700', color: C.ink }]}>
+                      {money(p.qty * p.price)}
+                    </Text>
+                    <Pressable style={{ width: 24, alignItems: 'center' }} onPress={() => removePart(w.uid, i)} hitSlop={6}>
+                      <Text style={{ color: C.danger, fontSize: 17, fontWeight: '700' }}>✕</Text>
+                    </Pressable>
+                  </View>
+                )))}
+
+                {/* totals */}
+                <View style={{ paddingTop: 12, gap: 6 }}>
+                  <TotalRow label="סה״כ לפני מע״מ" value={money(sum.net)} />
+                  <TotalRow label={`מע״מ (${Math.round(VAT * 100)}%)`} value={money(sum.vat)} />
+                  <View style={{ height: 1, backgroundColor: C.line, marginVertical: 4 }} />
+                  <View style={[s.row, { justifyContent: 'space-between' }]}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink }}>סה״כ לתשלום</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '800', color: C.slate }}>{money(sum.total)}</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <Text style={[s.dim, { textAlign: 'center', paddingVertical: 8 }]}>לא הוזנו פריטים</Text>
+            )}
+          </>
+        )}
+
+        {/* ================= DETAILS ================= */}
+        {tab === 'details' && (
+          <>
+            <View style={[s.card, { gap: 10 }]}>
+              <Field label="תיאור התקלה">
+                <TextInput style={[s.input, { minHeight: 60 }]} multiline value={draft.title} onChangeText={(v) => set('title', v)} />
+              </Field>
+              <View style={s.row}>
+                <Field label="לקוח" flex>
+                  <TextInput style={s.input} value={draft.customer} onChangeText={(v) => set('customer', v)} />
+                </Field>
+                <Field label="טלפון" flex>
+                  <TextInput style={s.input} keyboardType="phone-pad" value={draft.phone ?? ''} onChangeText={(v) => set('phone', v)} />
+                </Field>
+              </View>
+              <Field label="כתובת">
+                <TextInput style={s.input} value={draft.address ?? ''} onChangeText={(v) => set('address', v)} />
+              </Field>
+              <View style={s.row}>
+                <Field label="רכב" flex>
+                  <TextInput style={s.input} value={draft.car} onChangeText={(v) => set('car', v)} />
+                </Field>
+                <Field label="מספר רישוי" flex>
+                  <TextInput style={s.input} value={draft.plate} onChangeText={(v) => set('plate', v)} />
+                </Field>
+              </View>
+              <View style={s.row}>
+                <Field label="קילומטראז'" flex>
+                  <TextInput style={s.input} keyboardType="numeric" value={draft.km ?? ''} onChangeText={(v) => set('km', v)} />
+                </Field>
+                <Field label="שנה" flex>
+                  <TextInput style={s.input} keyboardType="numeric" value={draft.year ?? ''} onChangeText={(v) => set('year', v)} />
+                </Field>
+                <Field label="יעד" flex>
+                  <TextInput style={s.input} value={draft.due} onChangeText={(v) => set('due', v)} />
+                </Field>
               </View>
             </View>
-          ))}
 
-          {!works.length ? <Text style={s.dim}>לא הוזנו עבודות</Text> : null}
-
-          {works.length ? (
-            <View style={{ borderTopWidth: 1, borderTopColor: C.line, paddingTop: 8, gap: 3 }}>
-              <Total label="חלקים" v={sum.parts} />
-              <Total label="עבודה" v={sum.labor} />
-              <Total label="לפני מע״מ" v={sum.net} />
-              <Total label="מע״מ 17%" v={sum.vat} />
-              <Total label="סה״כ לתשלום" v={sum.total} bold />
+            <View style={[s.card, { gap: 10 }]}>
+              <Field label="סטטוס">
+                <Chips
+                  options={COLUMNS.map((c) => ({ id: c.id, label: c.title, color: c.dot }))}
+                  value={draft.st}
+                  onChange={(v) => changeStatus(v as Status)}
+                />
+              </Field>
+              <Field label="דחיפות">
+                <Chips
+                  options={(Object.keys(PRIORITIES) as Priority[]).map((p) => ({ id: p, label: PRIORITIES[p].t, color: PRIORITIES[p].c }))}
+                  value={draft.prio}
+                  onChange={(v) => set('prio', v as Priority)}
+                />
+              </Field>
+              <Field label="אחראי">
+                <Chips
+                  options={(Object.keys(TEAM) as (keyof typeof TEAM)[]).map((w) => ({ id: w, label: TEAM[w].n, color: TEAM[w].bg }))}
+                  value={draft.who}
+                  onChange={(v) => set('who', v as keyof typeof TEAM)}
+                />
+              </Field>
             </View>
-          ) : null}
-        </View>
+          </>
+        )}
 
-        {/* ---------- notes ---------- */}
-        <View style={[s.card, { gap: 10 }]}>
-          <Field label="הערות">
-            <TextInput style={[s.input, { minHeight: 70 }]} multiline value={draft.notes ?? ''} onChangeText={(v) => set('notes', v)} />
-          </Field>
-          <Field label="חסימה (אם יש)">
-            <TextInput style={s.input} value={draft.blocked ?? ''} onChangeText={(v) => set('blocked', v || undefined)} />
-          </Field>
-        </View>
+        {/* ================= HISTORY / CHECKLIST ================= */}
+        {tab === 'history' && (
+          <View style={[s.card, { gap: 8 }]}>
+            <Text style={s.h2}>משימות ({draft.done}/{draft.subtasks.length})</Text>
+            {draft.subtasks.map((task, i) => {
+              const checked = i < draft.done;
+              return (
+                <Pressable key={i} onPress={() => toggleSubtask(i)} style={[s.row, { paddingVertical: 8, gap: 10 }]}>
+                  <View style={{
+                    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                    borderColor: checked ? C.ok : C.line,
+                    backgroundColor: checked ? C.ok : 'transparent',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {checked ? <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text> : null}
+                  </View>
+                  <Text style={[s.body, { flex: 1, color: checked ? C.dim : C.text, textDecorationLine: checked ? 'line-through' : 'none' }]}>
+                    {task}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {!draft.subtasks.length ? <Text style={s.dim}>אין משימות</Text> : null}
+            <Text style={[s.dim, { fontSize: 11 }]}>
+              המשימות נסגרות לפי הסדר - המסד שומר מונה, לא סימון לכל שורה.
+            </Text>
+          </View>
+        )}
+
+        {/* ================= NOTES ================= */}
+        {tab === 'notes' && (
+          <View style={[s.card, { gap: 10 }]}>
+            <Field label="הערות">
+              <TextInput style={[s.input, { minHeight: 90 }]} multiline value={draft.notes ?? ''} onChangeText={(v) => set('notes', v)} />
+            </Field>
+            <Field label="חסימה (אם יש)">
+              <TextInput style={s.input} value={draft.blocked ?? ''} onChangeText={(v) => set('blocked', v || undefined)} />
+            </Field>
+          </View>
+        )}
       </ScrollView>
 
-      {/* ---------- save bar ---------- */}
+      {/* ---------- action bar ---------- */}
       <View style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: 12, paddingBottom: insets.bottom + 12,
+        flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
+        padding: 12, paddingBottom: insets.bottom + 10,
         backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.line,
       }}>
         <Pressable
-          onPress={save}
+          onPress={() => saveWith({ st: 'done', done: draft.subtasks.length })}
+          disabled={saving}
+          style={{ flex: 1, backgroundColor: C.ink, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+        >
+          {saving ? <ActivityIndicator color="#fff" />
+            : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>סיים עבודה וחייב לקוח</Text>}
+        </Pressable>
+        <Pressable
+          onPress={() => saveWith()}
           disabled={!dirty || saving}
           style={{
-            backgroundColor: dirty && !saving ? C.ink : C.line,
-            paddingVertical: 14, borderRadius: 12, alignItems: 'center',
+            paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12,
+            borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
+            opacity: dirty && !saving ? 1 : 0.5,
           }}
         >
-          {saving
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={{ color: dirty ? '#fff' : C.dim, fontWeight: '800', fontSize: 15 }}>
-                {dirty ? 'שמור שינויים' : 'אין שינויים לשמירה'}
-              </Text>}
+          <Text style={{ color: C.ink, fontWeight: '700', fontSize: 14 }}>שמור טיוטה</Text>
+        </Pressable>
+        <Pressable onPress={moreActions} style={{
+          paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: C.line,
+        }} hitSlop={6}>
+          <Text style={{ color: C.ink, fontSize: 18, fontWeight: '800' }}>⋯</Text>
         </Pressable>
       </View>
 
@@ -330,6 +513,65 @@ export default function EditTicket() {
     </KeyboardAvoidingView>
   );
 }
+
+/* ---------------- presentational pieces ---------------- */
+
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={[s.card, { flex: 1, gap: 4 }]}>
+      <Text style={[s.dim, { textAlign: 'right', marginBottom: 2 }]}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function SectionHead({ title, count, action, onAction }: {
+  title: string; count: number; action: string; onAction: () => void;
+}) {
+  return (
+    <View style={[s.row, { justifyContent: 'space-between' }]}>
+      <Text style={s.h2}>{title} ({count})</Text>
+      <Pressable onPress={onAction} style={{
+        flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
+        borderWidth: 1, borderColor: C.mist, backgroundColor: '#eef2f7',
+      }}>
+        <Text style={{ color: C.slate, fontWeight: '700', fontSize: 13 }}>+ {action}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function TotalRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={[s.row, { justifyContent: 'space-between' }]}>
+      <Text style={s.dim}>{label}</Text>
+      <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]}>{value}</Text>
+    </View>
+  );
+}
+
+function Stepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const btn = {
+    width: 30, height: 30, borderRadius: 8, borderWidth: 1, borderColor: C.line,
+    alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: C.card,
+  };
+  return (
+    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+      <Pressable style={btn} onPress={() => onChange(value + 1)} hitSlop={4}>
+        <Text style={{ fontSize: 16, color: C.ink }}>+</Text>
+      </Pressable>
+      <Text style={{ minWidth: 18, textAlign: 'center', fontSize: 14, fontWeight: '700', color: C.ink }}>{value}</Text>
+      <Pressable style={btn} onPress={() => onChange(Math.max(1, value - 1))} hitSlop={4}>
+        <Text style={{ fontSize: 16, color: C.ink }}>−</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const colName = { flex: 1 } as const;
+const colQty = { width: 96 } as const;
+const colNum = { width: 62 } as const;
 
 /* ---------------- pickers ---------------- */
 
@@ -472,46 +714,3 @@ function Chips({ options, value, onChange }: {
     </View>
   );
 }
-
-/** Keeps its own text while you type — committing on every keystroke would fight
-    you the moment the field is briefly empty or half-typed ("1." → NaN). */
-function NumInput({ value, onChange, width }: { value: number; onChange: (n: number) => void; width: number }) {
-  const [text, setText] = useState(String(value));
-
-  useEffect(() => { setText(String(value)); }, [value]);
-
-  return (
-    <TextInput
-      style={[s.input, { width, textAlign: 'center', paddingVertical: 6, fontSize: 13 }]}
-      keyboardType="decimal-pad"
-      value={text}
-      onChangeText={setText}
-      onBlur={() => {
-        const n = parseFloat(text.replace(',', '.'));
-        const clean = Number.isFinite(n) && n >= 0 ? n : 0;
-        setText(String(clean));
-        onChange(clean);
-      }}
-    />
-  );
-}
-
-function Total({ label, v, bold }: { label: string; v: number; bold?: boolean }) {
-  return (
-    <View style={[s.row, { justifyContent: 'space-between' }]}>
-      <Text style={[s.dim, bold && { color: C.ink, fontWeight: '800', fontSize: 14 }]}>{label}</Text>
-      <Text style={[s.dim, bold && { color: C.ink, fontWeight: '800', fontSize: 14 }]}>
-        ₪{v.toLocaleString('he-IL')}
-      </Text>
-    </View>
-  );
-}
-
-const btn = {
-  backgroundColor: C.ink,
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderRadius: 8,
-} as const;
-
-const btnText = { color: '#fff', fontSize: 13, fontWeight: '700' } as const;

@@ -15,7 +15,7 @@ export const C = {
   ok: '#4f7a5b',
 };
 
-/* Hebrew UI. We don't call I18nManager.forceRTL — on native it needs a full app
+/* Hebrew UI. We don't call I18nManager.forceRTL - on native it needs a full app
    restart to take effect and behaves inconsistently in Expo Go. Aligning text
    explicitly gets the same result, predictably. */
 export const rtl: TextStyle = { textAlign: 'right', writingDirection: 'rtl' };

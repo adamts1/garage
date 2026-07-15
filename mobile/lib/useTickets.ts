@@ -1,7 +1,7 @@
 /* Tickets, backed by Supabase, with optimistic writes.
 
    saveTicket paints the change immediately, then pushes it. Realtime brings in
-   edits made anywhere else (the web board, another phone) — but never while one
+   edits made anywhere else (the web board, another phone) - but never while one
    of our own writes is still in flight, or it would flicker back to the old row. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -47,7 +47,7 @@ export function useTickets() {
       await updateTicket(next, worksChanged);                            // save second
     } catch (e: any) {
       setError(e.message ?? String(e));
-      await refetch().catch(() => {});   // our optimistic state may be a lie now — resync
+      await refetch().catch(() => {});   // our optimistic state may be a lie now - resync
     } finally {
       writing.current--;
     }

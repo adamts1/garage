@@ -2773,6 +2773,47 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   .ws-grid, .tp-row { grid-template-columns: 1fr; }
 }
 
+/* ---- phones: tighten the ticket page to the mobile mock's rhythm ---- */
+@media (max-width: 640px) {
+  /* full-bleed panel: reclaim the desktop 22/24px gutter for content */
+  .main-content { padding: 14px 12px; border-radius: 0; }
+
+  /* keep the sticky-header bleed math in sync with the smaller gutter:
+     --tp-scroll-pad must equal .main-content's padding-top, and the negative
+     side margins must equal its padding-inline, or rows peek past the header */
+  .tp { --tp-head-h: 116px; --tp-scroll-pad: 14px; gap: 12px; }
+  .tp-head { margin: -14px -12px 0; padding: 14px 12px 12px; gap: 10px; }
+  .tp-title h2 { font-size: 18px; }
+  .tp-sub { font-size: 11.5px; gap: 6px; }
+
+  /* tabs scroll sideways instead of wrapping into a tall stacked block */
+  .tp-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tp-tabs::-webkit-scrollbar { display: none; }
+  .tp-tabs .tab { flex: none; }
+
+  /* vehicle + customer sit side by side like the mock; their read-only rows
+     stack label-over-value so nothing gets crushed at half width */
+  #tp-details { grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+  #tp-details .kv { grid-template-columns: 1fr; gap: 3px 0; }
+  #tp-details .kv dt { font-size: 10.5px; margin-top: 5px; }
+  #tp-details .kv dd { justify-content: flex-start; text-align: right; }
+
+  /* cards breathe less on a narrow screen */
+  .card { padding: 13px 14px; border-radius: 12px; }
+  .card .card-title { margin-bottom: 10px; padding-bottom: 10px; font-size: 13px; }
+  .tp-works-head { margin-bottom: 10px; padding-bottom: 10px; }
+
+  /* the grand total reads as the mock's hero number */
+  .sum .grand b { font-size: 22px; }
+
+  /* footer: primary spans full width on top, secondary actions share the row */
+  .tp-foot { flex-wrap: wrap; gap: 8px; }
+  .tp-foot .foot-spacer { display: none; }
+  .tp-foot .btn.primary { flex: 1 1 100%; order: -1; justify-content: center; }
+  .tp-foot .btn.danger,
+  .tp-foot .btn.ghost { flex: 1; justify-content: center; }
+}
+
 /* ============================ invoices module ============================ */
 /* Invoices are a view over billed tickets, so this page reuses .card /
    .works-table / .kv / .sum rather than introducing a second visual language. */

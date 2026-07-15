@@ -3,7 +3,7 @@
    db.ts maps between these types and the Supabase rows, exactly as the web app does.
    If you change a type here, change it there too (and in supabase/schema.sql). */
 
-export type Status = 'todo' | 'diag' | 'appr' | 'prog' | 'parts' | 'qa' | 'done';
+export type Status = 'todo' | 'appr' | 'prog' | 'parts' | 'done';
 export type Priority = 'urgent' | 'high' | 'med' | 'low';
 
 export interface PartRow {
@@ -13,7 +13,7 @@ export interface PartRow {
   price: number;
 }
 
-/** A work as attached to a ticket — a copy of the catalog definition the user can edit. */
+/** A work as attached to a ticket - a copy of the catalog definition the user can edit. */
 export interface TicketWork {
   uid: string;            // unique per ticket (the same work can be added twice)
   code: string;
@@ -46,7 +46,7 @@ export interface Ticket {
   car: string;
   customer: string;
   amount: number;
-  done: number;           // how many subtasks are checked — a COUNT, not a per-item flag
+  done: number;           // how many subtasks are checked - a COUNT, not a per-item flag
   subtasks: string[];
   due: string;
   flags: string[];
@@ -69,11 +69,9 @@ export interface Ticket {
 
 export const COLUMNS: { id: Status; title: string; dot: string }[] = [
   { id: 'todo', title: 'ממתין לטיפול', dot: '#748cab' },
-  { id: 'diag', title: 'אבחון', dot: '#3e5c76' },
   { id: 'appr', title: 'ממתין לאישור', dot: '#1d2d44' },
   { id: 'prog', title: 'בעבודה', dot: '#b58a3c' },
-  { id: 'parts', title: 'חסום — חלקים', dot: '#a5544b' },
-  { id: 'qa', title: 'בקרת איכות', dot: '#5b7f8c' },
+  { id: 'parts', title: 'חסום - חלקים', dot: '#a5544b' },
   { id: 'done', title: 'מוכן לאיסוף', dot: '#4f7a5b' },
 ];
 
@@ -109,7 +107,7 @@ export const TEAM = {
   am: { n: 'אבי מזרחי', ini: 'אמ', bg: '#748cab' },
 } as const;
 
-export const VAT = 0.17;
+export const VAT = 0.18;
 
 export const WORK_CATALOG: WorkDef[] = [
   {

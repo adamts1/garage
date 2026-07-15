@@ -1,4 +1,4 @@
-/* The one place that talks to Supabase — the mobile twin of ../../src/lib/db.ts.
+/* The one place that talks to Supabase - the mobile twin of ../../src/lib/db.ts.
    Same tables, same mapping, same wipe-and-reinsert strategy for works.
    Keep the two in step: a change to the ticket columns belongs in both files. */
 
@@ -183,7 +183,7 @@ export const deleteTicket = async (key: string) => {
 
 /* ---------------- realtime ---------------- */
 
-/** Fires `onChange` whenever anyone — the web app, another phone — touches a ticket / work / part. */
+/** Fires `onChange` whenever anyone - the web app, another phone - touches a ticket / work / part. */
 export const subscribeToTickets = (onChange: () => void) => {
   const channel = supabase
     .channel('garage-tickets-mobile')

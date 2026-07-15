@@ -10,7 +10,7 @@ const url = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '')
   .replace(/\/+$/, '');
 const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 
-/** False until .env is filled in — the app shows setup instructions instead of an empty list. */
+/** False until .env is filled in - the app shows setup instructions instead of an empty list. */
 export const isConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJECT-REF'));
 
 // A placeholder URL keeps createClient from throwing at import time; nothing calls it while unconfigured.
