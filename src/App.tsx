@@ -9,7 +9,8 @@ import WorksStep from './WorksStep';
 import { isConfigured } from './lib/supabase';
 import { useTickets } from './lib/useTickets';
 import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from './catalog';
-import { IconBoard, IconCar, IconCustomers, IconParts, IconPin, IconReports, IconTickets } from './icons';
+import InvoicesPage from './InvoicesPage';
+import { IconBoard, IconCar, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
 import {
   COLUMNS, EPICS, PRIORITIES, TEAM, TYPES,
   type Priority, type Ticket,
@@ -63,7 +64,7 @@ const emptyForm: TicketForm = {
 
 const navItems = [
   { name: 'לוח בקרה', Icon: IconBoard },
-  { name: 'כרטיסים', Icon: IconTickets },
+  { name: 'חשבוניות', Icon: IconDoc },
   { name: 'לקוחות', Icon: IconCustomers },
   { name: 'פריטים', Icon: IconParts },
   { name: 'דוחות', Icon: IconReports },
@@ -440,30 +441,11 @@ function App() {
                 )
               )}
 
-              {active === 'כרטיסים' && (
-                <>
-                  <div className="panel-header">
-                    <h2>ניהול כרטיסים</h2>
-                    <button className="btn primary" onClick={openForm}>הוסף כרטיס</button>
-                  </div>
-                  <div className="cards-grid">
-                    {tickets.map((ticket) => (
-                      <article key={ticket.k} className="ticket-card">
-                        <div className="ticket-header">
-                          <strong>{ticket.title}</strong>
-                          <span>{ticket.k}</span>
-                        </div>
-                        <p>{ticket.customer} · {ticket.car}</p>
-                        <div className="ticket-footer">
-                          <span className="status-pill">
-                            {COLUMNS.find((c) => c.id === ticket.st)?.title}
-                          </span>
-                          <span>{ticket.amount ? shekel(ticket.amount) : '—'}</span>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </>
+              {active === 'חשבוניות' && (
+                <InvoicesPage
+                  tickets={tickets}
+                  onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
+                />
               )}
 
               {active === 'לקוחות' && <CustomersPage />}

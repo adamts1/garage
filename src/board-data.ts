@@ -32,6 +32,8 @@ export interface Ticket {
   km?: string;
   year?: string;
   createdAt?: string;
+  /** raw ISO timestamp — createdAt is already localised, so it can't be sorted or aged */
+  createdAtISO?: string;
   notes?: string;
 
   /* set when the ticket is closed and billed */

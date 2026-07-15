@@ -104,6 +104,7 @@ const rowToTicket = (r: any): Ticket => ({
   year: r.year ?? undefined,
   notes: r.notes ?? undefined,
   createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : undefined,
+  createdAtISO: r.created_at ?? undefined,
   paid: r.paid ?? undefined,
   payMethod: r.pay_method ?? undefined,
   doc: r.doc ?? undefined,

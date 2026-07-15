@@ -2548,3 +2548,296 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 }
 
 .setup-notice a { color: #3e5c76; font-weight: 600; }
+
+/* ==================== ticket page — polish pass ==================== */
+
+/* header sticks, so the step nav and back action stay reachable on a long ticket.
+   the scroll container is .main-content (22px/24px padding) — content scrolls up
+   *through* that padding, so the header must bleed over it and be fully opaque,
+   or rows show above and through it. */
+.tp {
+  --tp-head-h: 140px;      /* sticky header, incl. its 1px bottom border */
+  --tp-row-gap: 16px;      /* the gap between .tp's children */
+  --tp-scroll-pad: 22px;   /* .main-content's padding-top — see .tp-head below */
+}
+.tp-head {
+  position: sticky;
+  /* pin up into .main-content's padding-top: sticky pins *below* that padding
+     while content scrolls up *through* it, so rows peek above an un-shifted header */
+  top: calc(-1 * var(--tp-scroll-pad));
+  z-index: 20;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin: calc(-1 * var(--tp-scroll-pad)) -24px 0;
+  padding: var(--tp-scroll-pad) 24px 14px;
+  background: var(--surface-2);      /* opaque: no bleed-through */
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 10px 16px -12px rgba(13, 19, 33, 0.25);
+}
+.tp-head-bar { display: flex; align-items: center; gap: 12px; }
+
+/* anchors clear the sticky header when a step is clicked */
+#tp-details, #tp-works, #tp-summary { scroll-margin-top: calc(var(--tp-head-h) + 12px); }
+
+/* status badge takes its colour from the board column, so 'חסום — חלקים'
+   no longer wears the same amber as 'בעבודה' */
+.tp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--dot, var(--steel)) 12%, #fff);
+  color: color-mix(in srgb, var(--dot, var(--steel)) 78%, var(--ink));
+  border: 1px solid color-mix(in srgb, var(--dot, var(--steel)) 26%, #fff);
+}
+.tp-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot, var(--steel));
+}
+
+.tp-sub { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.tp-sep { color: var(--border); }
+
+/* summary rail pins directly under the header — 116px was shorter than the
+   header itself, so it slid underneath */
+/* The rail must pin exactly where it already rests, or it visibly jumps once
+   before locking. Its resting offset from the scrollport top is:
+   header height + the gap above it, less the scroll container's top padding
+   (sticky offsets are measured from the padding box). Match that and it never
+   moves at all. */
+.tp-side {
+  position: sticky;
+  top: calc(var(--tp-head-h) + var(--tp-row-gap) - var(--tp-scroll-pad));
+  align-self: start;
+  max-height: calc(100vh - var(--tp-head-h) - 48px);
+  overflow-y: auto;
+}
+
+/* blanks read as blanks, not as data */
+.kv-empty { color: color-mix(in srgb, var(--steel) 55%, #fff); font-weight: 600; }
+.kv-link { color: var(--slate); font-weight: 700; text-decoration: none; }
+.kv-link:hover { text-decoration: underline; }
+
+/* works card header: title on one side, count chip on the other.
+   kept out of .card-title so the row-reverse icon rule stays untouched */
+.tp-works-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.tp-works-head .card-title {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+.card-count {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  color: var(--muted-d);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* summary: subtotal sits quieter than the lines it sums */
+.sum-n {
+  margin-inline-start: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+.sum .sum-sub {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-soft);
+}
+.sum .sum-sub span, .sum .sum-sub b { color: var(--muted-d); }
+.sum b { font-variant-numeric: tabular-nums; }
+
+/* tables: numeric columns line up, code reads as the mockup's pill */
+.works-table td, .works-table th { text-align: right; }
+.works-table td strong { font-variant-numeric: tabular-nums; }
+
+/* side-by-side gave each 6-column table ~400px — the job name was down to 'א...'.
+   stacked full-width (as in the mock) the name column gets ~530px, and the
+   selected work now sits directly above the parts it owns */
+.ws-grid { grid-template-columns: 1fr; }
+
+/* auto layout treats the th widths as hints, so a long job name starved the
+   numeric columns down to empty boxes — fixed layout makes the widths binding */
+.works-table { table-layout: fixed; }
+
+/* inputs carry a default intrinsic width (~177px) that blew out the columns and
+   crushed the name field down to 'אבח' — make them fill their cell instead */
+.works-table .cell-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+}
+/* spinners steal ~16px from an 84px column and are useless for prices */
+.works-table .cell-input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+.works-table .cell-input[type='number']::-webkit-outer-spin-button,
+.works-table .cell-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.cell-input.code {
+  width: 100%;
+  border-radius: 999px;
+  background: var(--sand);
+  border-color: color-mix(in srgb, var(--steel) 30%, var(--sand));
+  color: var(--navy);
+  font-size: 12px;
+}
+/* names are the one column allowed to run long — clip rather than push the table */
+.works-table td .cell-input.wide { text-overflow: ellipsis; }
+
+/* the row is mostly read, occasionally edited — so the cells read as text and
+   only surface their input chrome on hover/focus (the code pill stays a pill) */
+.works-table .cell-input:not(.code) {
+  background: transparent;
+  border-color: transparent;
+}
+.works-table tbody tr:hover .cell-input:not(.code),
+.works-table .cell-input:not(.code):hover,
+.works-table .cell-input:not(.code):focus {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.works-table .cell-input:not(.code):focus { border-color: var(--slate); }
+
+/* numbers align with their header and their total, so the column reads as a column */
+.works-table .cell-input[type='number'] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* running total per table, so each column proves its own number */
+.works-table tfoot td {
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.works-table tfoot tr:hover { background: var(--surface-2); }
+.works-table tfoot strong { color: var(--navy); font-size: 13.5px; }
+
+/* the ✕ was shouting on every row — reveal it on hover/focus instead */
+.row-x { opacity: 0; transition: opacity 0.12s ease; }
+.works-table tbody tr:hover .row-x,
+.works-table tbody tr.is-selected .row-x,
+.row-x:focus-visible { opacity: 1; }
+
+/* selected work gets a spine on the row's leading (right) edge, so it's clear
+   which work the parts table is showing */
+.works-table tr.is-selected td:first-child { box-shadow: inset -3px 0 0 var(--slate); }
+
+@media (max-width: 1100px) {
+  .tp-grid { grid-template-columns: 1fr; }
+  .tp-side { position: static; }
+  .ws-grid, .tp-row { grid-template-columns: 1fr; }
+}
+
+/* ============================ invoices module ============================ */
+/* Invoices are a view over billed tickets, so this page reuses .card /
+   .works-table / .kv / .sum rather than introducing a second visual language. */
+.inv { display: flex; flex-direction: column; gap: 16px; }
+.inv-sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+
+/* KPI row */
+.inv-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.inv-kpi { display: flex; align-items: center; gap: 14px; }
+.inv-kpi > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.inv-kpi-ic {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex: none;
+}
+.inv-kpi-ic.navy   { background: var(--primary-soft); color: var(--navy); }
+.inv-kpi-ic.warn   { background: var(--warn-soft);    color: var(--warn); }
+.inv-kpi-ic.ok     { background: var(--ok-soft);      color: var(--ok); }
+.inv-kpi-ic.danger { background: var(--danger-soft);  color: var(--danger); }
+.inv-kpi-val { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.inv-kpi-val.navy   { color: var(--navy); }
+.inv-kpi-val.warn   { color: var(--warn); }
+.inv-kpi-val.ok     { color: var(--ok); }
+.inv-kpi-val.danger { color: var(--danger); }
+.inv-kpi-label { font-size: 13px; font-weight: 700; }
+.inv-kpi-note  { font-size: 11.5px; color: var(--muted); }
+
+/* filters */
+.inv-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inv-search { flex: 1; min-width: 220px; }
+.inv-search,
+.inv-filters select {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text);
+}
+.inv-search:focus, .inv-filters select:focus { outline: none; border-color: var(--slate); }
+.inv-filters .btn.ghost:disabled { opacity: 0.5; cursor: default; }
+
+/* table */
+.inv-table { table-layout: auto; }
+.inv-num { color: var(--slate); font-variant-numeric: tabular-nums; }
+.inv-car { display: flex; align-items: center; gap: 8px; }
+.plate.sm { font-size: 11px; padding: 1px 6px; }
+.inv-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* status pills — same colour language as the board columns */
+.inv-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.inv-pill.paid    { background: var(--ok-soft);     color: var(--ok); }
+.inv-pill.due     { background: var(--warn-soft);   color: var(--warn); }
+.inv-pill.overdue { background: var(--danger-soft); color: var(--danger); }
+
+/* detail */
+.inv-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
+  align-items: start;
+}
+.inv-detail .kv dt { display: flex; align-items: center; gap: 7px; }
+.inv-detail .kv dt svg { width: 15px; height: 15px; color: var(--steel); }
+.inv-sum {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.inv-actions { display: flex; gap: 10px; margin-top: 18px; }
+.inv-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+
+@media (max-width: 1100px) {
+  .inv-kpis { grid-template-columns: repeat(2, 1fr); }
+  .inv-detail-grid { grid-template-columns: 1fr; }
+}

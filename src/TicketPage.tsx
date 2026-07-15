@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
 import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from './catalog';
@@ -45,13 +45,27 @@ interface Props {
   onBack: () => void;
 }
 
+const STEPS = [
+  { id: 'tp-details', label: 'פרטי לקוח ורכב' },
+  { id: 'tp-works', label: 'עבודות ופריטים' },
+  { id: 'tp-summary', label: 'סיכום וסגירה' },
+];
+
+/** '—' for anything the intake form never filled in, so blanks read as blank, not as data. */
+const Val = ({ children }: { children?: string | number | null }) =>
+  children === undefined || children === null || children === ''
+    ? <span className="kv-empty">—</span>
+    : <>{children}</>;
+
 export default function TicketPage({
   ticket, setTickets, catalog, addToCatalog, parts, addToParts, onBack,
 }: Props) {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [step, setStep] = useState('tp-details');
   const works = ticket.works ?? [];
+  const itemCount = works.reduce((s, w) => s + w.items.length, 0);
 
   const patch = (p: Partial<Ticket>) =>
     setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, ...p } : t)));
@@ -75,31 +89,49 @@ export default function TicketPage({
   return (
     <div className="tp">
       <header className="tp-head">
-        <div>
-          <div className="tp-title">
-            <h2>כרטיס עבודה #{ticket.k.split('-')[1]}</h2>
-            <span className={`tp-status${closed ? ' closed' : ''}`}>{column?.title}</span>
+        <div className="tp-head-bar">
+          <div>
+            <div className="tp-title">
+              <h2>כרטיס עבודה #{ticket.k.split('-')[1]}</h2>
+              <span
+                className="tp-status"
+                style={{ '--dot': column?.dot } as CSSProperties}
+              >
+                <i className="tp-status-dot" />
+                {column?.title}
+              </span>
+            </div>
+            <div className="tp-sub">
+              <span>נוצר: <Val>{ticket.createdAt}</Val></span>
+              <span className="tp-sep">·</span>
+              <span>יעד: <Val>{ticket.due}</Val></span>
+              <span className="tp-sep">·</span>
+              <span>עובד: {TEAM[ticket.who].n}</span>
+            </div>
           </div>
-          <div className="tp-sub">
-            נוצר: {ticket.createdAt ?? '—'} | עובד: {TEAM[ticket.who].n}
-          </div>
+
+          <div className="foot-spacer" />
+
+          <button className="btn ghost" onClick={onBack}>
+            <span className="arrow">←</span> חזרה לרשימת כרטיסים
+          </button>
         </div>
 
-        <div className="foot-spacer" />
-
-        <div className="tabs tp-tabs">
-          <button type="button" className="tab on" onClick={() => scrollTo('tp-details')}>
-            <span className="tab-num"><IconCheck /></span> פרטי לקוח ורכב
-          </button>
-          <button type="button" className="tab" onClick={() => scrollTo('tp-works')}>
-            <span className="tab-num">2</span> עבודות ופריטים
-          </button>
-          <button type="button" className="tab" onClick={() => scrollTo('tp-summary')}>
-            <span className="tab-num">3</span> סיכום וסגירה
-          </button>
-        </div>
-
-        <button className="btn ghost" onClick={onBack}>← חזרה לרשימת כרטיסים</button>
+        <nav className="tabs tp-tabs">
+          {STEPS.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`tab${step === s.id ? ' on' : ''}`}
+              onClick={() => { setStep(s.id); scrollTo(s.id); }}
+            >
+              <span className="tab-num">
+                {step === s.id ? <IconCheck /> : i + 1}
+              </span>
+              {s.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <div className="tp-grid">
@@ -109,10 +141,11 @@ export default function TicketPage({
             <section className="card">
               <h3 className="card-title"><IconCar /> פרטי רכב</h3>
               <dl className="kv">
-                <dt>מספר רישוי</dt><dd><span className="plate">{ticket.plate}</span></dd>
-                <dt>דגם</dt><dd>{ticket.car}</dd>
-                <dt>שנת ייצור</dt><dd>{ticket.year ?? '—'}</dd>
-                <dt>ק״מ</dt><dd>{ticket.km ? `${ticket.km} ק״מ` : '—'}</dd>
+                <dt>מספר רישוי</dt>
+                <dd>{ticket.plate ? <span className="plate">{ticket.plate}</span> : <Val>{null}</Val>}</dd>
+                <dt>דגם</dt><dd><Val>{ticket.car}</Val></dd>
+                <dt>שנת ייצור</dt><dd><Val>{ticket.year}</Val></dd>
+                <dt>ק״מ</dt><dd><Val>{ticket.km ? `${ticket.km} ק״מ` : null}</Val></dd>
               </dl>
             </section>
 
@@ -120,17 +153,28 @@ export default function TicketPage({
               <h3 className="card-title"><IconCustomers /> פרטי לקוח</h3>
               <dl className="kv">
                 <dt>שם</dt><dd><b>{ticket.customer}</b></dd>
-                <dt>טלפון</dt><dd>{ticket.phone ?? '—'}</dd>
-                <dt>אימייל</dt><dd>{ticket.email ?? '—'}</dd>
-                <dt>כתובת</dt><dd>{ticket.address ?? '—'}</dd>
+                <dt>טלפון</dt>
+                <dd>
+                  {ticket.phone
+                    ? <a className="kv-link" href={`tel:${ticket.phone}`} dir="ltr">{ticket.phone}</a>
+                    : <Val>{null}</Val>}
+                </dd>
+                <dt>אימייל</dt>
+                <dd>
+                  {ticket.email
+                    ? <a className="kv-link" href={`mailto:${ticket.email}`} dir="ltr">{ticket.email}</a>
+                    : <Val>{null}</Val>}
+                </dd>
+                <dt>כתובת</dt><dd><Val>{ticket.address}</Val></dd>
               </dl>
             </section>
           </div>
 
           <section className="card" id="tp-works">
-            <h3 className="card-title tp-works-title">
-              <IconWrench /> עבודות ופריטים ({works.length})
-            </h3>
+            <div className="tp-works-head">
+              <h3 className="card-title"><IconWrench /> עבודות ופריטים</h3>
+              <span className="card-count">{works.length} עבודות · {itemCount} פריטים</span>
+            </div>
 
             <WorksStep
               works={works}
@@ -180,8 +224,17 @@ export default function TicketPage({
           <section className="card">
             <h3 className="card-title"><IconDoc /> סיכום</h3>
             <div className="sum">
-              <div><span>סה״כ עבודות</span><b>{shekel(labour)}</b></div>
-              <div><span>סה״כ פריטים</span><b>{shekel(items)}</b></div>
+              <div>
+                <span>סה״כ עבודות <i className="sum-n">{works.length}</i></span>
+                <b>{shekel(labour)}</b>
+              </div>
+              <div>
+                <span>סה״כ פריטים <i className="sum-n">{itemCount}</i></span>
+                <b>{shekel(items)}</b>
+              </div>
+              <div className="sum-sub">
+                <span>סכום ביניים</span><b>{shekel(labour + items)}</b>
+              </div>
               <div><span>מע״מ ({Math.round(VAT * 100)}%)</span><b>{shekel(vat)}</b></div>
               <div className="grand"><span>סה״כ לתשלום</span><b>{shekel(total)}</b></div>
             </div>

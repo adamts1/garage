@@ -7,7 +7,9 @@ import {
   type PartDef, type TicketWork, type WorkDef,
 } from './catalog';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
+/* same format as the summary rail — a row reading ₪150 next to a total reading ₪150.00 looks like a bug */
+const shekel = (n: number) =>
+  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface Props {
   works: TicketWork[];
@@ -113,11 +115,6 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
       <div className="ws-col">
         <div className="ws-head">
           <span className="ws-title"><IconWrench /> עבודות ({works.length})</span>
-          {works.length > 0 && (
-            <button type="button" className="btn-mini" onClick={() => openPicker('')}>
-              <span className="plus">＋</span> הוסף עבודה
-            </button>
-          )}
         </div>
 
         {works.length === 0 ? (
@@ -135,12 +132,12 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
         <table className="works-table">
           <thead>
             <tr>
-              <th style={{ width: 130 }}>קוד</th>
+              <th style={{ width: 96 }}>קוד</th>
               <th>שם העבודה</th>
-              <th style={{ width: 130 }}>מחיר</th>
-              <th style={{ width: 90 }}>חלקים</th>
-              <th style={{ width: 110 }}>סה״כ</th>
-              <th style={{ width: 40 }} />
+              <th style={{ width: 84 }}>מחיר</th>
+              <th style={{ width: 54 }}>חלקים</th>
+              <th style={{ width: 96 }}>סה״כ</th>
+              <th style={{ width: 32 }} />
             </tr>
           </thead>
           <tbody>
@@ -150,11 +147,12 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                 className={w.uid === selected ? 'is-selected' : ''}
                 onClick={() => setSelected(w.uid)}
               >
+                {/* the inputs fill their cells, so they must not swallow the row click —
+                    clicking a field selects the work *and* focuses the field */}
                 <td>
                   <input
                     className="cell-input code"
                     value={w.code}
-                    onClick={(e) => e.stopPropagation()}
                     onChange={(e) => patchWork(w.uid, { code: e.target.value })}
                   />
                 </td>
@@ -162,7 +160,6 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                   <input
                     className="cell-input wide"
                     value={w.name}
-                    onClick={(e) => e.stopPropagation()}
                     onChange={(e) => patchWork(w.uid, { name: e.target.value })}
                   />
                   {w.custom && <span className="badge-new">חדשה</span>}
@@ -173,7 +170,6 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                     className="cell-input"
                     value={w.labor}
                     min={0}
-                    onClick={(e) => e.stopPropagation()}
                     onChange={(e) => patchWork(w.uid, { labor: Number(e.target.value) || 0 })}
                   />
                 </td>
@@ -191,7 +187,20 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
             ))}
 
           </tbody>
+          <tfoot>
+            {/* the סה״כ column is labour + that work's parts, so this foots to the
+                pre-VAT subtotal — not to the summary's labour-only 'סה״כ עבודות' */}
+            <tr>
+              <td colSpan={4}>סה״כ עבודה וחלקים</td>
+              <td><strong>{shekel(works.reduce((s, w) => s + workTotal(w), 0))}</strong></td>
+              <td />
+            </tr>
+          </tfoot>
         </table>
+
+        <button type="button" className="add-row" onClick={() => openPicker('')}>
+          <span className="plus">＋</span> הוסף עבודה
+        </button>
         </>
         )}
       </div>
@@ -202,11 +211,6 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
             <IconBox /> פריטים לעבודה ({current ? current.items.length : 0})
             {current && <span className="of-work">{current.name}</span>}
           </span>
-          {current && current.items.length > 0 && (
-            <button type="button" className="btn-mini" onClick={() => setPickingItem(true)}>
-              <span className="plus">＋</span> הוסף פריט
-            </button>
-          )}
         </div>
 
         {!current || current.items.length === 0 ? (
@@ -227,12 +231,12 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
           <table className="works-table">
             <thead>
               <tr>
-                <th>מק״ט</th>
+                <th style={{ width: 84 }}>מק״ט</th>
                 <th>פריט</th>
-                <th style={{ width: 90 }}>כמות</th>
-                <th style={{ width: 110 }}>מחיר ליח׳</th>
-                <th style={{ width: 110 }}>סה״כ</th>
-                <th style={{ width: 40 }} />
+                <th style={{ width: 64 }}>כמות</th>
+                <th style={{ width: 84 }}>מחיר ליח׳</th>
+                <th style={{ width: 96 }}>סה״כ</th>
+                <th style={{ width: 32 }} />
               </tr>
             </thead>
             <tbody>
@@ -270,8 +274,20 @@ export default function WorksStep({ works, setWorks, catalog, addToCatalog, part
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              {/* this table only ever shows the selected work's parts, so say so —
+                  the summary's 'סה״כ פריטים' is every work's parts together */}
+              <tr>
+                <td colSpan={4}>סה״כ פריטים בעבודה זו</td>
+                <td><strong>{shekel(current.items.reduce((s, i) => s + i.qty * i.price, 0))}</strong></td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
 
+          <button type="button" className="add-row" onClick={() => setPickingItem(true)}>
+            <span className="plus">＋</span> הוסף פריט
+          </button>
           </>
         )}
       </div>
