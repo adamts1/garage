@@ -153,7 +153,7 @@ function SetupNotice() {
       <Text style={s.h1}>חסרה הגדרת Supabase</Text>
       <Text style={s.body}>
         צור קובץ <Text style={{ fontWeight: '700' }}>mobile/.env</Text> לפי{' '}
-        <Text style={{ fontWeight: '700' }}>.env.example</Text>, עם הכתובת והמפתח של אותו פרויקט
+        <Text style={{ fontWeight: '700' }}>.env.example</Text>, עם הכתובת והמפתח של אותו אי-תןיקט
         Supabase שהאתר משתמש בו:
       </Text>
       <View style={[s.card, { backgroundColor: C.ink }]}>

@@ -164,7 +164,7 @@ export default function EditTicket() {
         `סה״כ לתשלום: ${money(total)}`,
         draft.paid ? `שולם ${draft.payMethod ? `ב${draft.payMethod} ` : ''}- תודה!` : 'התשלום יתבצע בעת האיסוף.',
         '',
-        'מוסך פרו · נשמח לראותך',
+        'מוסך אי-תן · נשמח לראותך',
       ].join('\n');
     }
     return [
@@ -180,7 +180,7 @@ export default function EditTicket() {
       `סה״כ לתשלום: ${money(sum.total)}`,
       '',
       'נא אשרו לביצוע. תודה,',
-      'מוסך פרו',
+      'מוסך אי-תן',
     ].join('\n');
   };
 
