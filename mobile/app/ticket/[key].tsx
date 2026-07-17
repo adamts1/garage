@@ -41,6 +41,7 @@ export default function EditTicket() {
   const [pickWork, setPickWork] = useState(false);
   const [pickPartFor, setPickPartFor] = useState<string | null>(null);   // work uid
   const [tab, setTab] = useState<Tab>('works');
+  const [openWork, setOpenWork] = useState<string | null>(null);   // expanded work uid
 
   // Load the ticket into an editable draft. Re-runs if realtime replaces the row
   // while we have nothing pending - but never clobbers edits in progress.
@@ -74,7 +75,6 @@ export default function EditTicket() {
 
   const works = draft.works ?? [];
   const sum = worksSummary(works);
-  const itemCount = works.reduce((n, w) => n + w.items.length, 0);
   const column = COLUMNS.find((c) => c.id === draft.st);
   const closed = draft.st === 'done';
   const notesCount = [draft.notes, draft.blocked].filter(Boolean).length;
@@ -115,19 +115,20 @@ export default function EditTicket() {
     patchWork(uid, { items: w.items.filter((_, i) => i !== idx) });
   };
 
-  // "+ הוסף פריט" is global in the mock; a part still belongs to a work, so it
-  // attaches to the last work (or nudges you to add a work first).
-  const addPartGlobal = () => {
-    if (!works.length) return Alert.alert('אין עבודות', 'הוסף עבודה לפני הוספת פריט.');
-    setPickPartFor(works[works.length - 1].uid);
-  };
-
   const editLabor = (w: TicketWork) => {
     if (Platform.OS !== 'ios') return;
     Alert.prompt('מחיר עבודה', w.name, (v) => {
       const n = parseFloat((v ?? '').replace(',', '.'));
       patchWork(w.uid, { labor: Number.isFinite(n) && n >= 0 ? n : w.labor });
     }, 'plain-text', String(w.labor));
+  };
+
+  const editPrice = (uid: string, idx: number, p: PartRow) => {
+    if (Platform.OS !== 'ios') return;
+    Alert.prompt('מחיר ליחידה', p.name, (v) => {
+      const n = parseFloat((v ?? '').replace(',', '.'));
+      patchPart(uid, idx, { price: Number.isFinite(n) && n >= 0 ? n : p.price });
+    }, 'plain-text', String(p.price));
   };
 
   const saveWith = async (over?: Partial<Ticket>) => {
@@ -148,12 +149,6 @@ export default function EditTicket() {
       { text: 'צא בלי לשמור', style: 'destructive', onPress: () => router.back() },
     ]);
   };
-
-  const moreActions = () =>
-    Alert.alert('אפשרויות', '', [
-      { text: dirty ? 'שמור וצא' : 'סגור', onPress: () => saveWith() },
-      { text: 'ביטול', style: 'cancel' },
-    ]);
 
   // WhatsApp: a ready-for-pickup notice once the car is prepared (status 'done'),
   // otherwise a quote asking the customer to approve the works.
@@ -209,46 +204,16 @@ export default function EditTicket() {
 
       {/* ---------- custom header ---------- */}
       <View style={{ backgroundColor: C.card, paddingTop: insets.top + 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
-        <View style={[s.row, { justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 4 }]}>
-          <Pressable onPress={moreActions} hitSlop={10}><Text style={{ fontSize: 22, color: C.ink }}>⋮</Text></Pressable>
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: C.ink }}>
-              כרטיס עבודה #{draft.k.includes('-') ? draft.k.split('-')[1] : draft.k}
-            </Text>
-            <View style={{
-              paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999,
-              backgroundColor: closed ? '#e6ede6' : C.sand,
-            }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: closed ? C.ok : '#8a6b28' }}>
-                {closed ? 'סגור' : 'פתוח'}
-              </Text>
-            </View>
-          </View>
+        <View style={[s.row, { justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 10 }]}>
+          <View style={{ width: 22 }} />
+          <Text style={{ fontSize: 22, fontWeight: '800', color: C.ink, letterSpacing: 0.5 }}>
+            {draft.plate || '-'}
+          </Text>
           <Pressable onPress={confirmLeave} hitSlop={10}><Text style={{ fontSize: 22, color: C.ink }}>›</Text></Pressable>
         </View>
-        <Text style={[s.dim, { textAlign: 'center', paddingBottom: 10, fontSize: 11.5 }]}>
-          נוצר: {draft.createdAt || '-'} · {TEAM[draft.who].n}
-        </Text>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
-        {/* ---------- vehicle + customer, side by side ---------- */}
-        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-          <InfoCard title="פרטי רכב">
-            <View style={{ alignSelf: 'flex-end', backgroundColor: C.sand, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginBottom: 2 }}>
-              <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink, ...rtl }}>{draft.plate || '-'}</Text>
-            </View>
-            <Text style={[s.body, { fontWeight: '600' }]}>{draft.car || '-'}</Text>
-            <Text style={s.dim}>{[draft.year, draft.km && `${draft.km} ק״מ`].filter(Boolean).join(' · ') || '-'}</Text>
-          </InfoCard>
-
-          <InfoCard title="לקוח">
-            <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink, ...rtl }}>{draft.customer || '-'}</Text>
-            <Text style={s.dim}>טל׳ {draft.phone || '-'}</Text>
-            <Text style={s.dim} numberOfLines={2}>{draft.address || '-'}</Text>
-          </InfoCard>
-        </View>
-
         {/* ---------- whatsapp ---------- */}
         <Pressable
           onPress={sendWhatsApp}
@@ -277,90 +242,80 @@ export default function EditTicket() {
           })}
         </View>
 
-        {/* ================= WORKS + ITEMS ================= */}
+        {/* ================= WORKS (each expands to its own parts) ================= */}
         {tab === 'works' && (
           <>
-            {/* works */}
             <SectionHead title="עבודות" count={works.length} action="הוסף עבודה" onAction={() => setPickWork(true)} />
-            {works.map((w) => (
-              <View key={w.uid} style={[s.card, { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }]}>
-                <Text style={{ color: C.dim, fontSize: 16 }}>⠿</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.h2]} numberOfLines={1}>{w.name}</Text>
-                  <View style={[s.row, { gap: 5, marginTop: 2 }]}>
-                    <Text style={{ color: C.ok, fontSize: 12, fontWeight: '700' }}>✓ תקין</Text>
-                  </View>
+            {works.map((w, wi) => {
+              const open = openWork === w.uid;
+              return (
+                <View key={`${w.uid}-${wi}`} style={s.card}>
+                  {/* work row — tap to reveal its parts */}
+                  <Pressable onPress={() => setOpenWork(open ? null : w.uid)} style={[s.row, { justifyContent: 'space-between', gap: 10 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.h2} numberOfLines={1}>{w.name}</Text>
+                      <Text style={[s.dim, { marginTop: 2 }]}>
+                        {w.items.length} פריטים · {money(workTotal(w))}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 20, color: C.mist }}>{open ? '⌄' : '‹'}</Text>
+                  </Pressable>
+
+                  {open && (
+                    <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 6 }}>
+                      {/* labor */}
+                      <View style={[s.row, { justifyContent: 'space-between', paddingVertical: 6 }]}>
+                        <Text style={[s.body, { fontSize: 13 }]}>עבודה</Text>
+                      </View>
+
+                      {/* parts of THIS work */}
+                      {w.items.map((p, i) => (
+                        <View key={`${w.uid}-${wi}-${i}`} style={[s.row, { paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.line, gap: 8 }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
+                            <Pressable onPress={() => editPrice(w.uid, i, p)}>
+                              <Text style={[s.dim, { fontSize: 11 }]}>{money(p.price)} ליח׳</Text>
+                            </Pressable>
+                          </View>
+                          <Stepper value={p.qty} onChange={(n) => patchPart(w.uid, i, { qty: n })} />
+                          <Text style={{ width: 62, textAlign: 'center', fontSize: 13, fontWeight: '700', color: C.ink, ...rtl }}>
+                            {money(p.qty * p.price)}
+                          </Text>
+                          <Pressable onPress={() => removePart(w.uid, i)} hitSlop={6} style={{ width: 22, alignItems: 'center' }}>
+                            <Text style={{ color: C.danger, fontSize: 16, fontWeight: '700' }}>✕</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                      {!w.items.length ? <Text style={[s.dim, { paddingVertical: 6 }]}>אין פריטים לעבודה זו</Text> : null}
+
+                      {/* per-work actions */}
+                      <View style={[s.row, { justifyContent: 'space-between', marginTop: 10 }]}>
+                        <Pressable onPress={() => setPickPartFor(w.uid)} hitSlop={6}>
+                          <Text style={{ color: C.slate, fontWeight: '700', fontSize: 13 }}>+ הוסף פריט</Text>
+                        </Pressable>
+                        <Pressable onPress={() => removeWork(w.uid)} hitSlop={6}>
+                          <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>מחק עבודה</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
                 </View>
-                <Pressable onPress={() => editLabor(w)}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink }}>{money(w.labor)}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => Alert.alert(w.name, '', [
-                    { text: 'ערוך מחיר עבודה', onPress: () => editLabor(w) },
-                    { text: 'מחק עבודה', style: 'destructive', onPress: () => removeWork(w.uid) },
-                    { text: 'ביטול', style: 'cancel' },
-                  ])}
-                  hitSlop={8}
-                >
-                  <Text style={{ color: C.dim, fontSize: 18 }}>⋮</Text>
-                </Pressable>
-              </View>
-            ))}
+              );
+            })}
             {!works.length ? <Text style={[s.dim, { textAlign: 'center', paddingVertical: 8 }]}>לא הוזנו עבודות</Text> : null}
 
-            {/* items */}
-            <View style={{ height: 4 }} />
-            <SectionHead title="פריטים" count={itemCount} action="הוסף פריט" onAction={addPartGlobal} />
-            {itemCount ? (
-              <View style={s.card}>
-                <View style={[s.row, { paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line }]}>
-                  <Text style={[colName, s.dim]}>פריט</Text>
-                  <Text style={[colQty, s.dim, { textAlign: 'center' }]}>כמות</Text>
-                  <Text style={[colNum, s.dim, { textAlign: 'center' }]}>מחיר</Text>
-                  <Text style={[colNum, s.dim, { textAlign: 'center' }]}>סה״כ</Text>
-                  <View style={{ width: 24 }} />
-                </View>
-                {works.flatMap((w) => w.items.map((p, i) => (
-                  <View key={`${w.uid}-${i}`} style={[s.row, { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line }]}>
-                    <View style={colName}>
-                      <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
-                      <Text style={[s.dim, { fontSize: 11 }]} numberOfLines={1}>{p.sku}</Text>
-                    </View>
-                    <View style={colQty}>
-                      <Stepper value={p.qty} onChange={(n) => patchPart(w.uid, i, { qty: n })} />
-                    </View>
-                    <Pressable style={colNum} onPress={() => {
-                      if (Platform.OS !== 'ios') return;
-                      Alert.prompt('מחיר', p.name, (v) => {
-                        const n = parseFloat((v ?? '').replace(',', '.'));
-                        patchPart(w.uid, i, { price: Number.isFinite(n) && n >= 0 ? n : p.price });
-                      }, 'plain-text', String(p.price));
-                    }}>
-                      <Text style={{ ...rtl, textAlign: 'center', fontSize: 12.5, color: C.text }}>{money(p.price)}</Text>
-                    </Pressable>
-                    <Text style={[colNum, { ...rtl, textAlign: 'center', fontSize: 12.5, fontWeight: '700', color: C.ink }]}>
-                      {money(p.qty * p.price)}
-                    </Text>
-                    <Pressable style={{ width: 24, alignItems: 'center' }} onPress={() => removePart(w.uid, i)} hitSlop={6}>
-                      <Text style={{ color: C.danger, fontSize: 17, fontWeight: '700' }}>✕</Text>
-                    </Pressable>
-                  </View>
-                )))}
-
-                {/* totals */}
-                <View style={{ paddingTop: 12, gap: 6 }}>
-                  <TotalRow label="סה״כ לפני מע״מ" value={money(sum.net)} />
-                  <TotalRow label={`מע״מ (${Math.round(VAT * 100)}%)`} value={money(sum.vat)} />
-                  <View style={{ height: 1, backgroundColor: C.line, marginVertical: 4 }} />
-                  <View style={[s.row, { justifyContent: 'space-between' }]}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink }}>סה״כ לתשלום</Text>
-                    <Text style={{ fontSize: 20, fontWeight: '800', color: C.slate }}>{money(sum.total)}</Text>
-                  </View>
+            {/* overall totals */}
+            {works.length ? (
+              <View style={[s.card, { gap: 6 }]}>
+                <TotalRow label="סה״כ לפני מע״מ" value={money(sum.net)} />
+                <TotalRow label={`מע״מ (${Math.round(VAT * 100)}%)`} value={money(sum.vat)} />
+                <View style={{ height: 1, backgroundColor: C.line, marginVertical: 4 }} />
+                <View style={[s.row, { justifyContent: 'space-between' }]}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink }}>סה״כ לתשלום</Text>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: C.slate }}>{money(sum.total)}</Text>
                 </View>
               </View>
-            ) : (
-              <Text style={[s.dim, { textAlign: 'center', paddingVertical: 8 }]}>לא הוזנו פריטים</Text>
-            )}
+            ) : null}
           </>
         )}
 
@@ -484,7 +439,7 @@ export default function EditTicket() {
           style={{ flex: 1, backgroundColor: C.ink, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
         >
           {saving ? <ActivityIndicator color="#fff" />
-            : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>סיים עבודה וחייב לקוח</Text>}
+            : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>סיים עבודה</Text>}
         </Pressable>
         <Pressable
           onPress={() => saveWith()}
@@ -495,12 +450,7 @@ export default function EditTicket() {
             opacity: dirty && !saving ? 1 : 0.5,
           }}
         >
-          <Text style={{ color: C.ink, fontWeight: '700', fontSize: 14 }}>שמור טיוטה</Text>
-        </Pressable>
-        <Pressable onPress={moreActions} style={{
-          paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: C.line,
-        }} hitSlop={6}>
-          <Text style={{ color: C.ink, fontSize: 18, fontWeight: '800' }}>⋯</Text>
+          <Text style={{ color: C.ink, fontWeight: '700', fontSize: 14 }}>שמור</Text>
         </Pressable>
       </View>
 
@@ -515,15 +465,6 @@ export default function EditTicket() {
 }
 
 /* ---------------- presentational pieces ---------------- */
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={[s.card, { flex: 1, gap: 4 }]}>
-      <Text style={[s.dim, { textAlign: 'right', marginBottom: 2 }]}>{title}</Text>
-      {children}
-    </View>
-  );
-}
 
 function SectionHead({ title, count, action, onAction }: {
   title: string; count: number; action: string; onAction: () => void;
@@ -568,10 +509,6 @@ function Stepper({ value, onChange }: { value: number; onChange: (n: number) => 
     </View>
   );
 }
-
-const colName = { flex: 1 } as const;
-const colQty = { width: 96 } as const;
-const colNum = { width: 62 } as const;
 
 /* ---------------- pickers ---------------- */
 

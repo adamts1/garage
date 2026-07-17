@@ -7,14 +7,9 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
 import { isConfigured } from '../lib/supabase';
-import { COLUMNS, EPICS, PRIORITIES, TEAM, TYPES } from '../lib/types';
+import { COLUMNS } from '../lib/types';
 import type { Status, Ticket } from '../lib/types';
 import { C, rtl, s } from '../lib/theme';
-
-const STATUS = Object.fromEntries(COLUMNS.map((c) => [c.id, c])) as Record<
-  Status,
-  (typeof COLUMNS)[number]
->;
 
 export default function TicketList() {
   const router = useRouter();
@@ -104,52 +99,28 @@ export default function TicketList() {
 }
 
 function TicketCard({ ticket: t, onPress }: { ticket: Ticket; onPress: () => void }) {
-  const epic = EPICS[t.epic];
-  const prio = PRIORITIES[t.prio];
-  const col = STATUS[t.st];
-  const who = TEAM[t.who];
-  const pct = t.subtasks.length ? Math.round((t.done / t.subtasks.length) * 100) : 0;
-
   return (
-    <Pressable style={({ pressed }) => [s.card, { opacity: pressed ? 0.7 : 1, gap: 8 }]} onPress={onPress}>
-      <View style={s.row}>
-        <View style={[s.row, { flex: 1, gap: 6 }]}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: col?.dot ?? C.mist }} />
-          <Text style={[s.dim, { fontWeight: '700', color: C.slate }]}>{t.k}</Text>
-          <Text style={s.dim}>{TYPES[t.type].i}</Text>
+    <Pressable
+      style={({ pressed }) => [
+        s.card,
+        { opacity: pressed ? 0.7 : 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 18 },
+      ]}
+      onPress={onPress}
+    >
+      <View style={{ alignItems: 'flex-end', gap: 8 }}>
+        {/* vehicle number, shown like a license plate */}
+        <View style={{ backgroundColor: C.sand, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 }}>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: C.ink, letterSpacing: 1 }}>
+            {t.plate || '—'}
+          </Text>
         </View>
-        <View style={{ backgroundColor: epic.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-          <Text style={{ color: epic.c, fontSize: 11, fontWeight: '700' }}>{epic.t}</Text>
-        </View>
+        {/* vehicle name */}
+        <Text style={[rtl, { fontSize: 17, fontWeight: '600', color: C.slate }]}>
+          {t.car || 'רכב ללא שם'}
+        </Text>
       </View>
 
-      <Text style={s.h2} numberOfLines={2}>{t.title}</Text>
-
-      <Text style={s.dim}>
-        {t.customer} · {t.car} · {t.plate}
-      </Text>
-
-      {t.blocked ? (
-        <Text style={[rtl, { fontSize: 12, color: C.danger }]}>⛔ {t.blocked}</Text>
-      ) : null}
-
-      <View style={[s.row, { justifyContent: 'space-between' }]}>
-        <View style={[s.row, { gap: 8 }]}>
-          <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: who.bg, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>{who.ini}</Text>
-          </View>
-          <Text style={{ color: prio.c, fontSize: 12, fontWeight: '700' }}>{prio.t}</Text>
-        </View>
-        <Text style={s.dim}>✓ {t.done}/{t.subtasks.length} · {pct}%</Text>
-      </View>
-
-      <View style={{ height: 4, backgroundColor: C.line, borderRadius: 2, overflow: 'hidden' }}>
-        <View style={{ width: `${pct}%`, height: 4, backgroundColor: col?.dot ?? C.mist }} />
-      </View>
-
-      {t.amount > 0 ? (
-        <Text style={[rtl, { fontSize: 13, fontWeight: '700', color: C.ink }]}>₪{t.amount.toLocaleString('he-IL')}</Text>
-      ) : null}
+      <Text style={{ fontSize: 28, color: C.mist }}>‹</Text>
     </Pressable>
   );
 }
