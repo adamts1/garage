@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "1383b0b2-63e3-4786-a7b9-d064dfafec36"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.adamtsityat.garagesystemmanagement",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}
