@@ -1,6 +1,6 @@
 import type { TicketWork } from './catalog';
 
-export type Status = 'todo' | 'appr' | 'prog' | 'parts' | 'done';
+export type Status = 'todo' | 'appr' | 'prog' | 'parts' | 'done' | 'paid';
 export type Priority = 'urgent' | 'high' | 'med' | 'low';
 export type GroupBy = 'none' | 'who' | 'prio' | 'epic';
 
@@ -48,7 +48,8 @@ export const COLUMNS: { id: Status; title: string; dot: string; wip?: number }[]
   { id: 'appr', title: 'ממתין לאישור', dot: '#1d2d44' },
   { id: 'prog', title: 'בעבודה', dot: '#b58a3c', wip: 4 },
   { id: 'parts', title: 'חסום - חלקים', dot: '#a5544b' },
-  { id: 'done', title: 'מוכן לאיסוף', dot: '#4f7a5b' },
+  { id: 'done', title: 'מוכן לאיסוף', dot: '#4f7a5b' },   // מוכן, טרם שולם
+  { id: 'paid', title: 'שולם', dot: '#2f6b4a' },
 ];
 
 export const EPICS = {

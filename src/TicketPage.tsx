@@ -83,7 +83,7 @@ export default function TicketPage({
   const total = labour + items + vat;
 
   const column = COLUMNS.find((c) => c.id === ticket.st);
-  const closed = ticket.st === 'done';
+  const closed = ticket.st === 'done' || ticket.st === 'paid';
   const wa = waNumber(ticket.phone);
 
   return (
@@ -294,7 +294,8 @@ export default function TicketPage({
           onClose={() => setClosing(false)}
           onConfirm={(r) => {
             patch({
-              st: 'done',
+              // paid -> "שולם"; closed with an open balance -> stays "מוכן לאיסוף"
+              st: r.paid ? 'paid' : 'done',
               done: ticket.subtasks.length,
               paid: r.paid,
               payMethod: r.method,

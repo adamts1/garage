@@ -64,7 +64,8 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
 
       const next: Ticket = { ...moving, st: h.col };
       if (h.col !== 'parts') delete next.blocked;          // leaving the blocked column clears the blocker
-      if (h.col === 'done') next.done = next.subtasks.length; // landing in Done ticks everything off
+      if (h.col === 'done' || h.col === 'paid') next.done = next.subtasks.length; // ready/paid ticks everything off
+      if (h.col === 'paid') next.paid = true;                 // dragging into "שולם" marks it paid
 
       // order inside the destination column is the array order
       const siblings = rest.filter((t) => t.st === h.col);

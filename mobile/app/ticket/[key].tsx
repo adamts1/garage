@@ -76,7 +76,7 @@ export default function EditTicket() {
   const works = draft.works ?? [];
   const sum = worksSummary(works);
   const column = COLUMNS.find((c) => c.id === draft.st);
-  const closed = draft.st === 'done';
+  const closed = draft.st === 'done' || draft.st === 'paid';
   const notesCount = [draft.notes, draft.blocked].filter(Boolean).length;
 
   /* The checklist is a prefix: the schema stores `done` as a count, not a flag per
@@ -87,8 +87,9 @@ export default function EditTicket() {
   const changeStatus = (st: Status) =>
     setDraft((d) => {
       if (!d) return d;
-      // Landing in Done ticks everything off - same rule as the web board (Board.tsx:67).
-      return { ...d, st, done: st === 'done' ? d.subtasks.length : d.done };
+      // Landing in Done/שולם ticks everything off - same rule as the web board (Board.tsx:67).
+      const finished = st === 'done' || st === 'paid';
+      return { ...d, st, done: finished ? d.subtasks.length : d.done, paid: st === 'paid' ? true : d.paid };
     });
 
   const addWork = (w: TicketWork) => { setWorks([...works, w]); setPickWork(false); };
@@ -456,7 +457,7 @@ export default function EditTicket() {
           onPress={() => saveWith()}
           disabled={!dirty || saving}
           style={{
-            paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12,
+            flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center',
             borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
             opacity: dirty && !saving ? 1 : 0.5,
           }}
