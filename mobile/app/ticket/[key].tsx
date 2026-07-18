@@ -268,35 +268,46 @@ export default function EditTicket() {
                         <Text style={[s.body, { fontSize: 13 }]}>עבודה</Text>
                       </View>
 
-                      {/* parts of THIS work */}
+                      {/* parts of THIS work — name · quantity · price · delete, evenly spaced */}
                       {w.items.map((p, i) => (
-                        <View key={`${w.uid}-${wi}-${i}`} style={[s.row, { paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.line, gap: 8 }]}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
-                            <Pressable onPress={() => editPrice(w.uid, i, p)}>
-                              <Text style={[s.dim, { fontSize: 11 }]}>{money(p.price)} ליח׳</Text>
-                            </Pressable>
-                          </View>
+                        <View key={`${w.uid}-${wi}-${i}`} style={[s.row, { paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.line, gap: 10, justifyContent: 'space-between' }]}>
+                          {/* item name (right in RTL) */}
+                          <Text style={[s.body, { flex: 1, fontSize: 14, fontWeight: '600', textAlign: 'right' }]} numberOfLines={2}>{p.name}</Text>
+                          {/* quantity */}
                           <Stepper value={p.qty} onChange={(n) => patchPart(w.uid, i, { qty: n })} />
-                          <Text style={{ width: 62, textAlign: 'center', fontSize: 13, fontWeight: '700', color: C.ink, ...rtl }}>
-                            {money(p.qty * p.price)}
-                          </Text>
-                          <Pressable onPress={() => removePart(w.uid, i)} hitSlop={6} style={{ width: 22, alignItems: 'center' }}>
-                            <Text style={{ color: C.danger, fontSize: 16, fontWeight: '700' }}>✕</Text>
+                          {/* price — tap to edit the unit price */}
+                          <Pressable onPress={() => editPrice(w.uid, i, p)} style={{ width: 90, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink, ...rtl }}>{money(p.qty * p.price)}</Text>
+                          </Pressable>
+                          {/* delete (left in RTL) */}
+                          <Pressable onPress={() => removePart(w.uid, i)} hitSlop={8} style={{ width: 30, alignItems: 'center' }}>
+                            <TrashIcon />
                           </Pressable>
                         </View>
                       ))}
                       {!w.items.length ? <Text style={[s.dim, { paddingVertical: 6 }]}>אין פריטים לעבודה זו</Text> : null}
 
-                      {/* per-work actions */}
-                      <View style={[s.row, { justifyContent: 'space-between', marginTop: 10 }]}>
-                        <Pressable onPress={() => setPickPartFor(w.uid)} hitSlop={6}>
-                          <Text style={{ color: C.slate, fontWeight: '700', fontSize: 13 }}>+ הוסף פריט</Text>
-                        </Pressable>
-                        <Pressable onPress={() => removeWork(w.uid)} hitSlop={6}>
-                          <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>מחק עבודה</Text>
-                        </Pressable>
+                      {/* add a part — large, full-width button */}
+                      <Pressable
+                        onPress={() => setPickPartFor(w.uid)}
+                        style={{
+                          marginTop: 12, paddingVertical: 15, borderRadius: 12, borderWidth: 1.5,
+                          borderColor: C.ink, alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ color: C.ink, fontWeight: '800', fontSize: 15 }}>+ הוסף פריט לעבודה</Text>
+                      </Pressable>
+
+                      {/* work subtotal */}
+                      <View style={[s.row, { justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.line }]}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: C.ink, ...rtl }}>{money(workTotal(w))}</Text>
+                        <Text style={[s.body, { fontSize: 14, fontWeight: '700' }]}>סה״כ עבודה</Text>
                       </View>
+
+                      {/* delete this work — kept, but subtle */}
+                      <Pressable onPress={() => removeWork(w.uid)} hitSlop={6} style={{ alignSelf: 'center', marginTop: 12 }}>
+                        <Text style={{ color: C.danger, fontWeight: '700', fontSize: 13 }}>מחק עבודה</Text>
+                      </Pressable>
                     </View>
                   )}
                 </View>
@@ -488,6 +499,21 @@ function TotalRow({ label, value }: { label: string; value: string }) {
     <View style={[s.row, { justifyContent: 'space-between' }]}>
       <Text style={s.dim}>{label}</Text>
       <Text style={[s.body, { fontSize: 13, fontWeight: '600' }]}>{value}</Text>
+    </View>
+  );
+}
+
+/** A small trash-can icon drawn with Views (no icon dependency). */
+function TrashIcon({ color = C.danger, size = 20 }: { color?: string; size?: number }) {
+  const bodyW = size * 0.62;
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-start', paddingTop: size * 0.14 }}>
+      {/* handle */}
+      <View style={{ width: bodyW * 0.44, height: size * 0.09, borderTopLeftRadius: 2, borderTopRightRadius: 2, backgroundColor: color }} />
+      {/* lid */}
+      <View style={{ width: bodyW * 1.32, height: size * 0.11, borderRadius: 2, backgroundColor: color, marginTop: size * 0.04 }} />
+      {/* can body */}
+      <View style={{ width: bodyW, flex: 1, marginTop: size * 0.07, borderWidth: Math.max(1.5, size * 0.1), borderTopWidth: 0, borderColor: color, borderBottomLeftRadius: size * 0.18, borderBottomRightRadius: size * 0.18 }} />
     </View>
   );
 }
