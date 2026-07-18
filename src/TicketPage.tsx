@@ -83,7 +83,11 @@ export default function TicketPage({
   const total = labour + items + vat;
 
   const column = COLUMNS.find((c) => c.id === ticket.st);
+  // work finished (ready for pickup OR paid) - enough to notify the customer
   const closed = ticket.st === 'done' || ticket.st === 'paid';
+  // actually settled. Only a paid ticket blocks further charging; a ticket sitting
+  // in "מוכן לאיסוף" is finished but still owes money, so payment stays open.
+  const settled = ticket.paid === true || ticket.st === 'paid';
   const wa = waNumber(ticket.phone);
 
   return (
@@ -260,9 +264,13 @@ export default function TicketPage({
             <button
               className="btn primary block"
               onClick={() => setClosing(true)}
-              disabled={closed}
+              disabled={settled}
             >
-              <IconCard /> {closed ? 'הכרטיס סגור' : 'סגור כרטיס וחייב לקוח'}
+              <IconCard /> {settled
+                ? 'שולם · הכרטיס סגור'
+                : ticket.st === 'done'
+                  ? 'גבה תשלום'          // ready for pickup, still owes money
+                  : 'סגור כרטיס וחייב לקוח'}
             </button>
             {closed && (
               wa ? (
