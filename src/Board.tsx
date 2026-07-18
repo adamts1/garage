@@ -168,35 +168,18 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
     setSort((p) => (p.by === by ? { by, dir: p.dir === 1 ? -1 : 1 } : { by, dir: 1 }));
 
   /* ---------- rendering ---------- */
-  const card = (t: Ticket) => {
-    const member = TEAM[t.who];
-    const epic = EPICS[t.epic];
-    const pct = t.subtasks.length ? Math.round((t.done / t.subtasks.length) * 100) : 0;
-    return (
-      <div
-        key={t.k}
-        className={`tkt prio-${t.prio}${drag?.k === t.k ? ' is-hidden' : ''}`}
-        data-k={t.k}
-        onPointerDown={(e) => onDown(e, t)}
-      >
-        <div className="tkt-meta">
-          <span className="epic" style={{ background: epic.bg, color: epic.c }}>{epic.t}</span>
-          <span className="plate">{t.plate}</span>
-          {t.flags.includes('VIP') && <span className="tkt-star">⭐</span>}
-        </div>
-        <div className="tkt-title">{t.title}</div>
-        {t.blocked && <div className="tkt-blocked">⛔ {t.blocked}</div>}
-        <div className="tkt-bar"><i style={{ width: `${pct}%` }} /></div>
-        <div className="tkt-meta tkt-sub">✓ {t.done}/{t.subtasks.length} משימות <span className="sep">|</span> {t.due}</div>
-        <div className="tkt-foot">
-          <span className="prio-dot" style={{ background: PRIORITIES[t.prio].c }} title={PRIORITIES[t.prio].t} />
-          <span className="tkt-key">{t.k}</span>
-          <span className="tkt-pts" title="נקודות מאמץ">{t.pts}</span>
-          <span className="avatar-sm" style={{ background: member.bg }} title={member.n}>{member.ini}</span>
-        </div>
-      </div>
-    );
-  };
+  const card = (t: Ticket) => (
+    <div
+      key={t.k}
+      className={`tkt${drag?.k === t.k ? ' is-hidden' : ''}`}
+      data-k={t.k}
+      onPointerDown={(e) => onDown(e, t)}
+    >
+      <span className="plate">{t.plate}</span>
+      <div className="tkt-title">{t.title}</div>
+      <div className="tkt-car">{t.car}</div>
+    </div>
+  );
 
   const columns = (list: Ticket[], lane: string) => (
     <div className="jb-board">
@@ -257,7 +240,7 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
           ><IconTickets /> טבלה</button>
         </div>
 
-        <button className="btn primary" onClick={onNewTicket}>＋ הוסף כרטיס</button>
+        <button className="btn primary" onClick={onNewTicket}>הוסף כרטיס ＋</button>
       </div>
 
       <div className="jb-filters">
@@ -327,19 +310,12 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
       {/* card that follows the pointer while dragging */}
       {drag && ghost && (
         <div
-          className={`tkt prio-${ghost.prio} tkt-ghost`}
+          className="tkt tkt-ghost"
           style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
         >
-          <div className="tkt-meta">
-            <span className="epic" style={{ background: EPICS[ghost.epic].bg, color: EPICS[ghost.epic].c }}>{EPICS[ghost.epic].t}</span>
-            <span className="plate">{ghost.plate}</span>
-          </div>
+          <span className="plate">{ghost.plate}</span>
           <div className="tkt-title">{ghost.title}</div>
-          <div className="tkt-foot">
-            <span className="tkt-key">{ghost.k}</span>
-            <span className="tkt-pts">{ghost.pts}</span>
-            <span className="avatar-sm" style={{ background: TEAM[ghost.who].bg }}>{TEAM[ghost.who].ini}</span>
-          </div>
+          <div className="tkt-car">{ghost.car}</div>
         </div>
       )}
 

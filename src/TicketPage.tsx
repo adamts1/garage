@@ -22,7 +22,7 @@ const waNumber = (phone?: string) => {
 const waMessage = (t: Ticket, total: number) => {
   const lines = [
     `שלום ${t.customer},`,
-    `הרכב ${t.car} (${t.plate}) מוכן לאיסוף 🚗`,
+    `הרכב ${t.car} (${t.plate}) מוכן לאיסוף`,
     '',
     'העבודות שבוצעו:',
     ...(t.works ?? []).map((w) => `• ${w.name}`),
@@ -30,7 +30,7 @@ const waMessage = (t: Ticket, total: number) => {
     `סה״כ לתשלום: ${shekel(total)}`,
     t.paid ? `שולם ב${t.payMethod} - תודה!` : 'התשלום יתבצע בעת האיסוף.',
     '',
-    'מוסך פרו · נשמח לראותך',
+    'מוסך אי-תן · נשמח לראותך',
   ];
   return lines.filter((l) => l !== undefined).join('\n');
 };
@@ -113,7 +113,7 @@ export default function TicketPage({
           <div className="foot-spacer" />
 
           <button className="btn ghost" onClick={onBack}>
-            <span className="arrow">←</span> חזרה לרשימת כרטיסים
+             חזרה לרשימת כרטיסים <span className="arrow">←</span>
           </button>
         </div>
 

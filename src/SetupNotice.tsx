@@ -12,7 +12,7 @@ export default function SetupNotice() {
 
       <ol>
         <li>
-          פתח פרויקט חדש ב‑<a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">supabase.com/dashboard</a>
+          פתח אי-תןיקט חדש ב‑<a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">supabase.com/dashboard</a>
         </li>
         <li>
           ב‑<b>SQL Editor</b> הדבק את כל <code>supabase/schema.sql</code> ולחץ <b>Run</b> -

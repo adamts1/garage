@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Board from './Board';
 import CustomersPage from './CustomersPage';
 import ItemsPage from './ItemsPage';
@@ -7,12 +7,13 @@ import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
 import { isConfigured } from './lib/supabase';
+import { listCustomers, listVehicles, subscribeToTable, type Customer, type Vehicle } from './lib/db';
 import { useTickets } from './lib/useTickets';
 import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from './catalog';
 import InvoicesPage from './InvoicesPage';
 import { IconBoard, IconCar, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
 import {
-  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES,
+  COLUMNS, EPICS, TEAM, TYPES,
   type Priority, type Ticket,
 } from './board-data';
 
@@ -20,12 +21,14 @@ interface TicketForm {
   customerSearch: string;
   customerName: string;
   customerPhone: string;
+  idNumber: string;
   customerType: string;
   address: string;
   email: string;
   city: string;
   zip: string;
   licensePlate: string;
+  vehicleCode: string;
   manufacturer: string;
   model: string;
   year: string;
@@ -43,12 +46,14 @@ const emptyForm: TicketForm = {
   customerSearch: '',
   customerName: '',
   customerPhone: '',
+  idNumber: '',
   customerType: 'פרטי',
   address: '',
   email: '',
   city: '',
   zip: '',
   licensePlate: '',
+  vehicleCode: '',
   manufacturer: '',
   model: '',
   year: '',
@@ -69,7 +74,6 @@ const navItems = [
   { name: 'פריטים', Icon: IconParts },
   { name: 'דוחות', Icon: IconReports },
 ];
-const MAKERS = ['טויוטה', 'יונדאי', 'מאזדה', 'קיה', 'פורד', 'סקודה', 'פיאט', 'הונדה', 'שברולט', 'פולקסווגן'];
 const YEARS = Array.from({ length: 22 }, (_, i) => 2026 - i);
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
@@ -85,6 +89,22 @@ function App() {
   const [catalog, setCatalog] = useState<WorkDef[]>(WORK_CATALOG);
   const [partsCatalog, setPartsCatalog] = useState<PartDef[]>(PARTS_CATALOG);
 
+  // known customers + their vehicles, for the "search + autofill" box on a new ticket
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [showMatches, setShowMatches] = useState(false);
+  const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
+  useEffect(() => {
+    if (!isConfigured) return;
+    const loadC = () => listCustomers().then(setCustomers).catch(() => {});
+    const loadV = () => listVehicles().then(setVehicles).catch(() => {}); // no-op until the table exists
+    loadC();
+    loadV();
+    const unsubC = subscribeToTable('customers', loadC);
+    const unsubV = subscribeToTable('vehicles', loadV);
+    return () => { unsubC(); unsubV(); };
+  }, []);
+
   // sidebar: a narrow rail that expands on hover, unless pinned open
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -93,10 +113,11 @@ function App() {
   const openForm = () => {
     setForm(emptyForm);
     setWorks([]);
+    setVehicleChoices([]);
     setShowForm(true);
   };
 
-  const closeForm = () => setShowForm(false);
+  const closeForm = () => { setShowForm(false); setVehicleChoices([]); };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +171,54 @@ function App() {
   const set = <K extends keyof TicketForm>(key: K, value: TicketForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  // customer search: match on name or phone (digits only), newest-known first
+  const digits = (s: string) => (s || '').replace(/\D/g, '');
+  const query = form.customerSearch.trim();
+  const qDigits = digits(query);
+  const customerMatches =
+    query.length < 1
+      ? []
+      : customers
+          .filter(
+            (c) =>
+              c.name.toLowerCase().includes(query.toLowerCase()) ||
+              (qDigits.length >= 3 && digits(c.phone ?? '').includes(qDigits)),
+          )
+          .slice(0, 6);
+
+  // fill the vehicle half of the form from a saved vehicle
+  const fillVehicle = (v: Vehicle) =>
+    setForm((prev) => ({
+      ...prev,
+      licensePlate: v.plate ?? '',
+      manufacturer: v.manufacturer ?? '',
+      model: v.model ?? '',
+      year: v.year ?? '',
+      km: v.km ?? '',
+      vehicleCode: v.vehicle_code ?? '',
+    }));
+
+  // picking a match fills the customer half, and the vehicle too when it's unambiguous
+  const pickCustomer = (c: Customer) => {
+    setForm((prev) => ({
+      ...prev,
+      customerSearch: '',
+      customerName: c.name,
+      customerPhone: c.phone ?? '',
+      email: c.email ?? '',
+      address: c.address ?? '',
+      city: c.city ?? '',
+      customerType: c.kind || 'פרטי',
+    }));
+    setShowMatches(false);
+
+    const owned = vehicles.filter((v) => v.customer_id === c.id);
+    if (owned.length === 1) { fillVehicle(owned[0]); setVehicleChoices([]); }
+    else setVehicleChoices(owned); // 0 -> nothing to pick; >1 -> let them choose
+  };
+
+  const pickVehicle = (v: Vehicle) => { fillVehicle(v); setVehicleChoices([]); };
+
   return (
     <div className={`app-shell${expanded ? '' : ' rail'}`}>
       <aside
@@ -200,7 +269,7 @@ function App() {
         </div>
       </aside>
 
-      <main className="main-content">
+      <main className={`main-content${isConfigured && !loading && !showForm && active === 'לוח בקרה' && !openTicket ? ' board-full' : ''}`}>
         <section className="panel">
           {error && <div className="db-error">שגיאת Supabase: {error}</div>}
 
@@ -239,7 +308,7 @@ function App() {
                   </button>
                 </div>
                 <button type="button" className="btn ghost" onClick={closeForm}>
-                  ← חזרה ללוח
+                   חזרה ללוח ←
                 </button>
               </div>
 
@@ -247,11 +316,46 @@ function App() {
               <div className="form-section span-2 search-wrap">
                 <input
                   type="text"
-                  placeholder="חיפוש לקוח / רכב / טלפון"
+                  placeholder="חיפוש לקוח קיים לפי שם או טלפון"
                   className="search-input"
                   value={form.customerSearch}
-                  onChange={(e) => set('customerSearch', e.target.value)}
+                  onChange={(e) => { set('customerSearch', e.target.value); setShowMatches(true); }}
+                  onFocus={() => setShowMatches(true)}
+                  onBlur={() => setTimeout(() => setShowMatches(false), 150)}
+                  autoComplete="off"
                 />
+                {showMatches && query.length >= 1 && (
+                  <ul className="customer-suggest">
+                    {customerMatches.length ? (
+                      customerMatches.map((c) => (
+                        <li key={c.id}>
+                          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pickCustomer(c)}>
+                            <span className="cs-name">{c.name}</span>
+                            <span className="cs-meta">
+                              {[c.phone, c.city].filter(Boolean).join(' · ')}
+                              {c.kind === 'עסקי' && <span className="cs-tag">עסקי</span>}
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="cs-empty">לא נמצא לקוח תואם</li>
+                    )}
+                  </ul>
+                )}
+                {vehicleChoices.length > 0 && (
+                  <div className="vehicle-picker">
+                    <span className="vp-label">בחר רכב ללקוח:</span>
+                    <div className="vp-list">
+                      {vehicleChoices.map((v) => (
+                        <button key={v.id} type="button" className="vp-chip" onClick={() => pickVehicle(v)}>
+                          <b>{[v.manufacturer, v.model].filter(Boolean).join(' ') || v.plate}</b>
+                          <span>{[v.plate, v.year, v.km && `${v.km} ק״מ`].filter(Boolean).join(' · ')}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="form-section">
@@ -264,6 +368,9 @@ function App() {
                   </div>
                   <div className="form-group">
                     <input type="tel" placeholder="טלפון" value={form.customerPhone} onChange={(e) => set('customerPhone', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <input type="text" inputMode="numeric" placeholder="ת״ז" value={form.idNumber} onChange={(e) => set('idNumber', e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
@@ -306,10 +413,7 @@ function App() {
                     <input type="text" placeholder="מספר רישוי" value={form.licensePlate} onChange={(e) => set('licensePlate', e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <select value={form.manufacturer} onChange={(e) => set('manufacturer', e.target.value)}>
-                      <option value="">יצרן</option>
-                      {MAKERS.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                    <input type="text" placeholder="יצרן" value={form.manufacturer} onChange={(e) => set('manufacturer', e.target.value)} />
                   </div>
                 </div>
                 <div className="form-row">
@@ -323,44 +427,12 @@ function App() {
                     </select>
                   </div>
                 </div>
-                <div className="form-group">
-                  <input type="text" placeholder="ק״מ" value={form.km} onChange={(e) => set('km', e.target.value)} />
-                </div>
-              </div>
-
-              <div className="form-section span-2">
-                <h3 className="section-title">סיווג ושיוך</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>דחיפות</label>
-                    <select value={form.priority} onChange={(e) => set('priority', e.target.value as Priority)}>
-                      {Object.entries(PRIORITIES).map(([id, p]) => (
-                        <option key={id} value={id}>{p.t}</option>
-                      ))}
-                    </select>
+                    <input type="text" inputMode="numeric" placeholder="קילומטר" value={form.km} onChange={(e) => set('km', e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label>טכנאי אחראי</label>
-                    <select value={form.technician} onChange={(e) => set('technician', e.target.value as TicketForm['technician'])}>
-                      {Object.entries(TEAM).map(([id, m]) => (
-                        <option key={id} value={id}>{m.n}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>תאריך יעד</label>
-                    <input type="date" value={form.targetDate} onChange={(e) => set('targetDate', e.target.value)} />
-                  </div>
-                  <div className="form-group key-cell">
-                    <label>מפתח רכב</label>
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={form.keyReceived}
-                        onChange={(e) => set('keyReceived', e.target.checked)}
-                      />
-                      מפתח התקבל
-                    </label>
+                    <input type="text" placeholder="קוד" value={form.vehicleCode} onChange={(e) => set('vehicleCode', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -387,7 +459,16 @@ function App() {
                 <button type="button" className="btn ghost" onClick={closeForm}>
                   ביטול
                 </button>
-                <button type="submit" className="btn primary lg" disabled={works.length === 0}>
+                <button
+                  type="submit"
+                  className="btn primary lg"
+                  disabled={!form.customerName.trim() && !form.licensePlate.trim() && works.length === 0}
+                  title={
+                    !form.customerName.trim() && !form.licensePlate.trim() && works.length === 0
+                      ? 'הזן שם לקוח, מספר רישוי או עבודה אחת כדי לשמור'
+                      : undefined
+                  }
+                >
                   שמור כרטיס <span className="arrow">←</span>
                 </button>
               </div>

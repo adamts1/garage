@@ -43,6 +43,28 @@ export const deleteCustomer = async (id: string) => {
   if (error) throw error;
 };
 
+/* ---------------- vehicles (a customer's cars, for ticket auto-complete) ---------------- */
+
+export interface Vehicle {
+  id: string;
+  customer_id: string;
+  plate: string;
+  manufacturer: string | null;
+  model: string | null;
+  year: string | null;
+  km: string | null;
+  vehicle_code: string | null;
+}
+
+export const listVehicles = async (): Promise<Vehicle[]> => {
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Vehicle[];
+};
+
 /* ---------------- items (parts catalog / stock) ---------------- */
 
 export interface Item {
@@ -271,10 +293,15 @@ export const deleteTicket = async (key: string) => {
 
 /* ---------------- realtime ---------------- */
 
+/* Each subscriber gets its own channel name. Supabase reuses a channel by its
+   topic, and adding `.on(...)` to an already-subscribed channel throws — so two
+   components watching the same table must not share a channel name. */
+let channelSeq = 0;
+
 /** Fires `onChange` whenever anyone, anywhere, touches a ticket / work / part. */
 export const subscribeToTickets = (onChange: () => void) => {
   const channel = supabase
-    .channel('garage-tickets')
+    .channel(`garage-tickets-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'works' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'work_items' }, onChange)
@@ -282,10 +309,10 @@ export const subscribeToTickets = (onChange: () => void) => {
   return () => void supabase.removeChannel(channel);
 };
 
-/** Same, for the customers and items pages. */
-export const subscribeToTable = (table: 'customers' | 'items', onChange: () => void) => {
+/** Same, for the customers / items / vehicles tables. */
+export const subscribeToTable = (table: 'customers' | 'items' | 'vehicles', onChange: () => void) => {
   const channel = supabase
-    .channel(`garage-${table}`)
+    .channel(`garage-${table}-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
     .subscribe();
   return () => void supabase.removeChannel(channel);

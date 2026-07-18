@@ -732,6 +732,16 @@ tbody tr:hover {
 }
 .jb-list.is-target { background: var(--primary-soft); border-radius: 0 0 17px 17px; }
 
+/* board view fills the panel down to the page bottom, so the horizontal
+   scrollbar sits at the very bottom and each column scrolls its own cards.
+   Scoped to .board-full so other pages keep their normal vertical scroll. */
+.main-content.board-full { display: flex; flex-direction: column; overflow: hidden; }
+.main-content.board-full > .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.board-full .jb { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.board-full .jb-board { flex: 1; min-height: 0; align-items: stretch; }
+.board-full .jb-col { max-height: none; min-height: 0; }
+.board-full .jb > .tbl-wrap { flex: 1; min-height: 0; overflow: auto; }   /* table view too */
+
 /* ticket card */
 .tkt {
   background: var(--surface);
@@ -752,6 +762,7 @@ tbody tr:hover {
 .tkt.prio-med { border-inline-start-color: var(--warn); }
 .tkt.prio-low { border-inline-start-color: var(--steel); }
 .tkt-title { font-weight: 700; font-size: 13.5px; line-height: 1.35; margin: 7px 0; }
+.tkt-car { font-size: 12px; font-weight: 600; color: var(--muted); }
 .tkt-meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
 .tkt-sub { margin-top: 6px; }
 .tkt-star { margin-inline-start: auto; }
@@ -1754,7 +1765,7 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .card-title svg { color: var(--slate); }
 
 /* placeholder-only fields (no labels) in the customer / vehicle cards */
-.search-wrap { padding: 0 !important; border: none !important; background: transparent !important; }
+.search-wrap { position: relative; padding: 0 !important; border: none !important; background: transparent !important; }
 .search-wrap .search-input {
   width: 100%;
   padding: 13px 16px;
@@ -1763,6 +1774,88 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   background: var(--surface);
   font-size: 13.5px;
 }
+
+/* customer search suggestions dropdown */
+.customer-suggest {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  max-height: 288px;
+  overflow-y: auto;
+}
+.customer-suggest > li { margin: 0; }
+.customer-suggest button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  text-align: right;
+  cursor: pointer;
+}
+.customer-suggest button:hover { background: var(--primary-soft); }
+.customer-suggest .cs-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.customer-suggest .cs-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  direction: ltr;
+  justify-content: flex-end;
+}
+.customer-suggest .cs-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.customer-suggest .cs-empty { padding: 11px 12px; font-size: 12.5px; color: var(--muted); }
+
+/* choose-a-vehicle prompt, shown when a picked customer has more than one car */
+.vehicle-picker {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.vehicle-picker .vp-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-d);
+}
+.vehicle-picker .vp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.vehicle-picker .vp-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  text-align: right;
+  cursor: pointer;
+}
+.vehicle-picker .vp-chip:hover { border-color: var(--primary); background: var(--primary-soft); }
+.vehicle-picker .vp-chip b { font-size: 13px; color: var(--text); }
+.vehicle-picker .vp-chip span { font-size: 11.5px; color: var(--muted); direction: ltr; text-align: right; }
 .intake-form .form-section .form-group input::placeholder,
 .intake-form .form-section .form-group select { color: var(--muted); }
 .intake-form .form-section .form-group select:valid { color: var(--text); }

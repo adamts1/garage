@@ -32,7 +32,7 @@ interface Method {
 
 const METHODS: Method[] = [
   { id: 'cash', label: 'מזומן', icon: '💵', hint: 'תשלום במזומן בקופה', paid: true },
-  { id: 'card', label: 'כרטיס אשראי', icon: '💳', hint: 'סליקה בטרמינל', ref: '4 ספרות אחרונות', paid: true },
+  { id: 'card', label: 'כרטיס אשראי', icon: '💳', hint: 'סליקה בטרמינל', ref: '4 סאי-תןת אחרונות', paid: true },
   { id: 'bit', label: 'ביט / פייבוקס', icon: '📱', hint: 'העברה מיידית', ref: 'מספר אסמכתא', paid: true },
   { id: 'transfer', label: 'העברה בנקאית', icon: '🏦', hint: 'העברה לחשבון המוסך', ref: 'מספר אסמכתא', paid: true },
   { id: 'check', label: 'צ׳ק', icon: '🧾', hint: 'צ׳ק לפקודת המוסך', ref: 'מספר צ׳ק', paid: true },
