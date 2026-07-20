@@ -6,9 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "db:new": "supabase migration new",
+    "db:reset": "supabase db reset",
+    "db:diff": "supabase db diff -f",
+    "db:push": "supabase db push",
+    "db:lint": "supabase db lint"
   },
   "dependencies": {
+    "@sentry/react": "^10.67.0",
     "@supabase/supabase-js": "^2.110.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -17,6 +24,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "supabase": "^2.109.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.1"
   }
