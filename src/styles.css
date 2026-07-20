@@ -2761,6 +2761,67 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   white-space: nowrap;
 }
 
+/* photos: shot on the phone, read-only here. auto-fill keeps the cells a roughly
+   constant size instead of stretching three photos across the whole card. */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+.photo-cell {
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: zoom-in;
+  aspect-ratio: 1;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.photo-cell:hover {
+  border-color: var(--steel);
+  transform: translateY(-1px);
+}
+.photo-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px;
+  background: rgba(13, 19, 33, 0.88);
+  cursor: zoom-out;
+}
+.photo-lightbox img {
+  max-width: 100%;
+  max-height: calc(100vh - 130px);
+  object-fit: contain;
+  border-radius: 10px;
+}
+.photo-lightbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: auto;
+  color: #fff;
+  font-size: 13px;
+}
+
 /* summary: subtotal sits quieter than the lines it sums */
 .sum-n {
   margin-inline-start: 5px;

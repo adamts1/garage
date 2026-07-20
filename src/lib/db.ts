@@ -291,6 +291,45 @@ export const deleteTicket = async (key: string) => {
   if (error) throw error; // works + work_items go with it (on delete cascade)
 };
 
+/* ---------------- ticket photos ---------------- */
+
+/* Read-only here: photos are taken and deleted on the phone (mobile/lib/db.ts),
+   the board just shows them. The bucket is public, so a photo is a plain <img src>. */
+
+export const PHOTO_BUCKET = 'ticket-photos';
+
+export interface TicketPhoto {
+  id: string;
+  url: string;
+  caption: string;
+  createdAt: string;
+}
+
+/** A ticket's photos, oldest first. One round trip: the embed filters by ticket key. */
+export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
+  const { data, error } = await supabase
+    .from('ticket_photos')
+    .select('id, path, caption, created_at, tickets!inner(key)')
+    .eq('tickets.key', key)
+    .order('created_at');
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    id: r.id,
+    url: supabase.storage.from(PHOTO_BUCKET).getPublicUrl(r.path).data.publicUrl,
+    caption: r.caption ?? '',
+    createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
+  }));
+};
+
+/** So a photo taken on the phone shows up on the board without a refresh. */
+export const subscribeToTicketPhotos = (onChange: () => void) => {
+  const channel = supabase
+    .channel(`garage-ticket-photos-${++channelSeq}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_photos' }, onChange)
+    .subscribe();
+  return () => void supabase.removeChannel(channel);
+};
+
 /* ---------------- realtime ---------------- */
 
 /* Each subscriber gets its own channel name. Supabase reuses a channel by its

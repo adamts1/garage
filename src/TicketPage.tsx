@@ -1,11 +1,12 @@
-import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
 import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from './catalog';
 import { COLUMNS, TEAM, type Ticket } from './board-data';
+import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from './lib/db';
 import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
-  IconDoc, IconPrint, IconTrash, IconWhatsapp, IconWrench,
+  IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
 } from './icons';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,7 +20,23 @@ const waNumber = (phone?: string) => {
   return '972' + digits.replace(/^0/, '');
 };
 
-const waMessage = (t: Ticket, total: number) => {
+/* wa.me carries text only - there is no attachment parameter - so photos travel as
+   links. The bucket is public, so they open without a login. Capped at three: ten
+   URLs would bury the price the customer is meant to be reading. */
+const WA_PHOTO_LIMIT = 3;
+const photoLines = (photos: TicketPhoto[]) => {
+  if (!photos.length) return [];
+  const shown = photos.slice(0, WA_PHOTO_LIMIT);
+  const rest = photos.length - shown.length;
+  return [
+    '',
+    photos.length > 1 ? 'תמונות מהמוסך:' : 'תמונה מהמוסך:',
+    ...shown.map((p) => p.url),
+    ...(rest > 0 ? [`(ועוד ${rest} תמונות בכרטיס)`] : []),
+  ];
+};
+
+const waMessage = (t: Ticket, total: number, photos: TicketPhoto[] = []) => {
   const lines = [
     `שלום ${t.customer},`,
     `הרכב ${t.car} (${t.plate}) מוכן לאיסוף`,
@@ -29,6 +46,7 @@ const waMessage = (t: Ticket, total: number) => {
     '',
     `סה״כ לתשלום: ${shekel(total)}`,
     t.paid ? `שולם ב${t.payMethod} - תודה!` : 'התשלום יתבצע בעת האיסוף.',
+    ...photoLines(photos),
     '',
     'מוסך אי-תן · נשמח לראותך',
   ];
@@ -64,8 +82,23 @@ export default function TicketPage({
   const [closing, setClosing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [step, setStep] = useState('tp-details');
+  /* Photos are taken on the phone; the board is read-only. The realtime subscription
+     is what makes a photo appear here seconds after the mechanic shoots it. */
+  const [photos, setPhotos] = useState<TicketPhoto[]>([]);
+  const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
   const works = ticket.works ?? [];
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      listTicketPhotos(ticket.k)
+        .then((p) => { if (alive) setPhotos(p); })
+        .catch(() => { if (alive) setPhotos([]); });   // an empty gallery beats a broken page
+    load();
+    const off = subscribeToTicketPhotos(load);
+    return () => { alive = false; off(); };
+  }, [ticket.k]);
 
   const patch = (p: Partial<Ticket>) =>
     setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, ...p } : t)));
@@ -191,6 +224,31 @@ export default function TicketPage({
             />
           </section>
 
+          <section className="card" id="tp-photos">
+            <div className="tp-works-head">
+              <h3 className="card-title"><IconPhoto /> תמונות</h3>
+              <span className="card-count">{photos.length} תמונות</span>
+            </div>
+
+            {photos.length === 0 ? (
+              <p className="photo-empty">אין תמונות בכרטיס. תמונות מצולמות מהאפליקציה בנייד.</p>
+            ) : (
+              <div className="photo-grid">
+                {photos.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="photo-cell"
+                    onClick={() => setLightbox(p)}
+                    title={p.caption || p.createdAt}
+                  >
+                    <img src={p.url} alt={p.caption || `תמונה מכרטיס ${ticket.k}`} loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
           <div className="tp-row">
             <section className="card">
               <h3 className="card-title"><IconClock /> היסטוריית פעולות</h3>
@@ -276,7 +334,7 @@ export default function TicketPage({
               wa ? (
                 <a
                   className="btn whatsapp block"
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage(ticket, total))}`}
+                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage(ticket, total, photos))}`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -317,6 +375,21 @@ export default function TicketPage({
             setTimeout(() => setToast(null), 5000);
           }}
         />
+      )}
+
+      {lightbox && (
+        <div
+          className="photo-lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox.url} alt={lightbox.caption || 'תמונה מהכרטיס'} />
+          <div className="photo-lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <span>{lightbox.caption || lightbox.createdAt}</span>
+            <button className="btn ghost" onClick={() => setLightbox(null)}>סגור</button>
+          </div>
+        </div>
       )}
 
       {toast && (

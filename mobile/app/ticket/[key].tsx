@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Modal, Platform, Pressable,
+  ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useTicketsStore } from '../../lib/TicketsProvider';
-import { listItems, type Item } from '../../lib/db';
+import {
+  deleteTicketPhoto, listItems, listTicketPhotos, uploadTicketPhoto,
+  type Item, type TicketPhoto,
+} from '../../lib/db';
 import {
   COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, WORK_CATALOG, VAT,
   fromCatalog, partsTotal, workTotal, worksSummary,
@@ -26,7 +30,7 @@ const waNumber = (phone?: string) => {
   return '972' + digits.replace(/^0/, '');
 };
 
-type Tab = 'details' | 'works' | 'history' | 'notes';
+type Tab = 'details' | 'works' | 'photos' | 'history' | 'notes';
 
 export default function EditTicket() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -43,11 +47,29 @@ export default function EditTicket() {
   const [tab, setTab] = useState<Tab>('works');
   const [openWork, setOpenWork] = useState<string | null>(null);   // expanded work uid
 
+  /* Photos are their own table and their own bytes, so they save on their own too -
+     uploading is immediate and never rides along on the ticket's dirty/save flow. */
+  const [photos, setPhotos] = useState<TicketPhoto[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [viewer, setViewer] = useState<TicketPhoto | null>(null);   // full-screen photo
+
   // Load the ticket into an editable draft. Re-runs if realtime replaces the row
   // while we have nothing pending - but never clobbers edits in progress.
   useEffect(() => {
     if (ticket && !draft) setDraft(ticket);
   }, [ticket, draft]);
+
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    setPhotosLoading(true);
+    listTicketPhotos(key)
+      .then((p) => alive && setPhotos(p))
+      .catch(() => alive && setPhotos([]))   // an empty gallery beats blocking the screen
+      .finally(() => alive && setPhotosLoading(false));
+    return () => { alive = false; };
+  }, [key]);
 
   const dirty = useMemo(
     () => Boolean(draft && ticket && JSON.stringify(draft) !== JSON.stringify(ticket)),
@@ -154,6 +176,23 @@ export default function EditTicket() {
   // WhatsApp: a ready-for-pickup notice once the car is prepared (status 'done'),
   // otherwise a quote asking the customer to approve the works.
   const total = works.length ? sum.total : draft.amount;
+
+  /* wa.me carries text only - there is no attachment parameter - so photos travel
+     as links. The bucket is public, so they open without a login. Capped at three:
+     ten URLs would bury the price the customer is meant to be reading. */
+  const WA_PHOTO_LIMIT = 3;
+  const photoLines = () => {
+    if (!photos.length) return [];
+    const shown = photos.slice(0, WA_PHOTO_LIMIT);
+    const rest = photos.length - shown.length;
+    return [
+      '',
+      photos.length > 1 ? 'תמונות מהמוסך:' : 'תמונה מהמוסך:',
+      ...shown.map((p) => p.url),
+      ...(rest > 0 ? [`(ועוד ${rest} תמונות בכרטיס)`] : []),
+    ];
+  };
+
   const waMessage = () => {
     const car = `${draft.car || 'הרכב'} (${draft.plate || '-'})`;
     if (closed) {
@@ -164,6 +203,7 @@ export default function EditTicket() {
         ...(works.length ? ['העבודות שבוצעו:', ...works.map((w) => `• ${w.name}`), ''] : []),
         `סה״כ לתשלום: ${money(total)}`,
         draft.paid ? `שולם ${draft.payMethod ? `ב${draft.payMethod} ` : ''}- תודה!` : 'התשלום יתבצע בעת האיסוף.',
+        ...photoLines(),
         '',
         'מוסך אי-תן · נשמח לראותך',
       ].join('\n');
@@ -179,6 +219,7 @@ export default function EditTicket() {
       `סה״כ לפני מע״מ: ${money(sum.net)}`,
       `מע״מ (${Math.round(VAT * 100)}%): ${money(sum.vat)}`,
       `סה״כ לתשלום: ${money(sum.total)}`,
+      ...photoLines(),
       '',
       'נא אשרו לביצוע. תודה,',
       'מוסך אי-תן',
@@ -192,9 +233,71 @@ export default function EditTicket() {
     Linking.openURL(url).catch(() => Alert.alert('שגיאה', 'לא ניתן לפתוח את וואטסאפ במכשיר.'));
   };
 
+  /* Camera or gallery, same upload path. quality 0.7 because a photo of a scratched
+     bumper doesn't need 12MP, and the mechanic is usually on cellular. */
+  const addPhotos = async (from: 'camera' | 'library') => {
+    const perm = from === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      return Alert.alert(
+        'אין הרשאה',
+        from === 'camera' ? 'יש לאשר גישה למצלמה בהגדרות המכשיר.' : 'יש לאשר גישה לתמונות בהגדרות המכשיר.',
+      );
+    }
+
+    const res = from === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'], quality: 0.7, base64: true,
+          allowsMultipleSelection: true, selectionLimit: 10,
+        });
+    if (res.canceled) return;
+
+    setUploading(true);
+    try {
+      // Sequential: ten parallel uploads on a garage's wifi is how you get timeouts.
+      for (const a of res.assets) {
+        if (!a.base64) continue;
+        const ext = (a.fileName?.split('.').pop() ?? a.uri.split('.').pop() ?? 'jpg').toLowerCase();
+        const photo = await uploadTicketPhoto(draft.k, {
+          base64: a.base64,
+          mime: a.mimeType ?? 'image/jpeg',
+          ext,
+        });
+        setPhotos((p) => [...p, photo]);   // each one appears as it lands
+      }
+    } catch (e: any) {
+      Alert.alert('העלאה נכשלה', e?.message ?? 'לא ניתן להעלות את התמונה.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const confirmDeletePhoto = (photo: TicketPhoto) =>
+    Alert.alert('מחיקת תמונה', 'למחוק את התמונה מהכרטיס?', [
+      { text: 'ביטול', style: 'cancel' },
+      {
+        text: 'מחק',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTicketPhoto(photo);
+            setPhotos((p) => p.filter((x) => x.id !== photo.id));
+            setViewer(null);
+          } catch (e: any) {
+            Alert.alert('המחיקה נכשלה', e?.message ?? 'לא ניתן למחוק את התמונה.');
+          }
+        },
+      },
+    ]);
+
+  const photoCount = photos.length;
+
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'details', label: 'פרטי כרטיס' },
     { id: 'works', label: 'עבודות ופריטים' },
+    { id: 'photos', label: 'תמונות', count: photoCount },
     { id: 'history', label: 'היסטוריה' },
     { id: 'notes', label: 'הערות', count: notesCount },
   ];
@@ -397,6 +500,68 @@ export default function EditTicket() {
         )}
 
         {/* ================= HISTORY / CHECKLIST ================= */}
+        {/* ================= PHOTOS ================= */}
+        {tab === 'photos' && (
+          <>
+            <SectionHead title="תמונות" count={photos.length} />
+
+            <View style={[s.row, { gap: 10 }]}>
+              {([
+                { from: 'camera' as const, label: 'צלם תמונה' },
+                { from: 'library' as const, label: 'מהגלריה' },
+              ]).map(({ from, label }) => (
+                <Pressable
+                  key={from}
+                  onPress={() => addPhotos(from)}
+                  disabled={uploading}
+                  style={{
+                    flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center',
+                    borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
+                    opacity: uploading ? 0.5 : 1,
+                  }}
+                >
+                  <Text style={{ color: C.ink, fontWeight: '700', fontSize: 14 }}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {uploading && (
+              <View style={[s.row, { justifyContent: 'center', gap: 8, paddingVertical: 4 }]}>
+                <Text style={s.dim}>מעלה...</Text>
+                <ActivityIndicator color={C.ink} />
+              </View>
+            )}
+
+            {photosLoading ? (
+              <ActivityIndicator color={C.ink} style={{ marginTop: 20 }} />
+            ) : photos.length === 0 ? (
+              <View style={[s.card, { alignItems: 'center', paddingVertical: 28 }]}>
+                <Text style={s.dim}>אין תמונות בכרטיס זה</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                {photos.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => setViewer(p)}
+                    onLongPress={() => confirmDeletePhoto(p)}   // long-press to delete, as everywhere else on the card
+                    style={{ width: '31.9%', aspectRatio: 1 }}
+                  >
+                    <Image
+                      source={{ uri: p.url }}
+                      style={{ width: '100%', height: '100%', borderRadius: 10, backgroundColor: C.line }}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {photos.length > 0 && (
+              <Text style={[s.dim, { textAlign: 'center' }]}>לחיצה ארוכה על תמונה כדי למחוק</Text>
+            )}
+          </>
+        )}
+
         {tab === 'history' && (
           <View style={[s.card, { gap: 8 }]}>
             <Text style={s.h2}>משימות ({draft.done}/{draft.subtasks.length})</Text>
@@ -466,6 +631,29 @@ export default function EditTicket() {
         </Pressable>
       </View>
 
+      {/* ---------- full-screen photo ---------- */}
+      <Modal visible={Boolean(viewer)} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <Pressable style={{ flex: 1 }} onPress={() => setViewer(null)}>
+            {viewer && (
+              <Image source={{ uri: viewer.url }} style={{ flex: 1 }} resizeMode="contain" />
+            )}
+          </Pressable>
+          <View style={{
+            flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 18, paddingTop: 12, paddingBottom: insets.bottom + 12,
+          }}>
+            <Pressable onPress={() => setViewer(null)} hitSlop={12}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>סגור</Text>
+            </Pressable>
+            <Text style={{ color: '#8b93a1', fontSize: 12 }}>{viewer?.createdAt}</Text>
+            <Pressable onPress={() => viewer && confirmDeletePhoto(viewer)} hitSlop={12}>
+              <Text style={{ color: C.danger, fontSize: 15, fontWeight: '700' }}>מחק</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <WorkPicker visible={pickWork} onClose={() => setPickWork(false)} onPick={addWork} />
       <PartPicker
         workUid={pickPartFor}
@@ -478,19 +666,20 @@ export default function EditTicket() {
 
 /* ---------------- presentational pieces ---------------- */
 
+/* `action` is optional: the photos section puts its buttons below the head, not in it. */
 function SectionHead({ title, count, action, onAction }: {
-  title: string; count: number; action: string; onAction: () => void;
+  title: string; count: number; action?: string; onAction?: () => void;
 }) {
   return (
     <View style={[s.row, { justifyContent: 'space-between' }]}>
       <Text style={s.h2}>{title} ({count})</Text>
-      <Pressable onPress={onAction} style={{
+      {action && <Pressable onPress={onAction} style={{
         flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
         paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
         borderWidth: 1, borderColor: C.mist, backgroundColor: '#eef2f7',
       }}>
         <Text style={{ color: C.slate, fontWeight: '700', fontSize: 13 }}>+ {action}</Text>
-      </Pressable>
+      </Pressable>}
     </View>
   );
 }

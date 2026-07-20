@@ -181,6 +181,102 @@ export const deleteTicket = async (key: string) => {
   if (error) throw error; // works + work_items go with it (on delete cascade)
 };
 
+/* ---------------- ticket photos ---------------- */
+
+export const PHOTO_BUCKET = 'ticket-photos';
+
+export interface TicketPhoto {
+  id: string;
+  path: string;      // object path inside the bucket - what we delete by
+  url: string;       // public CDN url - what <Image> renders
+  caption: string;
+  createdAt: string;
+}
+
+const photoUrl = (path: string) =>
+  supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+
+const rowToPhoto = (r: any): TicketPhoto => ({
+  id: r.id,
+  path: r.path,
+  url: photoUrl(r.path),
+  caption: r.caption ?? '',
+  createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
+});
+
+/* RN's fetch can't reliably turn a file:// uri into a Blob, so the picker hands us
+   base64 and we upload the bytes directly. Hermes has atob, but not on every RN
+   version we might land on - 20 lines here is cheaper than depending on that. */
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const decodeBase64 = (input: string): Uint8Array => {
+  const b64 = input.replace(/[^A-Za-z0-9+/]/g, '');            // drops padding and any newlines
+  const bytes = new Uint8Array(Math.floor((b64.length * 3) / 4)); // 4 chars -> 3 bytes; a short final group carries 1 or 2
+  // Past the end of the string indexOf gives -1, whose bits would corrupt the
+  // bytes we do keep. Missing characters have to read as zero.
+  const at = (i: number) => { const c = B64.indexOf(b64[i]); return c < 0 ? 0 : c; };
+  let p = 0;
+  for (let i = 0; i < b64.length; i += 4) {
+    const n = (at(i) << 18) | (at(i + 1) << 12) | (at(i + 2) << 6) | at(i + 3);
+    if (p < bytes.length) bytes[p++] = (n >> 16) & 0xff;
+    if (p < bytes.length) bytes[p++] = (n >> 8) & 0xff;
+    if (p < bytes.length) bytes[p++] = n & 0xff;
+  }
+  return bytes;
+};
+
+/** A ticket's photos, oldest first. One round trip: the embed filters by ticket key. */
+export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
+  const { data, error } = await supabase
+    .from('ticket_photos')
+    .select('id, path, caption, created_at, tickets!inner(key)')
+    .eq('tickets.key', key)
+    .order('created_at');
+  if (error) throw error;
+  return (data ?? []).map(rowToPhoto);
+};
+
+/** Upload the bytes, then record the row. Foldered by ticket key so the bucket stays browsable. */
+export const uploadTicketPhoto = async (
+  key: string,
+  file: { base64: string; mime: string; ext: string },
+): Promise<TicketPhoto> => {
+  const ticketId = await ticketIdByKey(key);
+  const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, decodeBase64(file.base64), { contentType: file.mime, upsert: false });
+  if (upErr) throw upErr;
+
+  const { data, error } = await supabase
+    .from('ticket_photos')
+    .insert({ ticket_id: ticketId, path })
+    .select('id, path, caption, created_at')
+    .single();
+  if (error) {
+    // The row is what makes a photo visible; an object with no row is invisible junk.
+    await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+    throw error;
+  }
+  return rowToPhoto(data);
+};
+
+/** Object first, then row: a failed object delete leaves the photo intact rather than broken. */
+export const deleteTicketPhoto = async (photo: TicketPhoto) => {
+  const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove([photo.path]);
+  if (rmErr) throw rmErr;
+  const { error } = await supabase.from('ticket_photos').delete().eq('id', photo.id);
+  if (error) throw error;
+};
+
+export const updatePhotoCaption = async (id: string, caption: string) => {
+  const { error } = await supabase
+    .from('ticket_photos')
+    .update({ caption: caption.trim() || null })
+    .eq('id', id);
+  if (error) throw error;
+};
+
 /* ---------------- realtime ---------------- */
 
 /** Fires `onChange` whenever anyone - the web app, another phone - touches a ticket / work / part. */
