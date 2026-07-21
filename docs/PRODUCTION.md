@@ -290,6 +290,17 @@ Changes nothing user-facing. Makes every later phase reversible.
 > required rounding with the accountant before invoices become legal documents.
 
 ### Phase 2 — Tenancy + auth 🔒
+
+> **Enable RLS explicitly in every migration. Never rely on the platform.**
+> Staging (`eu-central-1`, created 2026-07-21) has Supabase's `rls_auto_enable()`
+> event trigger, which turns on RLS for any new table in `public`. Production
+> (created 2026-07-14) predates it and has no such trigger. A migration that
+> creates `garages` or `garage_members` without an explicit
+> `alter table ... enable row level security` would therefore be protected on
+> staging and **silently unprotected on production** — the rehearsal would pass
+> and the real thing would ship an open table. Found by diffing a freshly built
+> staging schema against production.
+
 - [ ] `garages` + `garage_members`
 - [ ] `garage_id` on every table, backfilled
 - [ ] Replace every `demo_all` policy with tenant isolation
