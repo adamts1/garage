@@ -26,6 +26,7 @@ look arbitrary until you know what they are protecting against.
 | Card data | Hosted fields / redirect only | Building our own card form puts us in serious PCI DSS scope. Non-negotiable. |
 | Repo | Single repo, npm workspaces, shared package | Web and mobile already duplicate the data layer and have drifted. Splitting would make that permanent. See §3.8. |
 | Backend | Supabase Edge Functions added in Phase 4 | Provider API credentials cannot ship in a client bundle, and webhooks need an HTTPS endpoint. |
+| DB region | `eu-central-1` (Frankfurt) for staging and production | The demo project sits in `ap-northeast-2` (Seoul): ~250–300ms from Israel versus ~60–80ms to Frankfurt, which is the difference between a board that feels instant and one that lags with several mechanics on it. Frankfurt also keeps customer PII in the EU, matching the Sentry project. **Supabase regions cannot be changed after creation** — moving costs nothing now and is a migration with downtime once garages are live. |
 | Launch | Pilot with **one** garage, then roll out | Every schema assumption gets tested at 1/10th the blast radius. Fixing something for one customer is a conversation; for ten it is an incident. |
 
 ### Vendor selection criterion
@@ -251,13 +252,34 @@ Changes nothing user-facing. Makes every later phase reversible.
 > push. Treat the baseline as unverified until that job is green.
 
 ### Phase 1 — Consolidation
-- [ ] npm workspaces, `packages/shared`
-- [ ] Reconcile both `db.ts` files and the duplicate `Ticket` type into one
-- [ ] Both apps building green; iOS build verified
+- [x] `packages/shared` with npm workspaces
+- [x] Both `db.ts` files, both `Ticket` types and both copies of the money math reconciled into one
+- [x] Web green: typecheck, 14 tests, build
+- [x] Mobile green: typecheck, and a real Metro bundle (1170 modules) with shared code verified inside it
+- [ ] **A TestFlight build confirmed by a human** — the JS bundle is proven, the native build is not
+- [ ] `useTickets` still duplicated — deferred, see note
 
-> Metro needs configuration to resolve hoisted/symlinked workspace deps. It is
-> officially supported but not zero effort, and the iOS build is where a mistake
-> surfaces. This is the main risk in Phase 1.
+> **Mobile is deliberately not an npm workspace.** Hoisting its dependencies to
+> the repo root would change the paths `ios/Podfile` resolves against, risking a
+> working TestFlight pipeline for cosmetic tidiness. It links `@garage/shared`
+> as a `file:` dependency instead, so `mobile/node_modules` stays put and the
+> native project is untouched by the monorepo layout. `mobile/metro.config.js`
+> carries the resolver config this requires.
+
+> `src/lib/useTickets.ts` and `mobile/lib/useTickets.ts` are still separate.
+> They are React state management rather than data or money, they genuinely
+> differ, and Phase 1 was already large. Worth revisiting, but not urgent.
+
+> Merging the two `subscribeToTickets` fixed a latent mobile bug. Mobile used a
+> fixed channel name (`garage-tickets-mobile`) where web uses a counter. Supabase
+> reuses a channel by topic and throws when `.on()` is called on an already
+> subscribed one, so mobile would have crashed the moment a second component
+> subscribed. It worked only because exactly one did.
+
+> **For Phase 4a:** `worksSummary` computes `vat = Math.round(net * VAT)` —
+> whole shekels. Real tax invoices generally need agorot precision, and a VAT
+> line rounded this way may not reconcile against net and total. Confirm the
+> required rounding with the accountant before invoices become legal documents.
 
 ### Phase 2 — Tenancy + auth 🔒
 - [ ] `garages` + `garage_members`

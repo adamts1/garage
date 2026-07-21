@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { workTotal } from './catalog';
+import { workTotal } from '@garage/shared';
 import { IconBoard, IconTickets } from './icons';
 import {
   COLUMNS, EPICS, PRIORITIES, TEAM, TYPES,
   type Status, type Ticket,
-} from './board-data';
+} from '@garage/shared';
 
 interface BoardProps {
   tickets: Ticket[];

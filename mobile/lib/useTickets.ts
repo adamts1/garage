@@ -6,8 +6,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isConfigured } from './supabase';
-import { deleteTicket, listTickets, subscribeToTickets, updateTicket } from './db';
-import type { Ticket } from './types';
+import { deleteTicket, listTickets, subscribeToTickets, updateTicket } from '@garage/shared';
+import type { Ticket } from '@garage/shared';
 
 export function useTickets() {
   const [tickets, setTickets] = useState<Ticket[]>([]);

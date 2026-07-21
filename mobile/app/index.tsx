@@ -7,8 +7,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
 import { isConfigured } from '../lib/supabase';
-import { COLUMNS } from '../lib/types';
-import type { Status, Ticket } from '../lib/types';
+import { COLUMNS } from '@garage/shared';
+import type { Status, Ticket } from '@garage/shared';
 import { C, rtl, s } from '../lib/theme';
 
 export default function TicketList() {

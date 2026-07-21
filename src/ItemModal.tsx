@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PartDef } from './catalog';
+import type { PartDef } from '@garage/shared';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 const norm = (s: string) => s.trim().toLowerCase();
