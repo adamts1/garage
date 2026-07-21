@@ -266,6 +266,14 @@ Changes nothing user-facing. Makes every later phase reversible.
 > native project is untouched by the monorepo layout. `mobile/metro.config.js`
 > carries the resolver config this requires.
 
+> **Install order matters.** Run `npm ci` at the repo root *before*
+> `npm ci` in `mobile/`. Mobile links `@garage/shared` as a `file:` dependency
+> and TypeScript follows into its source, so resolving the shared package's own
+> imports walks up from `packages/shared/` to the root `node_modules`. Install
+> mobile alone and it typechecks against a shared package whose types cannot
+> resolve, turning every inferred database row into `any`. CI enforces this
+> order; a fresh clone has to follow it too.
+
 > `src/lib/useTickets.ts` and `mobile/lib/useTickets.ts` are still separate.
 > They are React state management rather than data or money, they genuinely
 > differ, and Phase 1 was already large. Worth revisiting, but not urgent.

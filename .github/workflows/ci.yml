@@ -38,6 +38,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      # Root install first. Mobile links @garage/shared as a `file:` dependency,
+      # and tsc follows into its source — so resolving the shared package's own
+      # imports (@supabase/supabase-js) walks up from packages/shared/ to the
+      # root node_modules. Without this, mobile typechecks against a shared
+      # package whose types cannot resolve, and every inferred row becomes `any`.
+      - run: npm ci
       - run: npm ci
         working-directory: mobile
       - run: npm run typecheck
