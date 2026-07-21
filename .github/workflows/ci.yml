@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   web:
-    name: web — typecheck + build
+    name: web — typecheck + test + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +21,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # Includes the telemetry scrubber tests. If these fail, customer PII can
+      # reach a third party — treat a failure here as a security issue.
+      - run: npm test
       # Builds without Supabase env vars on purpose: `isConfigured` goes false
       # and the app renders SetupNotice. Nothing here needs real credentials.
       - run: npm run build

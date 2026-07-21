@@ -201,7 +201,7 @@ Changes nothing user-facing. Makes every later phase reversible.
 - [x] Real migrations; `drop table cascade` retired to `supabase/legacy/`
 - [x] CI: typecheck + build both apps, and apply migrations to a clean database
 - [ ] `seed.sql` dumped from the live demo project — **blocked on CLI link**, see `supabase/README.md`
-- [x] Error tracking on web, with PII scrubbing — inert until `VITE_SENTRY_DSN` is set
+- [x] Error tracking on web, with PII scrubbing — verified end to end, EU region
 - [ ] Error tracking on mobile — deferred deliberately, see note
 - [ ] Separate staging project from production — *needs Supabase account access*
 - [ ] Automated backups **plus one tested restore** — an untested backup is not a backup
@@ -210,6 +210,12 @@ Changes nothing user-facing. Makes every later phase reversible.
 > rebuild. Kept out of the Phase 0 commit so a working TestFlight pipeline is
 > not disturbed by infrastructure changes. Do it as its own change, with an
 > iOS build verified before merge.
+
+> Use **two Sentry projects**, not one: `garage-web` (platform: React) and
+> `garage-mobile` (platform: React Native). Releases do not line up — web
+> deploys continuously, mobile ships through TestFlight — and source maps
+> differ, with React Native needing Hermes bundles and native symbolication.
+> Billing is by event volume, so the second project is free.
 
 > `src/lib/sentry.ts` scrubs query-string values before anything leaves the
 > browser. PostgREST puts filters in the URL — `.eq('name', 'יוסי לוי')` becomes

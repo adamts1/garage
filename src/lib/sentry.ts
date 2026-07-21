@@ -10,30 +10,11 @@
    be shipped to a third party. See docs/PRODUCTION.md §6. */
 
 import * as Sentry from '@sentry/react';
+import { scrubUrl } from './scrub';
 
 const DSN = (import.meta.env.VITE_SENTRY_DSN ?? '').trim();
 
 export const isSentryEnabled = Boolean(DSN);
-
-/** Query params safe to keep — shape of the query, never its values. */
-const SAFE_PARAMS = new Set(['select', 'order', 'limit', 'offset', 'apikey']);
-
-/** Keep the path and the param names; redact anything that could carry PII. */
-export const scrubUrl = (raw: string): string => {
-  try {
-    const u = new URL(raw, 'http://x');
-    let touched = false;
-    for (const key of [...u.searchParams.keys()]) {
-      if (SAFE_PARAMS.has(key)) continue;
-      u.searchParams.set(key, '<redacted>');
-      touched = true;
-    }
-    if (!touched) return raw;
-    return raw.startsWith('http') ? u.toString() : u.pathname + u.search;
-  } catch {
-    return raw.split('?')[0]; // unparseable — drop the query string entirely
-  }
-};
 
 export function initSentry() {
   if (!DSN) return;
