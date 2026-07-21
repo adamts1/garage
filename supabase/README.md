@@ -42,18 +42,23 @@ npx supabase link --project-ref <ref>
 npx supabase db push
 ```
 
-## seed.sql is not generated yet
+## Regenerating seed.sql
 
-It must be **dumped from the real database**, not reconstructed from
-`legacy/` — those files have drifted out of sync with each other and with
-production (see `legacy/README.md`). Reconstructing from them produces broken
-data.
-
-Once the CLI is linked to the demo project:
+Always dump it from the real database. Never reconstruct it from `legacy/` —
+those files have drifted out of sync with each other and with production (see
+`legacy/README.md`), and rebuilding from them produces broken data. The dump
+confirmed it: production has 11 customers where `schema.sql` seeds 8, and 16
+vehicles where the broken join in `vehicles.sql` would have inserted about 6.
 
 ```bash
-npx supabase db dump --data-only -f supabase/seed.sql
+npx supabase db dump --data-only --schema public -f supabase/seed.sql
 ```
 
-Then review it before committing — it will contain whatever demo customers were
-added through the UI, and it must never contain real customer PII.
+**`--schema public` is not optional.** Without it the dump also covers the
+`auth` and `storage` schemas. That is harmless today because there is no login
+yet, but once Phase 2 lands, an unscoped dump would pull `auth.users` into a
+file committed to git — email addresses, password hashes, and live session and
+refresh tokens. Keep the flag.
+
+Review the output before committing, and never dump a database holding real
+customer data into this file.
