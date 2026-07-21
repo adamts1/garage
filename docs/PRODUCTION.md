@@ -121,16 +121,33 @@ recorded in none of the legacy `.sql` files. That drift was invisible until
 seeding a clean database from a production dump failed on `column "id_number"
 does not exist`. The baseline now carries both.
 
-Two things to settle, and the second is not a code decision:
+**Resolved for ת״ז: wired up, stored on the customer.** It is needed, so it is
+now persisted properly rather than collected and dropped.
 
-1. Either wire the mapping or remove the inputs. Asking for data and dropping it
-   is worse than not asking.
-2. **Decide whether ת״ז should be collected at all.** A national ID number is
-   sensitive personal data and raises the bar on the §6 privacy review
-   considerably. A garage needs a name, a phone and a plate; it does not
-   obviously need an ID number. This was deliberately *not* wired up as part of
-   Phase 1 — silently switching on collection of national ID numbers is not a
-   mechanical refactor.
+It lives on `customers.id_number`, not on the ticket. A national ID identifies a
+person, not a repair — per-ticket storage would mean re-entering it every visit,
+duplicating it across rows, and having no single place to correct it. On the
+customer it is entered once and autofills thereafter, and Phase 4a can snapshot
+it onto an issued invoice from the customer record. `CustomersPage` can edit it,
+which matters because `findOrCreateCustomer` deliberately fills a *missing* ת״ז
+but never overwrites an existing one — a correction should be an explicit edit,
+not a side effect of opening a ticket with a typo in it.
+
+`Ticket.idNumber` exists only in transit, so the create form can hand it to
+`findOrCreateCustomer`. It is not a column on `tickets` and reading a ticket back
+never populates it.
+
+`tickets.id_number` is left in place and unused — every value is NULL, dropping a
+column is irreversible, and it costs nothing to keep. Remove it deliberately once
+tenancy settles, if still unused.
+
+> **This is the first sensitive identifier the system stores, and it was a
+> deliberate decision.** It raises the bar on the §6 privacy review: retention,
+> access, and deletion now all have a national ID in scope. Whatever review
+> happens must cover it explicitly.
+
+**Still open: `vehicleCode`.** Same defect, no privacy weight — still collected
+by the form, still discarded. Either map it or drop the input.
 
 ### 3.9 No migrations, no tests, no CI
 Schema changes are hand-pasted `.sql` files. `schema.sql` opens with

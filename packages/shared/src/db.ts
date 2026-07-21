@@ -16,6 +16,8 @@ export interface Customer {
   address: string | null;
   city: string | null;
   kind: string;
+  /** ת״ז / company registration number. Sensitive — see docs/PRODUCTION.md §6. */
+  id_number: string | null;
 }
 
 export const listCustomers = async (): Promise<Customer[]> => {
@@ -246,13 +248,28 @@ const saveWorks = async (ticketId: string, works: TicketWork[]) => {
 export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> => {
   if (!t.customer) return null;
 
+  const idNumber = t.idNumber?.trim() || null;
+
   const { data: found, error } = await getClient()
     .from('customers')
-    .select('id')
+    .select('id, id_number')
     .eq('name', t.customer)
     .maybeSingle();
   if (error) throw error;
-  if (found) return found.id;
+
+  if (found) {
+    // Fill in a ת״ז we did not have. Never overwrite one we do — a correction
+    // should be a deliberate edit on the customer, not a side effect of opening
+    // a ticket with a typo in it.
+    if (idNumber && !found.id_number) {
+      const { error: upErr } = await getClient()
+        .from('customers')
+        .update({ id_number: idNumber })
+        .eq('id', found.id);
+      if (upErr) throw upErr;
+    }
+    return found.id;
+  }
 
   const { data: created, error: insErr } = await getClient()
     .from('customers')
@@ -261,6 +278,7 @@ export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> =>
       phone: t.phone ?? null,
       email: t.email ?? null,
       address: t.address ?? null,
+      id_number: idNumber,
       kind: (t.flags ?? []).includes('עסקי') ? 'עסקי' : 'פרטי',
     })
     .select('id')
