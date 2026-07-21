@@ -109,6 +109,28 @@ independently in `src/board-data.ts` and `mobile/lib/types.ts`.
 They have already drifted. Two definitions of the shape that crosses the network
 to the same tables — and every remaining phase touches this layer.
 
+### 3.10 The ticket form silently discards what it collects
+`App.tsx` renders inputs for **ת״ז** (`form.idNumber`) and a vehicle code
+(`form.vehicleCode`). The user fills them in, and they go nowhere: `Ticket` has
+no field for either and `ticketToRow` never maps them. All 13 production tickets
+have `id_number = NULL` despite the field being on screen.
+
+The columns *do* exist in the database — added straight in the dashboard and
+recorded in none of the legacy `.sql` files. That drift was invisible until
+seeding a clean database from a production dump failed on `column "id_number"
+does not exist`. The baseline now carries both.
+
+Two things to settle, and the second is not a code decision:
+
+1. Either wire the mapping or remove the inputs. Asking for data and dropping it
+   is worse than not asking.
+2. **Decide whether ת״ז should be collected at all.** A national ID number is
+   sensitive personal data and raises the bar on the §6 privacy review
+   considerably. A garage needs a name, a phone and a plate; it does not
+   obviously need an ID number. This was deliberately *not* wired up as part of
+   Phase 1 — silently switching on collection of national ID numbers is not a
+   mechanical refactor.
+
 ### 3.9 No migrations, no tests, no CI
 Schema changes are hand-pasted `.sql` files. `schema.sql` opens with
 `drop table if exists ... cascade` labelled "safe to re-run" — true today,

@@ -76,7 +76,16 @@ create table if not exists public.tickets (
   doc           text,
   reference     text,
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  -- Added directly in the dashboard, never recorded in any of the legacy .sql
+  -- files. Found only because seeding a clean database from a production dump
+  -- failed on them. Kept in production's column order so the two match exactly.
+  --   id_number    — ת״ז, collected by the new-ticket form in App.tsx
+  --   vehicle_code — the garage's own code for the vehicle
+  -- Both are currently write-only dead ends: the form captures them but the
+  -- data layer never maps them, so every row is NULL. See docs/PRODUCTION.md §3.10.
+  id_number     text,
+  vehicle_code  text
 );
 create index if not exists tickets_status_idx      on public.tickets (status);
 create index if not exists tickets_customer_id_idx on public.tickets (customer_id);
