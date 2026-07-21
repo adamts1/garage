@@ -121,7 +121,16 @@ recorded in none of the legacy `.sql` files. That drift was invisible until
 seeding a clean database from a production dump failed on `column "id_number"
 does not exist`. The baseline now carries both.
 
-Two things to settle, and the second is not a code decision:
+**Resolved for ת״ז: the field is removed.** The app no longer asks for a national
+ID number. The `tickets.id_number` column stays — it is empty, harmless, and
+keeping it makes re-enabling collection a UI change rather than a migration if a
+garage ever genuinely needs it. Collecting national ID numbers should be a
+deliberate decision with a stated purpose, not an inherited default.
+
+`vehicleCode` is still collected and still discarded — same defect, no privacy
+weight. Either map it in `ticketToRow` or drop the input.
+
+Original framing, kept for context:
 
 1. Either wire the mapping or remove the inputs. Asking for data and dropping it
    is worse than not asking.

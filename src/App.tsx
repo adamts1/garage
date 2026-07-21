@@ -21,7 +21,6 @@ interface TicketForm {
   customerSearch: string;
   customerName: string;
   customerPhone: string;
-  idNumber: string;
   customerType: string;
   address: string;
   email: string;
@@ -46,7 +45,6 @@ const emptyForm: TicketForm = {
   customerSearch: '',
   customerName: '',
   customerPhone: '',
-  idNumber: '',
   customerType: 'פרטי',
   address: '',
   email: '',
@@ -368,9 +366,6 @@ function App() {
                   </div>
                   <div className="form-group">
                     <input type="tel" placeholder="טלפון" value={form.customerPhone} onChange={(e) => set('customerPhone', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <input type="text" inputMode="numeric" placeholder="ת״ז" value={form.idNumber} onChange={(e) => set('idNumber', e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
