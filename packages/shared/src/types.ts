@@ -29,6 +29,15 @@ export interface Ticket {
   phone?: string;
   email?: string;
   address?: string;
+
+  /** ת״ז, in transit only.
+   *
+   *  Unlike phone / email / address above, this is NOT a column on tickets.
+   *  It rides along so findOrCreateCustomer can put it on the customer record,
+   *  where a national ID belongs, and ticketToRow deliberately ignores it.
+   *  Reading a ticket back from the database never populates this field —
+   *  read it from the customer. See docs/PRODUCTION.md §3.10. */
+  idNumber?: string;
   km?: string;
   year?: string;
   createdAt?: string;

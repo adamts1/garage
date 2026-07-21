@@ -154,6 +154,7 @@ function App() {
       ],
       works,
       phone: form.customerPhone,
+      idNumber: form.idNumber,   // stored on the customer, not the ticket
       email: form.email,
       address: [form.address, form.city].filter(Boolean).join(', '),
       km: form.km,
@@ -205,6 +206,7 @@ function App() {
       customerSearch: '',
       customerName: c.name,
       customerPhone: c.phone ?? '',
+      idNumber: c.id_number ?? '',
       email: c.email ?? '',
       address: c.address ?? '',
       city: c.city ?? '',

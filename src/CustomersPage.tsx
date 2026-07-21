@@ -5,7 +5,7 @@ import {
 
 type Draft = Omit<Customer, 'id'>;
 
-const blank: Draft = { name: '', phone: '', email: '', address: '', city: '', kind: 'פרטי' };
+const blank: Draft = { name: '', phone: '', email: '', address: '', city: '', kind: 'פרטי', id_number: '' };
 
 export default function CustomersPage() {
   const [rows, setRows] = useState<Customer[]>([]);
@@ -55,6 +55,7 @@ export default function CustomersPage() {
     setEdit({
       name: c.name, phone: c.phone ?? '', email: c.email ?? '',
       address: c.address ?? '', city: c.city ?? '', kind: c.kind,
+      id_number: c.id_number ?? '',
     });
   };
 
@@ -74,6 +75,7 @@ export default function CustomersPage() {
           <input placeholder="שם" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
           <input placeholder="טלפון" value={draft.phone ?? ''} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
           <input placeholder="דוא״ל" value={draft.email ?? ''} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+          <input placeholder="ת״ז / ח.פ" inputMode="numeric" value={draft.id_number ?? ''} onChange={(e) => setDraft({ ...draft, id_number: e.target.value })} />
           <input placeholder="עיר" value={draft.city ?? ''} onChange={(e) => setDraft({ ...draft, city: e.target.value })} />
           <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
             <option>פרטי</option>
@@ -91,6 +93,7 @@ export default function CustomersPage() {
                 <th>שם</th>
                 <th>טלפון</th>
                 <th>דוא״ל</th>
+                <th>ת״ז / ח.פ</th>
                 <th>עיר</th>
                 <th>סוג</th>
                 <th />
@@ -103,6 +106,7 @@ export default function CustomersPage() {
                     <td><input className="cell-input wide" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
                     <td><input className="cell-input wide" value={edit.phone ?? ''} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} /></td>
                     <td><input className="cell-input wide" value={edit.email ?? ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></td>
+                    <td><input className="cell-input wide" inputMode="numeric" value={edit.id_number ?? ''} onChange={(e) => setEdit({ ...edit, id_number: e.target.value })} /></td>
                     <td><input className="cell-input wide" value={edit.city ?? ''} onChange={(e) => setEdit({ ...edit, city: e.target.value })} /></td>
                     <td>
                       <select className="cell-input" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
@@ -120,6 +124,7 @@ export default function CustomersPage() {
                     <td><strong>{c.name}</strong></td>
                     <td>{c.phone || '-'}</td>
                     <td>{c.email || '-'}</td>
+                    <td>{c.id_number || '-'}</td>
                     <td>{c.city || '-'}</td>
                     <td><span className="status-pill">{c.kind}</span></td>
                     <td className="row-actions">
@@ -130,7 +135,7 @@ export default function CustomersPage() {
                 )
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={6} className="empty-note">לא נמצאו לקוחות</td></tr>
+                <tr><td colSpan={7} className="empty-note">לא נמצאו לקוחות</td></tr>
               )}
             </tbody>
           </table>
