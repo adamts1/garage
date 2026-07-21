@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web — typecheck + test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # Includes the telemetry scrubber tests. If these fail, customer PII can
+      # reach a third party — treat a failure here as a security issue.
+      - run: npm test
+      # Builds without Supabase env vars on purpose: `isConfigured` goes false
+      # and the app renders SetupNotice. Nothing here needs real credentials.
+      - run: npm run build
+
+  mobile:
+    name: mobile — typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run typecheck
+        working-directory: mobile
+
+  migrations:
+    name: migrations — apply to a clean database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # `supabase start` applies every migration in order to a fresh database.
+      # If a migration is malformed, out of order, or depends on something that
+      # does not exist yet, this fails here rather than against production.
+      - name: Apply migrations to a fresh database
+        run: npx supabase start
+      - name: Check for schema drift
+        run: npx supabase db diff --schema public
+      - if: always()
+        run: npx supabase stop --no-backup
