@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   createCustomer, deleteCustomer, listCustomers, subscribeToTable, updateCustomer, type Customer,
-} from './lib/db';
+} from '@garage/shared';
 
 type Draft = Omit<Customer, 'id'>;
 

@@ -7,15 +7,15 @@ import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
 import { isConfigured } from './lib/supabase';
-import { listCustomers, listVehicles, subscribeToTable, type Customer, type Vehicle } from './lib/db';
+import { listCustomers, listVehicles, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
 import { useTickets } from './lib/useTickets';
-import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from './catalog';
+import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
 import InvoicesPage from './InvoicesPage';
 import { IconBoard, IconCar, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
 import {
   COLUMNS, EPICS, TEAM, TYPES,
   type Priority, type Ticket,
-} from './board-data';
+} from '@garage/shared';
 
 interface TicketForm {
   customerSearch: string;

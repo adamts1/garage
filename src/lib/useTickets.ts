@@ -5,11 +5,11 @@
    pushes only what actually changed. Realtime brings in everyone else's edits. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ticket } from '../board-data';
+import type { Ticket } from '@garage/shared';
 import { isConfigured } from './supabase';
 import {
   createTicket, deleteTicket, findOrCreateCustomer, listTickets, subscribeToTickets, updateTicket,
-} from './db';
+} from '@garage/shared';
 
 type Setter = (update: Ticket[] | ((prev: Ticket[]) => Ticket[])) => void;
 

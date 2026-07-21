@@ -5,7 +5,7 @@ import WorkModal from './WorkModal';
 import {
   fromCatalog, workTotal,
   type PartDef, type TicketWork, type WorkDef,
-} from './catalog';
+} from '@garage/shared';
 
 /* same format as the summary rail - a row reading ₪150 next to a total reading ₪150.00 looks like a bug */
 const shekel = (n: number) =>

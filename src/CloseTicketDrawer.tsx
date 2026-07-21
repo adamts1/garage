@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconCard, IconCheck, IconDoc } from './icons';
-import type { Ticket } from './board-data';
+import type { Ticket } from '@garage/shared';
 
 const shekel = (n: number) =>
   n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₪';

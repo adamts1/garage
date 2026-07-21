@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { VAT } from './catalog';
-import { COLUMNS, type Status, type Ticket } from './board-data';
+import { VAT } from '@garage/shared';
+import { COLUMNS, type Status, type Ticket } from '@garage/shared';
 import { IconCustomers, IconDoc, IconPrint, IconReports, IconTickets } from './icons';
 
 const money = (n: number) =>

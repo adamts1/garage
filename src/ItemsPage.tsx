@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createItem, deleteItem, listItems, subscribeToTable, updateItem, type Item } from './lib/db';
+import { createItem, deleteItem, listItems, subscribeToTable, updateItem, type Item } from '@garage/shared';
 
 type Draft = Omit<Item, 'id'>;
 

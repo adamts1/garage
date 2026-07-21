@@ -10,12 +10,12 @@ import { useTicketsStore } from '../../lib/TicketsProvider';
 import {
   deleteTicketPhoto, listItems, listTicketPhotos, uploadTicketPhoto,
   type Item, type TicketPhoto,
-} from '../../lib/db';
+} from '@garage/shared';
 import {
   COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, WORK_CATALOG, VAT,
   fromCatalog, partsTotal, workTotal, worksSummary,
-} from '../../lib/types';
-import type { PartRow, Priority, Status, Ticket, TicketWork } from '../../lib/types';
+} from '@garage/shared';
+import type { PartRow, Priority, Status, Ticket, TicketWork } from '@garage/shared';
 import { C, rtl, s } from '../../lib/theme';
 
 const money = (n: number) =>

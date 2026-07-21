@@ -2,9 +2,9 @@
    The UI keeps using the `Ticket` shape it always had - everything below
    maps between that shape and the tickets / works / work_items rows. */
 
-import { supabase } from './supabase';
-import type { Ticket } from '../board-data';
-import type { PartRow, TicketWork } from '../catalog';
+import { getClient } from './client';
+import type { Ticket } from './types';
+import type { PartRow, TicketWork } from './catalog';
 
 /* ---------------- customers ---------------- */
 
@@ -19,7 +19,7 @@ export interface Customer {
 }
 
 export const listCustomers = async (): Promise<Customer[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('customers')
     .select('*')
     .order('created_at', { ascending: true });
@@ -28,18 +28,18 @@ export const listCustomers = async (): Promise<Customer[]> => {
 };
 
 export const createCustomer = async (c: Omit<Customer, 'id'>) => {
-  const { data, error } = await supabase.from('customers').insert(c).select().single();
+  const { data, error } = await getClient().from('customers').insert(c).select().single();
   if (error) throw error;
   return data as Customer;
 };
 
 export const updateCustomer = async (id: string, patch: Partial<Omit<Customer, 'id'>>) => {
-  const { error } = await supabase.from('customers').update(patch).eq('id', id);
+  const { error } = await getClient().from('customers').update(patch).eq('id', id);
   if (error) throw error;
 };
 
 export const deleteCustomer = async (id: string) => {
-  const { error } = await supabase.from('customers').delete().eq('id', id);
+  const { error } = await getClient().from('customers').delete().eq('id', id);
   if (error) throw error;
 };
 
@@ -57,7 +57,7 @@ export interface Vehicle {
 }
 
 export const listVehicles = async (): Promise<Vehicle[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('vehicles')
     .select('*')
     .order('created_at', { ascending: true });
@@ -76,24 +76,24 @@ export interface Item {
 }
 
 export const listItems = async (): Promise<Item[]> => {
-  const { data, error } = await supabase.from('items').select('*').order('sku');
+  const { data, error } = await getClient().from('items').select('*').order('sku');
   if (error) throw error;
   return (data ?? []).map((r) => ({ ...r, price: Number(r.price), stock: Number(r.stock) })) as Item[];
 };
 
 export const createItem = async (i: Omit<Item, 'id'>) => {
-  const { data, error } = await supabase.from('items').insert(i).select().single();
+  const { data, error } = await getClient().from('items').insert(i).select().single();
   if (error) throw error;
   return data as Item;
 };
 
 export const updateItem = async (id: string, patch: Partial<Omit<Item, 'id'>>) => {
-  const { error } = await supabase.from('items').update(patch).eq('id', id);
+  const { error } = await getClient().from('items').update(patch).eq('id', id);
   if (error) throw error;
 };
 
 export const deleteItem = async (id: string) => {
-  const { error } = await supabase.from('items').delete().eq('id', id);
+  const { error } = await getClient().from('items').delete().eq('id', id);
   if (error) throw error;
 };
 
@@ -189,7 +189,7 @@ const ticketToRow = (t: Ticket) => ({
 });
 
 export const listTickets = async (): Promise<Ticket[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('tickets')
     .select('*, works(*, work_items(*))')
     .order('created_at', { ascending: false });
@@ -198,18 +198,18 @@ export const listTickets = async (): Promise<Ticket[]> => {
 };
 
 const ticketIdByKey = async (key: string): Promise<string> => {
-  const { data, error } = await supabase.from('tickets').select('id').eq('key', key).single();
+  const { data, error } = await getClient().from('tickets').select('id').eq('key', key).single();
   if (error) throw error;
   return data.id as string;
 };
 
 /** Rewrite a ticket's works and their parts. Simple and correct: wipe, re-insert. */
 const saveWorks = async (ticketId: string, works: TicketWork[]) => {
-  const { error: delErr } = await supabase.from('works').delete().eq('ticket_id', ticketId);
+  const { error: delErr } = await getClient().from('works').delete().eq('ticket_id', ticketId);
   if (delErr) throw delErr;
   if (!works.length) return;
 
-  const { data: rows, error: workErr } = await supabase
+  const { data: rows, error: workErr } = await getClient()
     .from('works')
     .insert(
       works.map((w, i) => ({
@@ -238,7 +238,7 @@ const saveWorks = async (ticketId: string, works: TicketWork[]) => {
   );
   if (!parts.length) return;
 
-  const { error: partErr } = await supabase.from('work_items').insert(parts);
+  const { error: partErr } = await getClient().from('work_items').insert(parts);
   if (partErr) throw partErr;
 };
 
@@ -246,7 +246,7 @@ const saveWorks = async (ticketId: string, works: TicketWork[]) => {
 export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> => {
   if (!t.customer) return null;
 
-  const { data: found, error } = await supabase
+  const { data: found, error } = await getClient()
     .from('customers')
     .select('id')
     .eq('name', t.customer)
@@ -254,7 +254,7 @@ export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> =>
   if (error) throw error;
   if (found) return found.id;
 
-  const { data: created, error: insErr } = await supabase
+  const { data: created, error: insErr } = await getClient()
     .from('customers')
     .insert({
       name: t.customer,
@@ -270,7 +270,7 @@ export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> =>
 };
 
 export const createTicket = async (t: Ticket, customerId?: string | null) => {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('tickets')
     .insert({ ...ticketToRow(t), customer_id: customerId ?? null })
     .select('id')
@@ -281,53 +281,125 @@ export const createTicket = async (t: Ticket, customerId?: string | null) => {
 
 /** `worksChanged` is false on a status drag, so we don't rewrite the works tables for nothing. */
 export const updateTicket = async (t: Ticket, worksChanged: boolean) => {
-  const { error } = await supabase.from('tickets').update(ticketToRow(t)).eq('key', t.k);
+  const { error } = await getClient().from('tickets').update(ticketToRow(t)).eq('key', t.k);
   if (error) throw error;
   if (worksChanged) await saveWorks(await ticketIdByKey(t.k), t.works ?? []);
 };
 
 export const deleteTicket = async (key: string) => {
-  const { error } = await supabase.from('tickets').delete().eq('key', key);
+  const { error } = await getClient().from('tickets').delete().eq('key', key);
   if (error) throw error; // works + work_items go with it (on delete cascade)
 };
 
 /* ---------------- ticket photos ---------------- */
 
-/* Read-only here: photos are taken and deleted on the phone (mobile/lib/db.ts),
-   the board just shows them. The bucket is public, so a photo is a plain <img src>. */
+/* Photos are taken, captioned and deleted on the phone; the board displays them.
+   Both halves live here now, so the two apps cannot disagree about the shape of
+   a photo or the order of an upload's two writes.
+
+   The bucket is public, so a photo is a plain <img src>. Phase 2 makes it
+   private with signed URLs — see docs/PRODUCTION.md §3.3. */
 
 export const PHOTO_BUCKET = 'ticket-photos';
 
 export interface TicketPhoto {
   id: string;
-  url: string;
+  path: string;      // object path inside the bucket - what we delete by
+  url: string;       // public CDN url - what the board and <Image> render
   caption: string;
   createdAt: string;
 }
 
+const photoUrl = (path: string) =>
+  getClient().storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+
+const rowToPhoto = (r: any): TicketPhoto => ({
+  id: r.id,
+  path: r.path,
+  url: photoUrl(r.path),
+  caption: r.caption ?? '',
+  createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
+});
+
 /** A ticket's photos, oldest first. One round trip: the embed filters by ticket key. */
 export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('ticket_photos')
     .select('id, path, caption, created_at, tickets!inner(key)')
     .eq('tickets.key', key)
     .order('created_at');
   if (error) throw error;
-  return (data ?? []).map((r: any) => ({
-    id: r.id,
-    url: supabase.storage.from(PHOTO_BUCKET).getPublicUrl(r.path).data.publicUrl,
-    caption: r.caption ?? '',
-    createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
-  }));
+  return (data ?? []).map(rowToPhoto);
+};
+
+/* RN's fetch can't reliably turn a file:// uri into a Blob, so the picker hands us
+   base64 and we upload the bytes directly. Hermes has atob, but not on every RN
+   version we might land on - 20 lines here is cheaper than depending on that. */
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const decodeBase64 = (input: string): Uint8Array => {
+  const b64 = input.replace(/[^A-Za-z0-9+/]/g, '');            // drops padding and any newlines
+  const bytes = new Uint8Array(Math.floor((b64.length * 3) / 4)); // 4 chars -> 3 bytes; a short final group carries 1 or 2
+  // Past the end of the string indexOf gives -1, whose bits would corrupt the
+  // bytes we do keep. Missing characters have to read as zero.
+  const at = (i: number) => { const c = B64.indexOf(b64[i]); return c < 0 ? 0 : c; };
+  let p = 0;
+  for (let i = 0; i < b64.length; i += 4) {
+    const n = (at(i) << 18) | (at(i + 1) << 12) | (at(i + 2) << 6) | at(i + 3);
+    if (p < bytes.length) bytes[p++] = (n >> 16) & 0xff;
+    if (p < bytes.length) bytes[p++] = (n >> 8) & 0xff;
+    if (p < bytes.length) bytes[p++] = n & 0xff;
+  }
+  return bytes;
+};
+
+export const uploadTicketPhoto = async (
+  key: string,
+  file: { base64: string; mime: string; ext: string },
+): Promise<TicketPhoto> => {
+  const ticketId = await ticketIdByKey(key);
+  const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
+
+  const { error: upErr } = await getClient()
+    .storage.from(PHOTO_BUCKET)
+    .upload(path, decodeBase64(file.base64), { contentType: file.mime, upsert: false });
+  if (upErr) throw upErr;
+
+  const { data, error } = await getClient()
+    .from('ticket_photos')
+    .insert({ ticket_id: ticketId, path })
+    .select('id, path, caption, created_at')
+    .single();
+  if (error) {
+    // The row is what makes a photo visible; an object with no row is invisible junk.
+    await getClient().storage.from(PHOTO_BUCKET).remove([path]);
+    throw error;
+  }
+  return rowToPhoto(data);
+};
+
+/** Object first, then row: a failed object delete leaves the photo intact rather than broken. */
+export const deleteTicketPhoto = async (photo: TicketPhoto) => {
+  const { error: rmErr } = await getClient().storage.from(PHOTO_BUCKET).remove([photo.path]);
+  if (rmErr) throw rmErr;
+  const { error } = await getClient().from('ticket_photos').delete().eq('id', photo.id);
+  if (error) throw error;
+};
+
+export const updatePhotoCaption = async (id: string, caption: string) => {
+  const { error } = await getClient()
+    .from('ticket_photos')
+    .update({ caption: caption.trim() || null })
+    .eq('id', id);
+  if (error) throw error;
 };
 
 /** So a photo taken on the phone shows up on the board without a refresh. */
 export const subscribeToTicketPhotos = (onChange: () => void) => {
-  const channel = supabase
+  const channel = getClient()
     .channel(`garage-ticket-photos-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_photos' }, onChange)
     .subscribe();
-  return () => void supabase.removeChannel(channel);
+  return () => void getClient().removeChannel(channel);
 };
 
 /* ---------------- realtime ---------------- */
@@ -339,20 +411,20 @@ let channelSeq = 0;
 
 /** Fires `onChange` whenever anyone, anywhere, touches a ticket / work / part. */
 export const subscribeToTickets = (onChange: () => void) => {
-  const channel = supabase
+  const channel = getClient()
     .channel(`garage-tickets-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'works' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'work_items' }, onChange)
     .subscribe();
-  return () => void supabase.removeChannel(channel);
+  return () => void getClient().removeChannel(channel);
 };
 
 /** Same, for the customers / items / vehicles tables. */
 export const subscribeToTable = (table: 'customers' | 'items' | 'vehicles', onChange: () => void) => {
-  const channel = supabase
+  const channel = getClient()
     .channel(`garage-${table}-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
     .subscribe();
-  return () => void supabase.removeChannel(channel);
+  return () => void getClient().removeChannel(channel);
 };

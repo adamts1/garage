@@ -1,9 +1,9 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
-import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from './catalog';
-import { COLUMNS, TEAM, type Ticket } from './board-data';
-import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from './lib/db';
+import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
+import { COLUMNS, TEAM, type Ticket } from '@garage/shared';
+import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
 import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,

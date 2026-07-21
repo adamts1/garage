@@ -32,9 +32,13 @@ npx tsc --noEmit || die "Typecheck failed. Fix the errors before building."
 printf '    %sclean%s\n' "$GREEN" "$OFF"
 
 # ---------- 3. uncommitted changes would be SILENTLY excluded ----------
-DIRTY="$(cd "$REPO_ROOT" && git status --porcelain -- mobile/)"
+# packages/shared is part of the app since Phase 1 — it is linked in as a `file:`
+# dependency and its source is bundled. Checking only mobile/ would let
+# uncommitted shared changes be silently excluded, which is the exact mistake
+# this check exists to prevent.
+DIRTY="$(cd "$REPO_ROOT" && git status --porcelain -- mobile/ packages/shared/)"
 if [[ -n "$DIRTY" ]]; then
-  warn "Uncommitted changes under mobile/ — EAS builds from git, so these will NOT be in the build:"
+  warn "Uncommitted changes under mobile/ or packages/shared/ — EAS builds from git, so these will NOT be in the build:"
   printf '%s\n' "$DIRTY" | sed 's/^/      /'
   echo
   read -r -p "    Commit them now? [y]es / [n]o, build without them / [a]bort: " ANS
@@ -42,7 +46,7 @@ if [[ -n "$DIRTY" ]]; then
     y|Y)
       read -r -p "    Commit message: " MSG
       [[ -z "$MSG" ]] && die "Empty commit message."
-      (cd "$REPO_ROOT" && git add mobile/ && git commit -m "$MSG")
+      (cd "$REPO_ROOT" && git add mobile/ packages/shared/ && git commit -m "$MSG")
       printf '    %scommitted%s\n' "$GREEN" "$OFF"
       ;;
     n|N) warn "Building WITHOUT those changes." ;;
@@ -52,7 +56,14 @@ else
   printf '    %sworking tree clean%s\n' "$GREEN" "$OFF"
 fi
 
-# ---------- 4. build (+ submit) ----------
+# ---------- 4. say what is actually being built ----------
+BRANCH="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD)"
+COMMIT="$(cd "$REPO_ROOT" && git log --oneline -1)"
+say "Building from"
+printf '    branch %s%s%s\n' "$GREEN" "$BRANCH" "$OFF"
+printf '    commit %s\n' "$COMMIT"
+
+# ---------- 5. build (+ submit) ----------
 if [[ "$SUBMIT" == "1" ]]; then
   say "Building on EAS and auto-submitting to TestFlight"
   npx --yes eas-cli@latest build --platform ios --profile production --auto-submit

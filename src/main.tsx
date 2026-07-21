@@ -1,11 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { setSupabaseClient } from '@garage/shared';
 import App from './App';
+import { supabase } from './lib/supabase';
 import { ErrorBoundary, initSentry } from './lib/sentry';
 import './styles.css';
 
 // Before render, so a crash during the first paint is still reported.
 initSentry();
+
+// @garage/shared has no client of its own — the browser build hands it this one.
+// Must run before any component calls into the data layer.
+setSupabaseClient(supabase);
 
 /** Last resort: a white screen tells the user nothing and tells us nothing. */
 const Fallback = () => (

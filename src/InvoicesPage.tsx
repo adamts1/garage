@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { VAT, partsTotal } from './catalog';
-import type { Ticket } from './board-data';
+import { VAT, partsTotal } from '@garage/shared';
+import type { Ticket } from '@garage/shared';
 import {
   IconCar, IconCard, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPrint, IconWrench,
