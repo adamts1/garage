@@ -34,7 +34,11 @@
     "testflight": "bash scripts/testflight.sh",
     "build:ios": "bash scripts/testflight.sh --build-only",
     "submit:ios": "eas submit --platform ios --profile production",
-    "builds": "eas build:list --platform ios --limit 5"
+    "builds": "eas build:list --platform ios --limit 5",
+    "build:staging": "eas build --platform ios --profile staging",
+    "device": "eas device:create",
+    "build:preview": "eas build --platform ios --profile preview",
+    "run:preview": "eas build:run --platform ios --profile preview"
   },
   "private": true
 }

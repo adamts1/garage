@@ -9,6 +9,7 @@
       "distribution": "internal",
       "environment": "development"
     },
+
     "preview": {
       "distribution": "internal",
       "environment": "preview",
@@ -16,6 +17,12 @@
         "simulator": true
       }
     },
+
+    "staging": {
+      "distribution": "internal",
+      "environment": "preview"
+    },
+
     "production": {
       "autoIncrement": true,
       "environment": "production"
