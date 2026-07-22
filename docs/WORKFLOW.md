@@ -1,0 +1,200 @@
+# How development works
+
+Companion to `PRODUCTION.md`. That document says *what* we are building and why.
+This one says *how work moves* — from an edit on your laptop to a garage using it.
+
+---
+
+## 1. One repository
+
+There is no second repo and there should not be. Web and mobile share a data
+layer, a `Ticket` type, and the arithmetic that decides what a customer owes.
+When they lived in two copies they had already drifted 241 lines apart
+(`PRODUCTION.md` §3.8).
+
+```
+/                    web app (Vite + React)
+  src/               web UI
+  packages/shared/   types, data layer, catalog, money math   <- both apps
+  mobile/            Expo app (its own node_modules, see below)
+  supabase/          migrations, seed
+  docs/              this and PRODUCTION.md
+```
+
+**Mobile is deliberately not an npm workspace.** Hoisting its dependencies to
+the repo root would change the paths `ios/Podfile` resolves against. It links
+`@garage/shared` as a `file:` dependency instead, so `mobile/node_modules` stays
+put and the native project is untouched by the monorepo layout.
+
+**Install order matters:** `npm ci` at the root *before* `npm ci` in `mobile/`.
+TypeScript follows into the shared package's source, so resolving its imports
+walks up to the root `node_modules`. CI enforces this; a fresh clone must too.
+
+---
+
+## 2. Three environments
+
+| | database | region | who uses it | data |
+|---|---|---|---|---|
+| **Local** | `garage-staging` | Frankfurt | you, while developing | seeded copy |
+| **Staging** | `garage-staging` | Frankfurt | rehearsing migrations | seeded copy |
+| **Production** | `garage` | Seoul ⚠️ | the deployed site and TestFlight builds | real |
+
+Local development points at **staging**, so a junk ticket created while testing
+never lands in real data. The deployed Netlify site and TestFlight builds point
+at **production**.
+
+Two independent things, frequently confused:
+
+- **Your app's connection** comes from `.env.local` / `mobile/.env` (local) or
+  the Netlify / EAS dashboards (deployed).
+- **The Supabase CLI link** (`supabase/.temp/project-ref`) decides where
+  `db push` and `db reset` go — and nothing else.
+
+They can point at different projects at the same time, and usually do.
+
+> ⚠️ **Production is still the Seoul demo project.** The decision (`PRODUCTION.md`
+> §1) is that real production lives in `eu-central-1`. Creating it is a launch
+> task — see §6 below. Regions cannot be changed after a project is created.
+
+### Before anything destructive
+
+```bash
+cat supabase/.temp/project-ref
+```
+
+`db push` adds and is safe. `db reset` **drops and rebuilds**. Same two letters,
+very different day.
+
+---
+
+## 3. The daily loop
+
+```
+branch from main
+   ↓
+edit  (+ a migration if the schema changes)
+   ↓
+test locally against staging      npm run dev
+   ↓
+push → PR → CI
+   ↓
+merge
+   ↓
+deploy
+```
+
+CI runs on every PR and blocks the merge:
+
+| job | what it proves |
+|---|---|
+| web | typecheck, tests, build |
+| mobile | typecheck |
+| migrations | every migration applies to a **clean** database, then loads the seed |
+
+That third job is the one that has caught real problems — a baseline missing two
+production columns, and a seed file that could not load. Trust it.
+
+**A failing `scrub.test.ts` is a security issue, not a style nit.** It is what
+keeps customer names and phone numbers out of Sentry.
+
+---
+
+## 4. Schema changes
+
+Never edit the database by hand. Never edit an applied migration — fix it with a
+new one. Nothing in `migrations/` may drop a table.
+
+```bash
+npm run db:new add_something        # create the migration file
+# ... write it ...
+npx supabase db reset               # test on a clean LOCAL database
+git push                            # CI re-tests on a clean database
+# merge, then:
+
+npx supabase link --project-ref poksqsdklnhaumozriqd   # staging
+npx supabase db push
+# check staging still works, then:
+
+npx supabase link --project-ref ettzjjyyzrncvjhpphbk   # production
+npx supabase db push
+```
+
+Staging always goes first. It exists so a migration meets real Supabase
+infrastructure somewhere that does not matter.
+
+---
+
+## 5. Shipping
+
+### Web — automatic
+
+Netlify builds `main` on every merge. PRs get a deploy preview. Nothing to run.
+
+**Environment variables are baked in at build time.** Changing one in the Netlify
+dashboard does nothing until the next deploy.
+
+### Mobile — manual, and deliberately so
+
+```bash
+cd mobile
+npm run testflight
+```
+
+Builds on EAS, auto-increments the version, submits to TestFlight. Apple then
+processes it for 5–15 minutes.
+
+- **EAS builds from git.** Uncommitted work is not in the build. The script
+  checks `mobile/` *and* `packages/shared/` and refuses to continue quietly.
+- The script prints the branch and commit before building. Read it — builds are
+  often made from a feature branch, and "which code is in this build" should not
+  be a guess.
+- **A build succeeding is not the app working.** After a TestFlight build,
+  install it and check: app opens, ticket list loads, a ticket opens with correct
+  totals, a photo uploads.
+- Apple charges nothing per build; EAS build minutes are the cost. For iteration,
+  `--local` builds on your Mac for free.
+
+---
+
+## 6. The road to the first customer
+
+Ordered. Each phase gates the next.
+
+| phase | what | state |
+|---|---|---|
+| **0** | Migrations, CI, error tracking, backups | ✅ done |
+| **1** | One shared package instead of two drifting copies | ✅ done |
+| **2a** | `garage_id` on every row — non-breaking | ✅ done |
+| **2b** | Auth: login on web and mobile | next |
+| **2c** | Tenant policies replace `demo_all`; private photo bucket | 🔒 gate |
+| **3** | Ticket-key races, transactional saves, customer identity, realtime | |
+| **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
+| **5** | Onboarding, alerting, runbook, privacy review | |
+| **6** | **Pilot: one garage** | |
+| **4b** | In-app card payment | after pilot |
+| | Roll out the remaining nine | |
+
+### The two hard gates
+
+**2c** — no garage may read another's data, proven by a test that runs in CI
+forever. Not a manual click-through.
+
+**4a** — an accountant signs off on real documents issued in staging. Taking
+money without a compliant invoice is a tax exposure, not a bug.
+
+### Launch tasks not in any phase
+
+- [ ] **Create the real production project in `eu-central-1`** and migrate. The
+      current production is the Seoul demo project; regions are immutable, and
+      Israel → Seoul is ~250–300ms on every board interaction.
+- [ ] Per-garage invoicing and merchant accounts — ten separate legal businesses,
+      each with their own credentials and accountant sign-off. **This coordination,
+      not the code, is the realistic schedule driver.** Start early.
+- [ ] Decide what happens to ticket photos, which backups do not cover (§3.11).
+
+### Pilot with one garage, not ten
+
+Every schema assumption gets tested at a tenth of the blast radius. Fixing
+something for one customer is a conversation; fixing it for ten is an incident.
+The pilot is what turns this from a rewrite into a rollout.

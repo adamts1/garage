@@ -149,6 +149,20 @@ tenancy settles, if still unused.
 **Still open: `vehicleCode`.** Same defect, no privacy weight — still collected
 by the form, still discarded. Either map it or drop the input.
 
+### 3.11 Ticket photos are not backed up
+Supabase's daily backups cover the database only. The dashboard says so plainly:
+*"Database backups do not include objects stored via the Storage API."*
+
+So `ticket_photos` rows are backed up — filenames, captions, which ticket they
+belong to — but **the images themselves are not**. Restoring from a backup would
+produce a database full of photo records pointing at files that no longer exist.
+
+Tolerable for a demo. For ten garages photographing vehicle damage — the kind of
+evidence that surfaces in an insurance dispute or a "it was already scratched"
+argument — it should be a decision rather than a surprise. Options run from
+"accept it, photos are convenience" to a scheduled job copying the bucket
+elsewhere. Not urgent, but it should be chosen rather than inherited.
+
 ### 3.9 No migrations, no tests, no CI
 Schema changes are hand-pasted `.sql` files. `schema.sql` opens with
 `drop table if exists ... cascade` labelled "safe to re-run" — true today,
@@ -318,12 +332,40 @@ Changes nothing user-facing. Makes every later phase reversible.
 > and the real thing would ship an open table. Found by diffing a freshly built
 > staging schema against production.
 
-- [ ] `garages` + `garage_members`
-- [ ] `garage_id` on every table, backfilled
-- [ ] Replace every `demo_all` policy with tenant isolation
+Split into three so nothing breaks mid-flight. The moment tenant policies replace
+`demo_all`, the anon key can read nothing — do that before auth exists in the
+apps and both go dark. So schema first, then auth, then the flip.
+
+**2a — schema (non-breaking)**
+- [x] `garages` + `garage_members`, RLS enabled explicitly
+- [x] `current_garage_id()` — `stable` so it evaluates once per query, `security definer` to read past RLS, empty `search_path` so it cannot be shadowed
+- [x] `garage_id` on all seven tables, backfilled into one garage, `NOT NULL`, indexed
+- [x] Inheritance triggers so a child's `garage_id` always comes from its parent
+- [x] `demo_all` untouched — both apps keep working
+
+**2b — auth**
 - [ ] Supabase Auth + login on web and mobile
+- [ ] Members joined to a garage on sign-up
+
+**2c — the flip 🔒**
+- [ ] Replace every `demo_all` policy with tenant isolation
+- [ ] Swap the temporary `garage_id` default for `current_garage_id()`
 - [ ] Photo bucket → private, signed URLs, garage-prefixed paths
 - [ ] **Gate:** an automated test proving garage A cannot read garage B, running in CI permanently
+
+> The `garage_id` DEFAULT that 2a leaves behind is scaffolding. Until callers are
+> authenticated the apps insert rows knowing nothing about garages, and a
+> `NOT NULL` column with no default would break every insert. 2c replaces it.
+> Leaving it in place after auth would mean a caller with no garage silently
+> writes into the backfill tenant instead of being rejected.
+
+> **Child rows carry `garage_id` denormalised** so policies stay a column
+> comparison rather than a join back to `tickets`. The risk of denormalising is
+> divergence — a work row claiming a different garage from its ticket would be
+> invisible to its owner, or visible to someone else. Triggers make that
+> unrepresentable: the child's value is always read from the parent, never from
+> the caller. Verified by attempting the forgery on `works`, `work_items` and
+> `vehicles`; all three were corrected to the parent's garage.
 
 ### Phase 3 — Data integrity
 - [ ] Ticket keys → per-garage sequence, `unique (garage_id, key)`  (§3.4)
