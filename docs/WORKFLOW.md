@@ -198,7 +198,8 @@ Ordered. Each phase gates the next.
 | **0** | Migrations, CI, error tracking, backups | ✅ done |
 | **1** | One shared package instead of two drifting copies | ✅ done |
 | **2a** | `garage_id` on every row — non-breaking | ✅ done |
-| **2b** | Auth: login on web and mobile | next |
+| **A** | **Android prebuild** — before auth, see below | next |
+| **2b** | Auth: login on web, iOS **and Android** | |
 | **2c** | Tenant policies replace `demo_all`; private photo bucket | 🔒 gate |
 | **3** | Ticket-key races, transactional saves, customer identity, realtime | |
 | **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
@@ -214,6 +215,44 @@ forever. Not a manual click-through.
 
 **4a** — an accountant signs off on real documents issued in staging. Taking
 money without a compliant invoice is a tax exposure, not a bug.
+
+### Android — in the pilot, so it comes before auth
+
+The pilot ships on **both** iOS and Android. That moves Android earlier than it
+would otherwise sit, for one reason:
+
+> **Auth is the most platform-divergent thing in the app.** Supabase login
+> involves redirect URLs — magic links, OAuth callbacks, deep links back into
+> the app. iOS uses URL schemes and associated domains; Android uses intent
+> filters. Building auth iOS-only means wiring the whole redirect path a second
+> time later and debugging it twice. Everything else in the plan — RLS,
+> invoicing, migrations — is genuinely platform-agnostic. Auth is not.
+
+So: `expo prebuild --platform android` **before** 2b, and 2b covers both.
+
+The code is close to ready. There is exactly one `Platform.OS` branch in the
+app (`KeyboardAvoidingView`), and it already handles Android. RTL is applied
+per-style via `textAlign` / `writingDirection` rather than
+`I18nManager.forceRTL`, which is the portable choice — `forceRTL` behaves
+differently across platforms and needs an app restart.
+
+What it still costs:
+
+- `npx expo prebuild --platform android`
+- **Google Play developer account — start this now, it has lead time.** $25
+  once, plus identity verification, plus Google's requirements for new
+  developer accounts before production release. Those have included a closed
+  test with a minimum number of testers over a fixed period, and differ between
+  personal and organisation accounts. **Verify the current rules in the Play
+  Console rather than assuming a formality** — if a multi-week requirement
+  applies, that is a schedule constraint worth discovering now. An organisation
+  account is likely correct for a business, and account type is painful to
+  change later.
+- Real-device testing. Hebrew font rendering and RTL layout genuinely differ
+  between platforms even with the style-based approach. Budget hours, not a
+  smoke test. An emulator is not enough.
+
+Every mobile change now needs checking on both platforms.
 
 ### Launch tasks not in any phase
 
