@@ -14,4 +14,5 @@
 export * from './types';
 export * from './catalog';
 export * from './db';
+export * from './auth';
 export { setSupabaseClient, getClient } from './client';
