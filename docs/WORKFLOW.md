@@ -38,7 +38,7 @@ walks up to the root `node_modules`. CI enforces this; a fresh clone must too.
 |---|---|---|---|---|
 | **Local** | `garage-staging` | Frankfurt | you, while developing | seeded copy |
 | **Staging** | `garage-staging` | Frankfurt | rehearsing migrations | seeded copy |
-| **Production** | `garage` | Seoul ⚠️ | the deployed site and TestFlight builds | real |
+| **Production** | `garage-production` | Frankfurt | the deployed site and TestFlight builds | real |
 
 Local development points at **staging**, so a junk ticket created while testing
 never lands in real data. The deployed Netlify site and TestFlight builds point
@@ -53,9 +53,10 @@ Two independent things, frequently confused:
 
 They can point at different projects at the same time, and usually do.
 
-> ⚠️ **Production is still the Seoul demo project.** The decision (`PRODUCTION.md`
-> §1) is that real production lives in `eu-central-1`. Creating it is a launch
-> task — see §6 below. Regions cannot be changed after a project is created.
+> Both projects are in `eu-central-1` (Frankfurt), ~60–80ms from Israel. The
+> original demo project in Seoul was ~250–300ms on every board interaction and
+> has been deleted; regions cannot be changed after a project is created, which
+> is why moving meant a new project rather than a setting.
 
 ### Before anything destructive
 
@@ -116,7 +117,7 @@ npx supabase link --project-ref poksqsdklnhaumozriqd   # staging
 npx supabase db push
 # check staging still works, then:
 
-npx supabase link --project-ref ettzjjyyzrncvjhpphbk   # production
+npx supabase link --project-ref fdztfosbohiwskzfvwaj   # production
 npx supabase db push
 ```
 
@@ -256,9 +257,9 @@ Every mobile change now needs checking on both platforms.
 
 ### Launch tasks not in any phase
 
-- [ ] **Create the real production project in `eu-central-1`** and migrate. The
-      current production is the Seoul demo project; regions are immutable, and
-      Israel → Seoul is ~250–300ms on every board interaction.
+- [x] **Create the real production project in `eu-central-1`** and migrate.
+      Done 2026-07-22: `garage-production` (`fdztfosbohiwskzfvwaj`), Frankfurt.
+      The Seoul demo project has been deleted.
 - [ ] Per-garage invoicing and merchant accounts — ten separate legal businesses,
       each with their own credentials and accountant sign-off. **This coordination,
       not the code, is the realistic schedule driver.** Start early.

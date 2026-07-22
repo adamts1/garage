@@ -323,14 +323,29 @@ Changes nothing user-facing. Makes every later phase reversible.
 ### Phase 2 — Tenancy + auth 🔒
 
 > **Enable RLS explicitly in every migration. Never rely on the platform.**
-> Staging (`eu-central-1`, created 2026-07-21) has Supabase's `rls_auto_enable()`
-> event trigger, which turns on RLS for any new table in `public`. Production
-> (created 2026-07-14) predates it and has no such trigger. A migration that
-> creates `garages` or `garage_members` without an explicit
-> `alter table ... enable row level security` would therefore be protected on
-> staging and **silently unprotected on production** — the rehearsal would pass
-> and the real thing would ship an open table. Found by diffing a freshly built
-> staging schema against production.
+> This was found when production was the Seoul demo project (created
+> 2026-07-14), which predated Supabase's `rls_auto_enable()` event trigger while
+> staging (created 2026-07-21) had it. A migration creating `garages` without an
+> explicit `alter table ... enable row level security` would have been protected
+> on staging and **silently unprotected on production** — the rehearsal passes,
+> the real thing ships an open table. Found by diffing a freshly built staging
+> schema against production.
+>
+> The specific hazard is gone: production was rebuilt in Frankfurt on 2026-07-22
+> and now postdates staging, so both carry the trigger. The rule stays, because
+> the lesson was never about that one trigger. Platform defaults differ by
+> project age, by region and by how a project was provisioned, and the
+> difference is invisible until something reads the table.
+>
+> **The same reasoning applies to GRANTs, and there it bit us.** A policy says
+> which rows a role may see; a grant says whether it may touch the table at all,
+> and RLS is never consulted without one. Tables created by a migration are
+> owned by `postgres`, whose default ACL in the local stack is `anon=Dxtm` — no
+> SELECT. Hosted projects were provisioned under `supabase_admin`'s default ACL,
+> which grants it. So the apps worked against staging and production while a
+> database built from the same migrations rejected every query with
+> `permission denied for table tickets`. Declared explicitly in
+> `20260722020000_declare_existing_grants.sql`.
 
 Split into three so nothing breaks mid-flight. The moment tenant policies replace
 `demo_all`, the anon key can read nothing — do that before auth exists in the
