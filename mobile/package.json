@@ -38,7 +38,9 @@
     "build:staging": "eas build --platform ios --profile staging",
     "device": "eas device:create",
     "build:preview": "eas build --platform ios --profile preview",
-    "run:preview": "eas build:run --platform ios --profile preview"
+    "run:preview": "eas build:run --platform ios --profile preview",
+    "build:staging:local": "eas build --platform ios --profile staging --local",
+    "build:prod:local": "eas build --platform ios --profile production --local"
   },
   "private": true
 }
