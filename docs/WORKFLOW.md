@@ -134,7 +134,39 @@ Netlify builds `main` on every merge. PRs get a deploy preview. Nothing to run.
 **Environment variables are baked in at build time.** Changing one in the Netlify
 dashboard does nothing until the next deploy.
 
-### Mobile — manual, and deliberately so
+### Mobile — two tracks
+
+**TestFlight is for production builds only.** Never point it at staging: one app
+has one bundle ID and one baked-in database, so repointing TestFlight would mean
+your testers are suddenly writing to whichever database was current at build
+time — and you cannot tell by looking at the app which one that is.
+
+To test a build against staging, use the `staging` profile instead. It installs
+directly on registered devices, skipping TestFlight and Apple's processing wait
+entirely.
+
+| profile | database | how it installs | for |
+|---|---|---|---|
+| `staging` | **staging** | direct link / QR to registered devices | trying a change on a real phone |
+| `preview` | **staging** | iOS Simulator on your Mac | quick checks, no device needed |
+| `production` | **production** | TestFlight | releases |
+
+```bash
+cd mobile
+npm run device          # once per phone — registers it for direct install
+npm run build:staging   # build against staging, install via the link EAS prints
+npm run testflight      # production build -> TestFlight
+```
+
+`staging` and `preview` both read EAS's **preview** environment, so that is the
+one that must hold staging's URL and anon key. `production` reads the
+**production** environment.
+
+Registering a device is a one-off: iOS ad-hoc distribution embeds the allowed
+device IDs in the provisioning profile, so a phone that was not registered when
+the build was made cannot install it.
+
+### Shipping to TestFlight
 
 ```bash
 cd mobile
