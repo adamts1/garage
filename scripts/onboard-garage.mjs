@@ -31,6 +31,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 /* Load .env.local ourselves rather than relying on how we were invoked.
 
@@ -199,7 +200,70 @@ const { error: memberErr } = await db
 if (memberErr) die(`User and garage exist but could not be linked: ${memberErr.message}`);
 console.log(`\x1b[32m✓\x1b[0m membership linked\n`);
 
-/* ---------- 4. verify, rather than assume ---------- */
+/* ---------- 4. a starter catalog ----------
+
+   A brand-new garage with no works and no parts cannot write a ticket at all —
+   the picker is empty and there is nothing to attach. So a new garage is handed
+   a copy of the standard catalog to edit, rename and re-price, rather than a
+   blank one to build from scratch on its first morning.
+
+   A copy, not a reference: from here on the two diverge, which is the entire
+   point of making the catalog per-garage. Editing one garage's oil-change price
+   must never touch another's.
+
+   Skipped when joining someone to a garage that already exists (--garage-id),
+   since that garage has its own catalog and duplicating it would be a mess of
+   conflicting SKUs. */
+if (!existingGarageId && !args.get('no-catalog')) {
+  const starterPath = join(dirname(fileURLToPath(import.meta.url)), 'starter-catalog.json');
+  let starter = null;
+  try {
+    starter = JSON.parse(readFileSync(starterPath, 'utf8'));
+  } catch {
+    console.log('\x1b[33m!\x1b[0m starter catalog not found — garage created with an empty catalog');
+  }
+
+  if (starter) {
+    // Parts first: they are what a work's items refer to by SKU.
+    const parts = (starter.parts ?? []).map((p) => ({ ...p, stock: 0, garage_id: garageId }));
+    if (parts.length) {
+      const { error } = await db.from('items').upsert(parts, { onConflict: 'garage_id,sku' });
+      if (error) die(`Could not seed the parts catalog: ${error.message}`);
+    }
+
+    for (const w of starter.works ?? []) {
+      const { data: row, error } = await db
+        .from('work_defs')
+        .insert({
+          garage_id: garageId,
+          code: w.code,
+          name: w.name,
+          labor: w.labor,
+          hours: w.hours,
+          position: w.position ?? 0,
+        })
+        .select('id')
+        .single();
+      // A duplicate code means this garage was already seeded; skip rather than
+      // fail, so a half-finished run can be repeated.
+      if (error) {
+        if (/duplicate key/i.test(error.message)) continue;
+        die(`Could not seed work ${w.code}: ${error.message}`);
+      }
+      if (w.items?.length) {
+        const { error: itemErr } = await db.from('work_def_items').insert(
+          w.items.map((p, i) => ({ work_def_id: row.id, ...p, position: i })),
+        );
+        if (itemErr) die(`Could not seed parts for work ${w.code}: ${itemErr.message}`);
+      }
+    }
+    console.log(
+      `\x1b[32m✓\x1b[0m catalog seeded    ${(starter.works ?? []).length} works, ${parts.length} parts`,
+    );
+  }
+}
+
+/* ---------- 5. verify, rather than assume ---------- */
 // Reading it back through the same path the app uses is the difference between
 // "the inserts returned no error" and "this account can actually sign in".
 const probe = createClient(url, serviceKey, { auth: { persistSession: false } });
