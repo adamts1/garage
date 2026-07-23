@@ -275,11 +275,23 @@ To test a build against staging, use the `staging` profile instead. It installs
 directly on registered devices, skipping TestFlight and Apple's processing wait
 entirely.
 
-| profile | database | how it installs | for |
-|---|---|---|---|
-| `staging` | **staging** | direct link / QR to registered devices | trying a change on a real phone |
-| `preview` | **staging** | iOS Simulator on your Mac | quick checks, no device needed |
-| `production` | **production** | TestFlight | releases |
+| profile | database | packaging | how it installs | for |
+|---|---|---|---|---|
+| `staging` | **staging** | apk | direct link / QR | trying a change on a real phone |
+| `staging-play` | **staging** | **aab** | Google Play, closed testing | the Play testing track |
+| `preview` | **staging** | apk | iOS Simulator on your Mac | quick checks, no device needed |
+| `production` | **production** | aab / ipa | Play production, TestFlight | releases |
+
+> **`staging-play` is the one profile that pairs store packaging with the
+> staging database, and that is deliberate.** Play only accepts an `.aab`, and
+> Google's new-developer rules can require a closed test running for a fixed
+> period before production access — a test that must not write into real garage
+> data. So the artefact is shaped for the store while the data is not.
+>
+> It also means an `.aab` in hand is **not** necessarily a release candidate.
+> Check which profile produced it before promoting anything: a `staging-play`
+> bundle promoted to Play production would point ten real garages at the
+> staging database. `eas build:view <id>` prints the profile.
 
 ```bash
 cd mobile

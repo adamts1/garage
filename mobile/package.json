@@ -43,6 +43,7 @@
     "build:prod:local": "eas build --platform ios --profile production --local",
     "build:android": "eas build --platform android --profile staging",
     "build:android:local": "eas build --platform android --profile staging --local",
+    "build:android:play": "eas build --platform android --profile staging-play",
     "build:android:prod": "eas build --platform android --profile production",
     "builds:android": "eas build:list --platform android --limit 5"
   },

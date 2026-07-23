@@ -23,6 +23,15 @@
       "environment": "preview"
     },
 
+    "staging-play": {
+      "distribution": "store",
+      "environment": "preview",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+
     "production": {
       "autoIncrement": true,
       "environment": "production"
