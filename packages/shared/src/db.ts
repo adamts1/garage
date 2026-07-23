@@ -4,7 +4,7 @@
 
 import { getClient } from './client';
 import type { Ticket } from './types';
-import type { PartRow, TicketWork } from './catalog';
+import type { PartRow, TicketWork, WorkDef } from './catalog';
 
 /* ---------------- customers ---------------- */
 
@@ -96,6 +96,112 @@ export const updateItem = async (id: string, patch: Partial<Omit<Item, 'id'>>) =
 
 export const deleteItem = async (id: string) => {
   const { error } = await getClient().from('items').delete().eq('id', id);
+  if (error) throw error;
+};
+
+/* ---------------- the works catalog ----------------
+
+   Standard jobs, each with a labour price and the parts it needs. This used to
+   be WORK_CATALOG, a constant compiled into both apps, which meant every garage
+   saw the same names and the same prices and changing one required a release.
+
+   Note there is no separate parts catalog. PARTS_CATALOG was the same shape as
+   the `items` table — sku, name, price — so `listItems()` above is the parts
+   catalog, and a part invented while editing a work is just createItem().
+   Keeping two lists of the same thing is what this phase is undoing.
+
+   The caller never sends garage_id. It defaults to current_garage_id(), so a
+   work belongs to whoever created it and cannot be aimed at another tenant. */
+
+/** Rows arrive with the embedded parts under whatever alias PostgREST chose. */
+const rowToWorkDef = (r: any): WorkDef => ({
+  id: r.id,
+  code: r.code,
+  name: r.name,
+  labor: Number(r.labor),
+  hours: Number(r.hours),
+  items: (r.work_def_items ?? [])
+    .slice()
+    .sort((a: any, b: any) => a.position - b.position)
+    .map((p: any): PartRow => ({
+      sku: p.sku ?? '',
+      name: p.name,
+      qty: Number(p.qty),
+      price: Number(p.price),
+    })),
+});
+
+/** The garage's catalog, in its own display order. One round trip. */
+export const listWorkDefs = async (): Promise<WorkDef[]> => {
+  const { data, error } = await getClient()
+    .from('work_defs')
+    .select('id, code, name, labor, hours, position, work_def_items(sku, name, qty, price, position)')
+    .order('position');
+  if (error) throw error;
+  return (data ?? []).map(rowToWorkDef);
+};
+
+/* Create a work and its parts.
+
+   Two statements, not one: the parts need the work's id. If the parts insert
+   fails the work is removed again, because a catalog work that silently lost
+   its parts is worse than one that was never created — it looks correct in the
+   list and produces a wrong quote when someone picks it. */
+export const createWorkDef = async (def: Omit<WorkDef, 'id'>): Promise<WorkDef> => {
+  const { data: row, error } = await getClient()
+    .from('work_defs')
+    .insert({ code: def.code, name: def.name, labor: def.labor, hours: def.hours })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  if (def.items.length) {
+    const { error: partErr } = await getClient().from('work_def_items').insert(
+      def.items.map((p, i) => ({
+        work_def_id: row.id,
+        sku: p.sku || null,
+        name: p.name,
+        qty: p.qty,
+        price: p.price,
+        position: i,
+      })),
+    );
+    if (partErr) {
+      await getClient().from('work_defs').delete().eq('id', row.id);
+      throw partErr;
+    }
+  }
+  return { ...def, id: row.id };
+};
+
+/** Rewrite a work and its parts. Wipe and re-insert, as saveWorks does. */
+export const updateWorkDef = async (id: string, def: Omit<WorkDef, 'id'>): Promise<void> => {
+  const { error } = await getClient()
+    .from('work_defs')
+    .update({ code: def.code, name: def.name, labor: def.labor, hours: def.hours })
+    .eq('id', id);
+  if (error) throw error;
+
+  const { error: delErr } = await getClient().from('work_def_items').delete().eq('work_def_id', id);
+  if (delErr) throw delErr;
+  if (!def.items.length) return;
+
+  const { error: partErr } = await getClient().from('work_def_items').insert(
+    def.items.map((p, i) => ({
+      work_def_id: id,
+      sku: p.sku || null,
+      name: p.name,
+      qty: p.qty,
+      price: p.price,
+      position: i,
+    })),
+  );
+  if (partErr) throw partErr;
+};
+
+/** Parts go with it — work_def_items cascades on the foreign key. */
+export const deleteWorkDef = async (id: string) => {
+  const { error } = await getClient().from('work_defs').delete().eq('id', id);
   if (error) throw error;
 };
 

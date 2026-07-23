@@ -8,14 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import {
-  deleteTicketPhoto, listItems, listTicketPhotos, uploadTicketPhoto,
+  deleteTicketPhoto, listItems, listTicketPhotos, listWorkDefs, uploadTicketPhoto,
   type Item, type TicketPhoto,
 } from '@garage/shared';
 import {
-  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, WORK_CATALOG, VAT,
+  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES, VAT,
   fromCatalog, partsTotal, workTotal, worksSummary,
 } from '@garage/shared';
-import type { PartRow, Priority, Status, Ticket, TicketWork } from '@garage/shared';
+import type { PartRow, Priority, Status, Ticket, TicketWork, WorkDef } from '@garage/shared';
 import { C, rtl, s } from '../../lib/theme';
 
 const money = (n: number) =>
@@ -733,11 +733,34 @@ function WorkPicker({ visible, onClose, onPick }: {
 }) {
   const uid = () => `w-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
 
+  /* This garage's catalog, not a constant compiled into the app. Same pattern
+     as PartPicker below: fetched when the sheet first opens, then kept.
+
+     An empty catalog is a real state now — a garage onboarded without a starter
+     catalog has none — so it needs its own message. Falling through to a blank
+     list would read as a failed load, and the free-work button below is still
+     the way out either way. */
+  const [defs, setDefs] = useState<WorkDef[] | null>(null);
+
+  useEffect(() => {
+    if (visible && !defs) listWorkDefs().then(setDefs).catch(() => setDefs([]));
+  }, [visible, defs]);
+
   return (
     <Sheet visible={visible} onClose={onClose} title="בחר עבודה מהקטלוג">
+      {defs === null ? (
+        <View style={{ padding: 24, alignItems: 'center' }}>
+          <ActivityIndicator color={C.ink} />
+        </View>
+      ) : (
       <FlatList
-        data={WORK_CATALOG}
+        data={defs}
         keyExtractor={(w) => w.id}
+        ListEmptyComponent={
+          <Text style={[s.dim, { padding: 16, textAlign: 'center' }]}>
+            אין עבודות בקטלוג של המוסך.
+          </Text>
+        }
         contentContainerStyle={{ gap: 8, padding: 12 }}
         ListFooterComponent={
           <Pressable
@@ -759,6 +782,7 @@ function WorkPicker({ visible, onClose, onPick }: {
           </Pressable>
         )}
       />
+      )}
     </Sheet>
   );
 }

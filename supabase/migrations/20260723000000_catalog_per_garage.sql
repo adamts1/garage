@@ -40,7 +40,15 @@ comment on constraint items_garage_sku_key on public.items is
 -- ---------- 2. the works catalog ----------
 create table if not exists public.work_defs (
   id         uuid primary key default gen_random_uuid(),
-  garage_id  uuid not null references public.garages(id) on delete cascade,
+  -- Defaulted to the caller's garage, not to the backfill tenant. The other
+  -- seven tables carry a hardcoded UUID default as scaffolding, because they
+  -- predate auth and a NOT NULL column with no default would break every
+  -- insert. These tables do not, so they start with the shape the flip is
+  -- moving everything else towards: the caller never names their own garage,
+  -- and an unauthenticated insert gets NULL and is rejected rather than
+  -- silently landing in someone else's tenant.
+  garage_id  uuid not null default public.current_garage_id()
+             references public.garages(id) on delete cascade,
   code       text not null,                              -- typed in the works table to pull it in
   name       text not null,
   labor      numeric(10,2) not null default 0,
