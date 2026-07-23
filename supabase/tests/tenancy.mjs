@@ -232,19 +232,94 @@ check(
 // This is the state AuthGate must refuse to render a board for. The app-side
 // half of this rule is covered in packages/shared/src/auth.test.ts.
 
-/* ---------- 2c: the gate this file exists to become ----------
+/* ---------- the gate ----------
  *
- * Until the demo_all policies are replaced, anon and every session can read
- * every tenant's rows, so these cannot pass yet. They are written out rather
- * than left to memory because the point of 2c is that they start passing and
- * never stop.
- *
- *   check("A cannot read B's tickets", ...)
- *   check("A cannot write into B's garage", ...)
- *   check('anon cannot read tickets at all', ...)
- *   check("A cannot read B's ticket photos from storage", ...)
+ * docs/PRODUCTION.md §5 requires an automated test proving garage A cannot read
+ * garage B, running in CI permanently. This is it. These assertions were
+ * written as comments through 2a and 2b and turned on with the flip; they must
+ * never be commented out again.
  */
-console.log('\n  (2c will add: A cannot read B\'s tickets, and anon cannot read any)\n');
+
+const makeTicket = async (tenant, key, title) => {
+  const res = await rest('tickets', tenant.token, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ key, title, status: 'todo' }),
+  });
+  const body = await res.json();
+  return { status: res.status, row: Array.isArray(body) ? body[0] : body };
+};
+
+const aTicket = await makeTicket(a, `ISO-A-${stamp}`, 'A ticket');
+check(
+  'A can create a ticket without naming a garage',
+  aTicket.status === 201 && Boolean(aTicket.row?.id),
+  `got ${aTicket.status} ${JSON.stringify(aTicket.row).slice(0, 120)}`,
+);
+check(
+  "the ticket landed in A's garage, from the column default",
+  aTicket.row?.garage_id === a.garage.id,
+  `got ${aTicket.row?.garage_id}`,
+);
+
+await makeTicket(b, `ISO-B-${stamp}`, 'B ticket');
+
+const aTickets = await (await rest('tickets?select=key,garage_id', a.token)).json();
+check(
+  "A sees only A's tickets",
+  Array.isArray(aTickets) && aTickets.every((t) => t.garage_id === a.garage.id),
+  `${Array.isArray(aTickets) ? aTickets.length : '?'} rows, garages ${[...new Set((aTickets ?? []).map((t) => t.garage_id))].length}`,
+);
+check(
+  "A cannot see B's ticket",
+  Array.isArray(aTickets) && !aTickets.some((t) => t.key === `ISO-B-${stamp}`),
+);
+
+const bReadsA = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, b.token)).json();
+check(
+  "B cannot read A's ticket by its id",
+  Array.isArray(bReadsA) && bReadsA.length === 0,
+  `got ${JSON.stringify(bReadsA)}`,
+);
+
+// The update reports success with zero rows affected rather than an error —
+// PostgREST cannot update a row the policy hides. Asserting on the row's
+// contents afterwards is what actually proves it.
+await rest(`tickets?id=eq.${aTicket.row?.id}`, b.token, {
+  method: 'PATCH',
+  body: JSON.stringify({ title: 'B was here' }),
+});
+const stillMine = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=title`, a.token)).json();
+check(
+  "B cannot modify A's ticket",
+  stillMine?.[0]?.title === 'A ticket',
+  `title is now ${JSON.stringify(stillMine?.[0]?.title)}`,
+);
+
+await rest(`tickets?id=eq.${aTicket.row?.id}`, b.token, { method: 'DELETE' });
+const stillThere = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, a.token)).json();
+check("B cannot delete A's ticket", stillThere?.length === 1);
+
+const forgedTicket = await rest('tickets', b.token, {
+  method: 'POST',
+  body: JSON.stringify({ key: `ISO-FORGE-${stamp}`, title: 'forged', status: 'todo', garage_id: a.garage.id }),
+});
+check(
+  "B cannot create a ticket inside A's garage",
+  forgedTicket.status === 403 || forgedTicket.status === 401,
+  `got ${forgedTicket.status}`,
+);
+
+/* ---------- and the anon key, which is public ---------- */
+for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 'vehicles', 'ticket_photos']) {
+  const res = await rest(`${table}?select=id&limit=1`, ANON);
+  const body = res.status === 200 ? await res.json() : null;
+  check(
+    `anon reads nothing from ${table}`,
+    res.status === 401 || res.status === 403 || (Array.isArray(body) && body.length === 0),
+    `got ${res.status}${body ? ` with ${body.length} rows` : ''}`,
+  );
+}
 
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);
