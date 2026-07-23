@@ -8,3 +8,7 @@ dist/
 
 .DS_Store
 *.log
+
+# local-Supabase pointers for pre-flip verification (public demo keys, still not committed)
+.env.local.localdb
+mobile/.env.localdb
