@@ -66,5 +66,14 @@ jobs:
         run: npx supabase start
       - name: Check for schema drift
         run: npx supabase db diff --schema public
+      # Talks to PostgREST with real sessions, not to Postgres as a superuser.
+      # That is the only path where a missing GRANT and a missing policy are
+      # both exercised — `set role` in psql skips the grant check, and a test
+      # that skips it passes right up until the app makes the same call.
+      #
+      # Phase 2c turns this into the gate PRODUCTION.md §5 requires: no garage
+      # may read another's data, proven here forever rather than by clicking.
+      - name: Tenant isolation
+        run: node supabase/tests/tenancy.mjs
       - if: always()
         run: npx supabase stop --no-backup

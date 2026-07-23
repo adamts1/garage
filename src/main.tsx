@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { setSupabaseClient } from '@garage/shared';
 import App from './App';
+import AuthGate from './AuthGate';
 import { supabase } from './lib/supabase';
 import { ErrorBoundary, initSentry } from './lib/sentry';
 import './styles.css';
@@ -25,7 +26,11 @@ const Fallback = () => (
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary fallback={<Fallback />}>
-      <App />
+      {/* Outside App so no board component — and so no realtime subscription —
+          mounts before there is a session. */}
+      <AuthGate>
+        <App />
+      </AuthGate>
     </ErrorBoundary>
   </React.StrictMode>,
 );

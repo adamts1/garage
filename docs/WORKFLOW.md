@@ -38,7 +38,7 @@ walks up to the root `node_modules`. CI enforces this; a fresh clone must too.
 |---|---|---|---|---|
 | **Local** | `garage-staging` | Frankfurt | you, while developing | seeded copy |
 | **Staging** | `garage-staging` | Frankfurt | rehearsing migrations | seeded copy |
-| **Production** | `garage` | Seoul ⚠️ | the deployed site and TestFlight builds | real |
+| **Production** | `garage-production` | Frankfurt | the deployed site and TestFlight builds | real |
 
 Local development points at **staging**, so a junk ticket created while testing
 never lands in real data. The deployed Netlify site and TestFlight builds point
@@ -53,9 +53,10 @@ Two independent things, frequently confused:
 
 They can point at different projects at the same time, and usually do.
 
-> ⚠️ **Production is still the Seoul demo project.** The decision (`PRODUCTION.md`
-> §1) is that real production lives in `eu-central-1`. Creating it is a launch
-> task — see §6 below. Regions cannot be changed after a project is created.
+> Both projects are in `eu-central-1` (Frankfurt), ~60–80ms from Israel. The
+> original demo project in Seoul was ~250–300ms on every board interaction and
+> has been deleted; regions cannot be changed after a project is created, which
+> is why moving meant a new project rather than a setting.
 
 ### Before anything destructive
 
@@ -116,16 +117,107 @@ npx supabase link --project-ref poksqsdklnhaumozriqd   # staging
 npx supabase db push
 # check staging still works, then:
 
-npx supabase link --project-ref ettzjjyyzrncvjhpphbk   # production
+npx supabase link --project-ref fdztfosbohiwskzfvwaj   # production
 npx supabase db push
 ```
 
 Staging always goes first. It exists so a migration meets real Supabase
 infrastructure somewhere that does not matter.
 
+### Grants are not policies, and neither is inherited
+
+A **policy** decides which rows a role may see. A **grant** decides whether the
+role may address the table at all, and *RLS is never consulted without one*.
+Both are required. Write both, in the migration, every time.
+
+`service_role` bypasses RLS. It does **not** bypass grants. Conflating those two
+is what made the onboarding script work against staging and fail on a clean
+database.
+
+Never inherit either from the platform. Tables created by a migration are owned
+by `postgres`; its default ACL locally gives `anon` and `service_role` no
+`SELECT`, while hosted projects were provisioned under `supabase_admin`'s
+default ACL, which grants full DML. So the same migration produces a working
+database on staging and a database that rejects every query locally — and the
+difference is invisible until something reads a table. `supabase db diff` does
+not report it.
+
 ---
 
-## 5. Shipping
+## 5. Accounts
+
+There is no signup. Accounts are created by an operator, together with the
+membership that joins them to a garage:
+
+```bash
+npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
+```
+
+It prints a generated password once and stores it nowhere. Pass `--garage-id` to
+add someone to a garage that already exists.
+
+`SUPABASE_SERVICE_ROLE_KEY` goes in `.env.local`, which is gitignored. The npm
+script passes `--env-file=.env.local`, because **node does not read .env files
+on its own** — only Vite does, and only for `VITE_`-prefixed names. The URL is
+taken from `SUPABASE_URL`, falling back to `VITE_SUPABASE_URL`.
+
+> **Never name it `VITE_SUPABASE_SERVICE_ROLE_KEY`.** Vite bakes every
+> `VITE_`-prefixed variable into the browser bundle, and this key bypasses RLS
+> *and* every grant. The absent prefix is what keeps it out of the bundle — the
+> naming is load-bearing, not stylistic. The project URL has no such problem: it
+> already ships in the bundle and the APK.
+
+The script refuses to run if the key is not a `service_role` key, or if the key
+and the URL name different projects. That second check exists because they come
+from different places — the URL usually from `.env.local`, the key exported by
+hand — and the dangerous case is not a key that fails to authenticate but one
+that succeeds against a project you did not mean to write to.
+
+To target production, override the URL for that one command:
+
+```bash
+SUPABASE_URL=https://fdztfosbohiwskzfvwaj.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<production key> \
+  node scripts/onboard-garage.mjs --garage "..." --email ...
+```
+
+**Why no self-signup.** A user and their membership are written by the same
+command, so "signed in but belongs to no garage" cannot arise. That state is not
+theoretical: before 2c such a user lands in the backfill tenant and reads real
+data, and after 2c they read nothing while the UI insists all is well. The apps
+have a screen for it anyway (`AuthGate`), because a state that should be
+impossible is exactly the one worth being loud about.
+
+> **Public signup is off on staging and production** (disabled 2026-07-23), and
+> `enable_signup = false` in `config.toml` covers the local stack. Keep it that
+> way: the anon key ships inside the APK and the web bundle, so an open signup
+> endpoint lets anyone who extracts it create an account.
+>
+> It is a **per-project dashboard setting** — Authentication → Sign In /
+> Providers → *Allow new users to sign up*. `config.toml` governs only the local
+> stack, and `supabase config push` is not a safe way to change it: it pushes
+> the whole `[auth]` block, including `site_url`, which would point a hosted
+> project at localhost.
+>
+> Verify rather than assume, on each project:
+> ```bash
+> curl -s -X POST "https://<ref>.supabase.co/auth/v1/signup" \
+>   -H "apikey: <anon>" -H "Content-Type: application/json" \
+>   -d '{"email":"probe@gmail.com","password":"StrongEnough123!"}'
+> ```
+> `signup_disabled` is correct. A `weak_password` or `email_address_invalid`
+> reply means signup is **open** — the endpoint got far enough to validate the
+> payload. Do not probe with a weak password and read the rejection as safety.
+
+### The login gate is not a security boundary
+
+Until 2c replaces the `demo_all` policies, the anon key still reads and writes
+every tenant table. Signing in changes what the app shows, not what the database
+permits. Treat 2b as product behaviour; 2c is the boundary.
+
+---
+
+## 6. Shipping
 
 ### Web — automatic
 
@@ -189,7 +281,7 @@ processes it for 5–15 minutes.
 
 ---
 
-## 6. The road to the first customer
+## 7. The road to the first customer
 
 Ordered. Each phase gates the next.
 
@@ -198,8 +290,8 @@ Ordered. Each phase gates the next.
 | **0** | Migrations, CI, error tracking, backups | ✅ done |
 | **1** | One shared package instead of two drifting copies | ✅ done |
 | **2a** | `garage_id` on every row — non-breaking | ✅ done |
-| **A** | **Android prebuild** — before auth, see below | next |
-| **2b** | Auth: login on web, iOS **and Android** | |
+| **A** | **Android prebuild** — before auth, see below | ✅ built; device testing outstanding |
+| **2b** | Auth: login on web, iOS **and Android** | code done; not yet run on a device |
 | **2c** | Tenant policies replace `demo_all`; private photo bucket | 🔒 gate |
 | **3** | Ticket-key races, transactional saves, customer identity, realtime | |
 | **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
@@ -256,9 +348,9 @@ Every mobile change now needs checking on both platforms.
 
 ### Launch tasks not in any phase
 
-- [ ] **Create the real production project in `eu-central-1`** and migrate. The
-      current production is the Seoul demo project; regions are immutable, and
-      Israel → Seoul is ~250–300ms on every board interaction.
+- [x] **Create the real production project in `eu-central-1`** and migrate.
+      Done 2026-07-22: `garage-production` (`fdztfosbohiwskzfvwaj`), Frankfurt.
+      The Seoul demo project has been deleted.
 - [ ] Per-garage invoicing and merchant accounts — ten separate legal businesses,
       each with their own credentials and accountant sign-off. **This coordination,
       not the code, is the realistic schedule driver.** Start early.

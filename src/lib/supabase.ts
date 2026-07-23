@@ -12,5 +12,21 @@ export const isConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJEC
 export const supabase = createClient(
   isConfigured ? url : 'https://placeholder.supabase.co',
   isConfigured ? anonKey : 'placeholder-key',
-  { realtime: { params: { eventsPerSecond: 10 } } },
+  {
+    auth: {
+      // Spelled out rather than left to supabase-js defaults. These were always
+      // the effective values, but the defaults have changed between major
+      // versions before, and a silent change here logs every user out.
+      storage: window.localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+      // No redirect-based sign-in — 2b is email and password on all three
+      // platforms, so there is never a session in the URL to detect. Leaving
+      // this on would have the client inspect every page load for auth
+      // fragments it will never find. Revisit only alongside magic links.
+      detectSessionInUrl: false,
+      flowType: 'pkce',
+    },
+    realtime: { params: { eventsPerSecond: 10 } },
+  },
 );
