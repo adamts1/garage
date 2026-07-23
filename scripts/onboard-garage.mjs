@@ -12,13 +12,19 @@
  * why garage_members has no INSERT policy: nothing else needs to write it, so
  * nothing else may.
  *
- * The key is read from SUPABASE_SERVICE_ROLE_KEY and never stored in the repo.
- * Get it with:
- *   npx supabase projects api-keys --project-ref <ref>
+ *   npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
  *
- * Target the project explicitly, every time. A script that creates accounts
- * should never infer which database it is pointed at:
- *   SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... node scripts/onboard-garage.mjs ...
+ * That wrapper passes --env-file=.env.local, because node does not read .env
+ * files on its own — only Vite does, and only for its own prefixed variables.
+ *
+ * NEVER name the service key VITE_SUPABASE_SERVICE_ROLE_KEY. Vite bakes every
+ * VITE_-prefixed variable into the browser bundle, and this key bypasses RLS
+ * and every grant. The missing prefix is what keeps it out of the bundle, so
+ * the naming here is load-bearing rather than stylistic.
+ *
+ * SUPABASE_URL is preferred and VITE_SUPABASE_URL is accepted, since the URL is
+ * public either way. Which project is being written to is printed before
+ * anything happens, and checked against the key — see below.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -29,7 +35,10 @@ for (let i = 2; i < process.argv.length; i += 2) {
   args.set(process.argv[i].replace(/^--/, ''), process.argv[i + 1]);
 }
 
-const url = process.env.SUPABASE_URL?.trim();
+// VITE_SUPABASE_URL is a fine fallback: the project URL is already public, it
+// ships in the browser bundle and the APK. Only the *key* must never carry a
+// VITE_ prefix.
+const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL)?.trim();
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const garageName = args.get('garage');
 const email = args.get('email')?.trim().toLowerCase();
@@ -73,10 +82,44 @@ if (!looksLikeServiceRole(serviceKey)) {
   die('SUPABASE_SERVICE_ROLE_KEY is not a service_role key — check you did not paste the anon key.');
 }
 
+/* The URL and the key arrive from different places — the URL often from
+   .env.local, the key exported by hand — so nothing stops them naming different
+   projects. A key from the wrong project simply fails to authenticate, which is
+   survivable. The dangerous direction is subtler: exporting a production key
+   while .env.local still points at staging, or the reverse, then reading the
+   resulting success as confirmation you hit the project you meant.
+
+   A Supabase JWT carries its project in the `ref` claim, so the mismatch is
+   detectable before anything is written rather than after. Opaque sb_secret_
+   keys carry no claims and cannot be checked this way; the printed project ref
+   below is the only guard for those. */
+const projectRef = url.replace(/^https:\/\//, '').split('.')[0];
+
+/** The `ref` claim, or null for opaque keys and anything unparseable. */
+const keyProjectRef = (key) => {
+  if (key.startsWith('sb_secret_')) return null;
+  try {
+    return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).ref ?? null;
+  } catch {
+    // Not a reason to refuse on its own — a genuinely wrong key fails at the
+    // first request anyway.
+    return null;
+  }
+};
+
+const keyRef = keyProjectRef(serviceKey);
+if (keyRef && keyRef !== projectRef) {
+  die(
+    `Key/URL mismatch: the key belongs to "${keyRef}" but the URL points at "${projectRef}". ` +
+      'One of them is from the wrong project.',
+  );
+}
+
 const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-const project = url.replace(/^https:\/\//, '').split('.')[0];
-console.log(`\nProject  ${project}`);
+// Printed before anything is written. For an opaque sb_secret_ key this line is
+// the only indication of which database is about to gain a user.
+console.log(`\nProject  ${projectRef}`);
 console.log(`Garage   ${garageName ?? existingGarageId}`);
 console.log(`User     ${email}\n`);
 

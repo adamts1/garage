@@ -150,15 +150,36 @@ There is no signup. Accounts are created by an operator, together with the
 membership that joins them to a garage:
 
 ```bash
-export SUPABASE_URL=https://poksqsdklnhaumozriqd.supabase.co     # staging
-export SUPABASE_SERVICE_ROLE_KEY="$(npx supabase projects api-keys \
-  --project-ref poksqsdklnhaumozriqd -o json | jq -r '.[]|select(.name=="service_role").api_key')"
-
-node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com
+npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
 ```
 
 It prints a generated password once and stores it nowhere. Pass `--garage-id` to
 add someone to a garage that already exists.
+
+`SUPABASE_SERVICE_ROLE_KEY` goes in `.env.local`, which is gitignored. The npm
+script passes `--env-file=.env.local`, because **node does not read .env files
+on its own** — only Vite does, and only for `VITE_`-prefixed names. The URL is
+taken from `SUPABASE_URL`, falling back to `VITE_SUPABASE_URL`.
+
+> **Never name it `VITE_SUPABASE_SERVICE_ROLE_KEY`.** Vite bakes every
+> `VITE_`-prefixed variable into the browser bundle, and this key bypasses RLS
+> *and* every grant. The absent prefix is what keeps it out of the bundle — the
+> naming is load-bearing, not stylistic. The project URL has no such problem: it
+> already ships in the bundle and the APK.
+
+The script refuses to run if the key is not a `service_role` key, or if the key
+and the URL name different projects. That second check exists because they come
+from different places — the URL usually from `.env.local`, the key exported by
+hand — and the dangerous case is not a key that fails to authenticate but one
+that succeeds against a project you did not mean to write to.
+
+To target production, override the URL for that one command:
+
+```bash
+SUPABASE_URL=https://fdztfosbohiwskzfvwaj.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<production key> \
+  node scripts/onboard-garage.mjs --garage "..." --email ...
+```
 
 **Why no self-signup.** A user and their membership are written by the same
 command, so "signed in but belongs to no garage" cannot arise. That state is not
