@@ -150,6 +150,61 @@ check(
   `got ${JSON.stringify(aSeesMembers)}`,
 );
 
+/* ---------- the works catalog is per-garage ----------
+ *
+ * work_defs and work_def_items were created with tenant policies from the
+ * start, so unlike tickets they can be asserted before the flip. These are the
+ * first checks in this file that prove data isolation rather than just
+ * membership privacy.
+ */
+
+const seedWork = async (tenant, code, name, labor) => {
+  const res = await rest('work_defs', tenant.token, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ garage_id: tenant.garage.id, code, name, labor }),
+  });
+  const body = await res.json();
+  return Array.isArray(body) ? body[0] : body;
+};
+
+const aWork = await seedWork(a, 'AAA-01', 'A only', 111);
+const bWork = await seedWork(b, 'AAA-01', 'B only', 222);
+
+check(
+  'two garages can hold the same work code',
+  Boolean(aWork?.id && bWork?.id),
+  `a=${aWork?.id ?? JSON.stringify(aWork)} b=${bWork?.id ?? JSON.stringify(bWork)}`,
+);
+
+const aSeesWorks = await (await rest('work_defs?select=code,name', a.token)).json();
+check(
+  "A's catalog contains A's work and not B's",
+  Array.isArray(aSeesWorks) &&
+    aSeesWorks.some((w) => w.name === 'A only') &&
+    !aSeesWorks.some((w) => w.name === 'B only'),
+  `got ${JSON.stringify(aSeesWorks)}`,
+);
+
+const bReadsAWork = await (await rest(`work_defs?id=eq.${aWork?.id}&select=id`, b.token)).json();
+check(
+  "B cannot read A's work by its id",
+  Array.isArray(bReadsAWork) && bReadsAWork.length === 0,
+  `got ${JSON.stringify(bReadsAWork)}`,
+);
+
+// WITH CHECK, not USING: the row would be invisible to B either way, but
+// without WITH CHECK the insert itself would succeed and quietly land in A.
+const forge = await rest('work_defs', b.token, {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, code: 'FORGED', name: 'forged', labor: 1 }),
+});
+check(
+  "B cannot insert a work into A's garage",
+  forge.status === 403 || forge.status === 401,
+  `got ${forge.status}`,
+);
+
 /* ---------- a user with no membership resolves to nothing ---------- */
 
 const orphanEmail = `iso-orphan-${stamp}@garage.test`;
