@@ -167,13 +167,26 @@ data, and after 2c they read nothing while the UI insists all is well. The apps
 have a screen for it anyway (`AuthGate`), because a state that should be
 impossible is exactly the one worth being loud about.
 
-> ⚠️ **Public signup is still enabled on staging and production.** It is a
-> dashboard setting per project — `config.toml` governs only the local stack,
-> and `supabase config push` would also overwrite `site_url` with a localhost
-> URL, so it is not a safe way to change it. Turn it off under
-> **Authentication → Sign In / Providers → Allow new users to sign up**.
-> Until then anyone holding the anon key — which ships inside the APK and the
-> web bundle — can create an account.
+> **Public signup is off on staging and production** (disabled 2026-07-23), and
+> `enable_signup = false` in `config.toml` covers the local stack. Keep it that
+> way: the anon key ships inside the APK and the web bundle, so an open signup
+> endpoint lets anyone who extracts it create an account.
+>
+> It is a **per-project dashboard setting** — Authentication → Sign In /
+> Providers → *Allow new users to sign up*. `config.toml` governs only the local
+> stack, and `supabase config push` is not a safe way to change it: it pushes
+> the whole `[auth]` block, including `site_url`, which would point a hosted
+> project at localhost.
+>
+> Verify rather than assume, on each project:
+> ```bash
+> curl -s -X POST "https://<ref>.supabase.co/auth/v1/signup" \
+>   -H "apikey: <anon>" -H "Content-Type: application/json" \
+>   -d '{"email":"probe@gmail.com","password":"StrongEnough123!"}'
+> ```
+> `signup_disabled` is correct. A `weak_password` or `email_address_invalid`
+> reply means signup is **open** — the endpoint got far enough to validate the
+> payload. Do not probe with a weak password and read the rejection as safety.
 
 ### The login gate is not a security boundary
 
