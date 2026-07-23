@@ -124,9 +124,66 @@ npx supabase db push
 Staging always goes first. It exists so a migration meets real Supabase
 infrastructure somewhere that does not matter.
 
+### Grants are not policies, and neither is inherited
+
+A **policy** decides which rows a role may see. A **grant** decides whether the
+role may address the table at all, and *RLS is never consulted without one*.
+Both are required. Write both, in the migration, every time.
+
+`service_role` bypasses RLS. It does **not** bypass grants. Conflating those two
+is what made the onboarding script work against staging and fail on a clean
+database.
+
+Never inherit either from the platform. Tables created by a migration are owned
+by `postgres`; its default ACL locally gives `anon` and `service_role` no
+`SELECT`, while hosted projects were provisioned under `supabase_admin`'s
+default ACL, which grants full DML. So the same migration produces a working
+database on staging and a database that rejects every query locally — and the
+difference is invisible until something reads a table. `supabase db diff` does
+not report it.
+
 ---
 
-## 5. Shipping
+## 5. Accounts
+
+There is no signup. Accounts are created by an operator, together with the
+membership that joins them to a garage:
+
+```bash
+export SUPABASE_URL=https://poksqsdklnhaumozriqd.supabase.co     # staging
+export SUPABASE_SERVICE_ROLE_KEY="$(npx supabase projects api-keys \
+  --project-ref poksqsdklnhaumozriqd -o json | jq -r '.[]|select(.name=="service_role").api_key')"
+
+node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com
+```
+
+It prints a generated password once and stores it nowhere. Pass `--garage-id` to
+add someone to a garage that already exists.
+
+**Why no self-signup.** A user and their membership are written by the same
+command, so "signed in but belongs to no garage" cannot arise. That state is not
+theoretical: before 2c such a user lands in the backfill tenant and reads real
+data, and after 2c they read nothing while the UI insists all is well. The apps
+have a screen for it anyway (`AuthGate`), because a state that should be
+impossible is exactly the one worth being loud about.
+
+> ⚠️ **Public signup is still enabled on staging and production.** It is a
+> dashboard setting per project — `config.toml` governs only the local stack,
+> and `supabase config push` would also overwrite `site_url` with a localhost
+> URL, so it is not a safe way to change it. Turn it off under
+> **Authentication → Sign In / Providers → Allow new users to sign up**.
+> Until then anyone holding the anon key — which ships inside the APK and the
+> web bundle — can create an account.
+
+### The login gate is not a security boundary
+
+Until 2c replaces the `demo_all` policies, the anon key still reads and writes
+every tenant table. Signing in changes what the app shows, not what the database
+permits. Treat 2b as product behaviour; 2c is the boundary.
+
+---
+
+## 6. Shipping
 
 ### Web — automatic
 
@@ -190,7 +247,7 @@ processes it for 5–15 minutes.
 
 ---
 
-## 6. The road to the first customer
+## 7. The road to the first customer
 
 Ordered. Each phase gates the next.
 
@@ -199,8 +256,8 @@ Ordered. Each phase gates the next.
 | **0** | Migrations, CI, error tracking, backups | ✅ done |
 | **1** | One shared package instead of two drifting copies | ✅ done |
 | **2a** | `garage_id` on every row — non-breaking | ✅ done |
-| **A** | **Android prebuild** — before auth, see below | next |
-| **2b** | Auth: login on web, iOS **and Android** | |
+| **A** | **Android prebuild** — before auth, see below | ✅ built; device testing outstanding |
+| **2b** | Auth: login on web, iOS **and Android** | code done; not yet run on a device |
 | **2c** | Tenant policies replace `demo_all`; private photo bucket | 🔒 gate |
 | **3** | Ticket-key races, transactional saves, customer identity, realtime | |
 | **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
