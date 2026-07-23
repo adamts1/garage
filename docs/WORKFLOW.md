@@ -209,11 +209,49 @@ impossible is exactly the one worth being loud about.
 > reply means signup is **open** — the endpoint got far enough to validate the
 > payload. Do not probe with a weak password and read the rejection as safety.
 
-### The login gate is not a security boundary
+### The login gate became a security boundary in 2c
 
-Until 2c replaces the `demo_all` policies, the anon key still reads and writes
-every tenant table. Signing in changes what the app shows, not what the database
-permits. Treat 2b as product behaviour; 2c is the boundary.
+Through 2b it was not one: `demo_all` granted the anon key — which ships inside
+both apps — full read and write on every tenant table, so signing in changed
+what the app showed and nothing about what the database would hand out.
+
+2c replaced those policies. A caller now sees exactly one garage's rows and
+writes into exactly one garage, proven by `supabase/tests/tenancy.mjs` on every
+CI run.
+
+### Grants are the other half, and they are never inherited
+
+Said once in §4 and repeated here because it cost four separate fixes in one
+phase. A policy decides which rows; a **grant** decides whether the role may
+address the table at all, and RLS is never consulted without one.
+
+Every time, the symptom was the same: the same migration produced different
+behaviour on a hosted project and on a database built from these migrations,
+because the two were provisioned under different default ACLs, and nothing
+reports the difference until something reads the table.
+
+| what | how it surfaced |
+|---|---|
+| `anon` on the seven original tables | clean local DB rejected every query |
+| `service_role` on the same | onboarding worked on staging, failed on a fresh DB |
+| `anon` on the membership map | staging answered `200 []`, local `401` |
+| `anon` on the catalog tables | same again, in a migration whose comment claimed otherwise |
+| `service_role` on `current_garage_id()` | only after the flip made it a column default |
+
+**Omitting a grant is not revoking one.** Write both the grant and the revoke,
+explicitly, in the migration.
+
+### Photos are private
+
+The `ticket-photos` bucket is private as of 2c and every read is a signed URL,
+valid 8 hours. Paths are `<garage_id>/<ticket key>/<file>`.
+
+Photos uploaded before 2c have no garage prefix, and a stored object cannot be
+renamed from SQL — moving one is a storage API call. The storage policies
+therefore authorise on *either* the path prefix or a `ticket_photos` row in the
+caller's garage. Do not simplify that to the prefix alone without migrating the
+objects first: staging and production both hold pre-2c photos, and they would
+become unreadable to their owner while every new upload kept working.
 
 ---
 
@@ -290,9 +328,9 @@ Ordered. Each phase gates the next.
 | **0** | Migrations, CI, error tracking, backups | ✅ done |
 | **1** | One shared package instead of two drifting copies | ✅ done |
 | **2a** | `garage_id` on every row — non-breaking | ✅ done |
-| **A** | **Android prebuild** — before auth, see below | ✅ built; device testing outstanding |
-| **2b** | Auth: login on web, iOS **and Android** | code done; not yet run on a device |
-| **2c** | Tenant policies replace `demo_all`; private photo bucket | 🔒 gate |
+| **A** | **Android prebuild** — before auth, see below | ✅ built; RTL device testing outstanding |
+| **2b** | Auth: login on web, iOS **and Android** | ✅ merged and live |
+| **2c** | Tenant policies replace `demo_all`; per-garage catalog; private photos | ✅ gate passing in CI |
 | **3** | Ticket-key races, transactional saves, customer identity, realtime | |
 | **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
 | **5** | Onboarding, alerting, runbook, privacy review | |
