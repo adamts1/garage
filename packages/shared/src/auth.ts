@@ -152,7 +152,18 @@ export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth
       status: 'no-garage',
       session,
       garages: [],
-      error: e instanceof Error ? e.message : String(e),
+      error: errorMessage(e),
     };
   }
+};
+
+/* Supabase rejects with a PostgrestError — a plain object with a `message`,
+   not an Error instance. `String(e)` on one yields "[object Object]", which is
+   what reaches Sentry and, in the app, the operator on the phone. */
+const errorMessage = (e: unknown): string => {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    return String((e as { message: unknown }).message);
+  }
+  return String(e);
 };
