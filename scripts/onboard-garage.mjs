@@ -29,6 +29,27 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+/* Load .env.local ourselves rather than relying on how we were invoked.
+
+   Node does not read .env files — only Vite does, and only for VITE_-prefixed
+   names. `npm run onboard` passes --env-file, but the obvious thing to type is
+   `node scripts/onboard-garage.mjs ...`, and that form failed with a message
+   about unset variables that were, from the operator's point of view, plainly
+   set: they are sitting in .env.local.
+
+   Values already in the environment win, so an explicit
+   `SUPABASE_URL=... node scripts/...` still overrides the file — which is how
+   production is targeted without editing anything. */
+try {
+  const here = dirname(fileURLToPath(import.meta.url));
+  process.loadEnvFile(join(here, '..', '.env.local'));
+} catch {
+  // Absent or unreadable is fine — the variables may come from the environment,
+  // as they do in CI. The checks below report what is actually missing.
+}
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
