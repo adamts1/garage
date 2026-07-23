@@ -3103,3 +3103,28 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   color: var(--danger, #b42318);
   font-size: 13px;
 }
+
+/* Sign-out lives in the sidebar footer, the one chrome element present on every
+   page — there is no router, so there is no header to hang it off. */
+.sidebar-footer .sign-out {
+  margin-top: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted, #7a8699);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.sidebar-footer .sign-out:hover {
+  background: var(--surface-2, #eceef1);
+  color: var(--text);
+}
+.sidebar-footer .sign-out.icon-only {
+  width: auto;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1;
+}

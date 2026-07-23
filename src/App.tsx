@@ -7,7 +7,7 @@ import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
 import { isConfigured } from './lib/supabase';
-import { listCustomers, listVehicles, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
+import { listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
 import { useTickets } from './lib/useTickets';
 import { PARTS_CATALOG, WORK_CATALOG, worksSummary, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
 import InvoicesPage from './InvoicesPage';
@@ -264,9 +264,17 @@ function App() {
             <>
               <div className="status-badge">פתוח</div>
               <div className="footer-note">{tickets.length} כרטיסים פעילים</div>
+              <button className="sign-out" onClick={() => void signOut()}>
+                התנתקות
+              </button>
             </>
           ) : (
-            <div className="status-dot" title={`${tickets.length} כרטיסים פעילים`} />
+            <>
+              <div className="status-dot" title={`${tickets.length} כרטיסים פעילים`} />
+              <button className="sign-out icon-only" onClick={() => void signOut()} title="התנתקות">
+                ⏻
+              </button>
+            </>
           )}
         </div>
       </aside>

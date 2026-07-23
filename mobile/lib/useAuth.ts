@@ -1,8 +1,9 @@
-/* The session, as React state.
+/* The session, as React state. Mirrors src/lib/useAuth.ts.
 
    The decision of what each session means lives in @garage/shared (resolveAuth)
-   so web and mobile cannot disagree about it. What is here is only the React
-   plumbing: subscribe, resolve, set state, clean up. */
+   so the two platforms cannot disagree about it. Only the React plumbing is
+   duplicated, and deliberately — see the note in packages/shared/src/auth.ts for
+   why the hook itself is not shared. */
 
 import { useEffect, useState } from 'react';
 import {
@@ -22,8 +23,9 @@ export function useAuth(): ResolvedAuth {
   useEffect(() => {
     if (!isConfigured) return;
 
-    // Guards a resolved promise from writing state after a sign-out raced past
-    // it, which would show the previous user's garages on the login screen.
+    // On mobile the stored session comes from AsyncStorage, which is genuinely
+    // async — unlike the browser's synchronous localStorage, the 'loading'
+    // state here is visible on a cold start rather than instantaneous.
     let live = true;
     const apply = async (session: Parameters<typeof resolveAuth>[0]) => {
       const next = await resolveAuth(session);

@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto';   // supabase-js needs a real URL/URLSearchParams; RN's is incomplete
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 
 // Same normalisation as the web app: supabase-js appends /rest/v1 and /realtime/v1
@@ -19,8 +20,8 @@ export const supabase = createClient(
   isConfigured ? anonKey : 'placeholder-key',
   {
     auth: {
-      // There is no login yet, but wiring these now means adding Supabase Auth later
-      // is a new screen, not a client rewrite. Sessions survive an app restart.
+      // Sessions survive an app restart; see the AppState note below for the
+      // part that keeps them alive while the app is not on screen.
       storage: AsyncStorage,
       persistSession: true,
       autoRefreshToken: true,
@@ -29,3 +30,25 @@ export const supabase = createClient(
     realtime: { params: { eventsPerSecond: 10 } },
   },
 );
+
+/* Refresh tokens only while the app is actually in the foreground.
+
+   autoRefreshToken sets a timer, and the OS does not run timers for a
+   backgrounded app. Without this, a phone left on a bench overnight — which is
+   the normal state of a phone in a garage — resumes with an access token that
+   expired hours ago, and the first tap gets a 401 that looks like a random
+   failure rather than an expired session.
+
+   Stopping on background matters as much as starting on foreground: a timer
+   left armed fires on wake in an unpredictable order relative to the resumed
+   session read, and can refresh with a token AsyncStorage has already replaced.
+
+   Registered once at module scope, alongside the client it refreshes, rather
+   than in a component that could mount twice. */
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    void supabase.auth.startAutoRefresh();
+  } else {
+    void supabase.auth.stopAutoRefresh();
+  }
+});

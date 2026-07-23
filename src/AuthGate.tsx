@@ -37,7 +37,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (auth.status === 'out') return <Login />;
 
-  if (auth.garages.length === 0) {
+  if (auth.status === 'no-garage') {
     return (
       <div className="login">
         <div className="login-card">

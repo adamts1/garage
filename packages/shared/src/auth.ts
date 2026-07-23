@@ -80,3 +80,79 @@ export const listMyGarages = async (): Promise<Garage[]> => {
     name: r.garage_name,
   }));
 };
+
+/* ---------- what the apps render, decided once ----------
+
+   Both apps need the same four states and must agree on what produces each,
+   because one of them — signed in with no garage — is a rule about what a user
+   is allowed to see, not a display preference. If web treated it as "show an
+   empty board" and mobile as "show an error", the two would be making different
+   claims about the same account.
+
+   This stays framework-free deliberately. Sharing the React hook itself would
+   mean adding react to @garage/shared, and mobile is not an npm workspace: its
+   dependencies do not hoist, so shared's `react` would resolve to the root copy
+   while mobile's components use mobile/node_modules. Two Reacts in one bundle
+   is an invalid-hook-call at runtime that typechecks cleanly — the resolution
+   risk is worse than the duplication it would save. Each app keeps its own
+   thin hook around this. */
+
+export type AuthStatus =
+  /** Still reading stored credentials. Never render a login form here. */
+  | 'loading'
+  /** No session. Login form. */
+  | 'out'
+  /** Session, and at least one garage. The app. */
+  | 'in'
+  /** Session, no garage. Not an empty board — see below. */
+  | 'no-garage';
+
+export interface ResolvedAuth {
+  status: AuthStatus;
+  session: Session | null;
+  garages: Garage[];
+  /** Set only when membership could not be read at all — distinct from having none. */
+  error: string | null;
+}
+
+export const SIGNED_OUT: ResolvedAuth = {
+  status: 'out',
+  session: null,
+  garages: [],
+  error: null,
+};
+
+/* Resolve a session into what should be on screen.
+
+   'no-garage' is its own state rather than an empty board because under
+   operator-created accounts it should be unreachable: onboard-garage.mjs writes
+   the user and the membership together. If it ever appears, something wrote an
+   account without a membership, and both alternatives hide that — a spinner
+   looks like a slow network, and an empty board looks like a garage with no
+   work. Falling through to the board is worse still: before 2c that user reads
+   the backfill tenant's data, and after 2c they read nothing while the UI
+   insists everything is fine.
+
+   A failure to *read* membership is kept separate from having none. The first
+   is a network or policy problem worth retrying; the second is an onboarding
+   problem that retrying will never fix, and telling a user to try again when
+   the answer will not change wastes their afternoon. */
+export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth> => {
+  if (!session) return SIGNED_OUT;
+  try {
+    const garages = await listMyGarages();
+    return {
+      status: garages.length ? 'in' : 'no-garage',
+      session,
+      garages,
+      error: null,
+    };
+  } catch (e) {
+    return {
+      status: 'no-garage',
+      session,
+      garages: [],
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+};
