@@ -310,6 +310,123 @@ check(
   `got ${forgedTicket.status}`,
 );
 
+/* ---------- ticket photos: a private bucket, per garage ----------
+ *
+ * Photos of customers' cars, number plates included. Before 2c the bucket was
+ * public and its policies checked only the bucket name, so any leaked URL was a
+ * permanent, unauthenticated grant.
+ */
+
+const storage = (path, token, init = {}) =>
+  fetch(`${API}/storage/v1/${path}`, {
+    ...init,
+    headers: { apikey: ANON, Authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
+  });
+
+const aPhotoPath = `${a.garage.id}/ISO-A-${stamp}/photo.txt`;
+const upA = await storage(`object/ticket-photos/${aPhotoPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain' },
+  body: 'pretend this is a car',
+});
+check('A can upload into its own garage folder', upA.status === 200, `got ${upA.status}`);
+
+const forgedUpload = await storage(`object/ticket-photos/${a.garage.id}/forged/x.txt`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain' },
+  body: 'B writing into A',
+});
+check(
+  "B cannot upload into A's garage folder",
+  forgedUpload.status === 400 || forgedUpload.status === 403 || forgedUpload.status === 401,
+  `got ${forgedUpload.status}`,
+);
+
+const signA = await storage(`object/sign/ticket-photos/${aPhotoPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check('A can sign a URL for its own photo', signA.status === 200, `got ${signA.status}`);
+
+const signB = await storage(`object/sign/ticket-photos/${aPhotoPath}`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  "B cannot sign a URL for A's photo",
+  signB.status !== 200,
+  `got ${signB.status}`,
+);
+
+// The whole point of a private bucket: the unsigned path is not a URL any more.
+const unsigned = await fetch(`${API}/storage/v1/object/public/ticket-photos/${aPhotoPath}`);
+check(
+  'the public URL for a photo no longer resolves',
+  unsigned.status !== 200,
+  `got ${unsigned.status}`,
+);
+
+const anonSign = await storage(`object/sign/ticket-photos/${aPhotoPath}`, ANON, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check('anon cannot sign a URL for any photo', anonSign.status !== 200, `got ${anonSign.status}`);
+
+/* Photos uploaded before 2c have no garage prefix — their paths start with the
+ * ticket key. Those objects cannot be renamed from SQL (moving a stored object
+ * is a storage API call), so the policy authorises them through the
+ * ticket_photos row instead. Staging and production both hold such photos, and
+ * if this arm is wrong they become permanently unreadable to their owner while
+ * every new upload keeps working — a failure that would look like corruption
+ * rather than a policy bug.
+ *
+ * Placed with service_role, because the INSERT policy rightly refuses to create
+ * an unprefixed object now. */
+const legacyPath = `GAR-LEGACY-${stamp}/old-photo.txt`;
+await fetch(`${API}/storage/v1/object/ticket-photos/${legacyPath}`, {
+  method: 'POST',
+  headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'text/plain' },
+  body: 'uploaded before 2c',
+});
+// Checked, not fired and forgotten: this insert failed silently once, and the
+// assertion below then failed for a reason that had nothing to do with the
+// policy it was testing.
+const legacyRow = await admin('/rest/v1/ticket_photos', {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ ticket_id: aTicket.row?.id, path: legacyPath }),
+});
+check(
+  'setup: a pre-2c photo row can be created by service_role',
+  legacyRow.status === 201,
+  `got ${legacyRow.status} ${(await legacyRow.clone().text()).slice(0, 140)}`,
+);
+
+const signLegacyA = await storage(`object/sign/ticket-photos/${legacyPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  'A can still sign a pre-2c photo of its own (no garage prefix)',
+  signLegacyA.status === 200,
+  `got ${signLegacyA.status}`,
+);
+
+const signLegacyB = await storage(`object/sign/ticket-photos/${legacyPath}`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  "B cannot sign A's pre-2c photo",
+  signLegacyB.status !== 200,
+  `got ${signLegacyB.status}`,
+);
+
 /* ---------- and the anon key, which is public ---------- */
 for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 'vehicles', 'ticket_photos']) {
   const res = await rest(`${table}?select=id&limit=1`, ANON);

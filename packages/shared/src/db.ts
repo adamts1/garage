@@ -421,31 +421,56 @@ export const deleteTicket = async (key: string) => {
    Both halves live here now, so the two apps cannot disagree about the shape of
    a photo or the order of an upload's two writes.
 
-   The bucket is public, so a photo is a plain <img src>. Phase 2 makes it
-   private with signed URLs — see docs/PRODUCTION.md §3.3. */
+   The bucket is PRIVATE as of 2c. A photo is no longer a permanent CDN link but
+   a signed URL minted for a caller the database has already authorised, so
+   `url` is now produced by a round trip rather than by string concatenation —
+   which is why building a TicketPhoto is async. See docs/PRODUCTION.md §3.3. */
 
 export const PHOTO_BUCKET = 'ticket-photos';
+
+/* Long enough that a board left open across a shift does not fill with broken
+   images, short enough that a URL copied out of devtools is not a permanent
+   grant. Photos are re-listed on every ticket open, so this is refreshed often
+   in practice. */
+const PHOTO_URL_TTL_SECONDS = 60 * 60 * 8;
 
 export interface TicketPhoto {
   id: string;
   path: string;      // object path inside the bucket - what we delete by
-  url: string;       // public CDN url - what the board and <Image> render
+  url: string;       // signed, expiring url - what the board and <Image> render
   caption: string;
   createdAt: string;
 }
 
-const photoUrl = (path: string) =>
-  getClient().storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+/* One signed URL per object.
 
-const rowToPhoto = (r: any): TicketPhoto => ({
+   Signing is a network call, so this is batched by the caller rather than
+   invoked per row in a loop. An object whose signature fails yields an empty
+   string rather than throwing: one unreadable photo should leave the rest of
+   the ticket usable, and a broken <img> is a better failure than a blank
+   screen. */
+const signPhotoUrls = async (paths: string[]): Promise<Map<string, string>> => {
+  const out = new Map<string, string>();
+  if (!paths.length) return out;
+  const { data, error } = await getClient()
+    .storage.from(PHOTO_BUCKET)
+    .createSignedUrls(paths, PHOTO_URL_TTL_SECONDS);
+  if (error) throw error;
+  for (const entry of data ?? []) {
+    if (entry.path) out.set(entry.path, entry.signedUrl ?? '');
+  }
+  return out;
+};
+
+const rowToPhoto = (r: any, url: string): TicketPhoto => ({
   id: r.id,
   path: r.path,
-  url: photoUrl(r.path),
+  url,
   caption: r.caption ?? '',
   createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
 });
 
-/** A ticket's photos, oldest first. One round trip: the embed filters by ticket key. */
+/** A ticket's photos, oldest first. One query, then one batched signing call. */
 export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
   const { data, error } = await getClient()
     .from('ticket_photos')
@@ -453,7 +478,10 @@ export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
     .eq('tickets.key', key)
     .order('created_at');
   if (error) throw error;
-  return (data ?? []).map(rowToPhoto);
+
+  const rows = data ?? [];
+  const urls = await signPhotoUrls(rows.map((r) => r.path));
+  return rows.map((r) => rowToPhoto(r, urls.get(r.path) ?? ''));
 };
 
 /* RN's fetch can't reliably turn a file:// uri into a Blob, so the picker hands us
@@ -476,12 +504,34 @@ const decodeBase64 = (input: string): Uint8Array => {
   return bytes;
 };
 
+/* The caller's garage, asked of the database rather than assumed.
+
+   Every other table fills garage_id from a column default, so the client has
+   never needed to know this. Storage has no defaults — an object path is
+   whatever the uploader says it is — so the prefix has to be built here, and
+   the storage INSERT policy checks it.
+
+   Not cached. A cached value outlives a sign-out, and the next user's photos
+   would be written into the previous user's folder, where the policy would
+   accept them because the path looks right. One round trip per upload is
+   nothing next to the image bytes that follow it. */
+const currentGarageId = async (): Promise<string> => {
+  const { data, error } = await getClient().rpc('current_garage_id');
+  if (error) throw error;
+  if (!data) throw new Error('No garage for the current session — cannot upload a photo.');
+  return data as string;
+};
+
 export const uploadTicketPhoto = async (
   key: string,
   file: { base64: string; mime: string; ext: string },
 ): Promise<TicketPhoto> => {
   const ticketId = await ticketIdByKey(key);
-  const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
+  const garageId = await currentGarageId();
+  // The garage prefix is what the storage policy checks. The ticket key stays
+  // in the path because it is what makes an object recognisable in the
+  // dashboard when something needs looking at by hand.
+  const path = `${garageId}/${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
 
   const { error: upErr } = await getClient()
     .storage.from(PHOTO_BUCKET)
@@ -498,7 +548,9 @@ export const uploadTicketPhoto = async (
     await getClient().storage.from(PHOTO_BUCKET).remove([path]);
     throw error;
   }
-  return rowToPhoto(data);
+
+  const urls = await signPhotoUrls([data.path]);
+  return rowToPhoto(data, urls.get(data.path) ?? '');
 };
 
 /** Object first, then row: a failed object delete leaves the photo intact rather than broken. */

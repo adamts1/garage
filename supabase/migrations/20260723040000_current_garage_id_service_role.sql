@@ -1,0 +1,33 @@
+-- ============================================================
+--  Let service_role evaluate current_garage_id().
+--
+--  20260722000000 wrote:
+--      revoke all on function public.current_garage_id() from public;
+--      grant execute on function public.current_garage_id() to anon, authenticated;
+--
+--  service_role was left out, and it did not matter: nothing called the function
+--  as service_role, because it was only ever referenced inside policies.
+--
+--  The flip changed that. current_garage_id() is now the DEFAULT for garage_id
+--  on all seven tenant tables, so it is evaluated by *any* insert that omits the
+--  column — including inserts made by service_role. Those now fail with
+--  `permission denied for function current_garage_id`, a message that points at
+--  the function rather than at the missing grant, on a role that is supposed to
+--  be able to do everything.
+--
+--  That breaks admin tooling: backfills, support scripts, anything server-side
+--  writing a row without naming a garage. scripts/onboard-garage.mjs happens to
+--  survive because it names garage_id explicitly on every insert, which is luck
+--  rather than design.
+--
+--  Granting it does NOT give service_role a garage. It has no auth.uid(), so
+--  the function returns NULL and the insert then fails the NOT NULL constraint —
+--  which is the correct outcome and, unlike a permission error, says what is
+--  actually wrong: a service_role caller must name the garage it is writing to.
+--
+--  Found by a test asserting that photos uploaded before 2c stay readable; its
+--  setup inserts a ticket_photos row as service_role, and that insert was
+--  failing silently.
+-- ============================================================
+
+grant execute on function public.current_garage_id() to service_role;
