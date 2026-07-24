@@ -4,7 +4,7 @@
 
 import { getClient } from './client';
 import type { Ticket } from './types';
-import type { PartRow, TicketWork } from './catalog';
+import type { PartRow, TicketWork, WorkDef } from './catalog';
 
 /* ---------------- customers ---------------- */
 
@@ -96,6 +96,112 @@ export const updateItem = async (id: string, patch: Partial<Omit<Item, 'id'>>) =
 
 export const deleteItem = async (id: string) => {
   const { error } = await getClient().from('items').delete().eq('id', id);
+  if (error) throw error;
+};
+
+/* ---------------- the works catalog ----------------
+
+   Standard jobs, each with a labour price and the parts it needs. This used to
+   be WORK_CATALOG, a constant compiled into both apps, which meant every garage
+   saw the same names and the same prices and changing one required a release.
+
+   Note there is no separate parts catalog. PARTS_CATALOG was the same shape as
+   the `items` table — sku, name, price — so `listItems()` above is the parts
+   catalog, and a part invented while editing a work is just createItem().
+   Keeping two lists of the same thing is what this phase is undoing.
+
+   The caller never sends garage_id. It defaults to current_garage_id(), so a
+   work belongs to whoever created it and cannot be aimed at another tenant. */
+
+/** Rows arrive with the embedded parts under whatever alias PostgREST chose. */
+const rowToWorkDef = (r: any): WorkDef => ({
+  id: r.id,
+  code: r.code,
+  name: r.name,
+  labor: Number(r.labor),
+  hours: Number(r.hours),
+  items: (r.work_def_items ?? [])
+    .slice()
+    .sort((a: any, b: any) => a.position - b.position)
+    .map((p: any): PartRow => ({
+      sku: p.sku ?? '',
+      name: p.name,
+      qty: Number(p.qty),
+      price: Number(p.price),
+    })),
+});
+
+/** The garage's catalog, in its own display order. One round trip. */
+export const listWorkDefs = async (): Promise<WorkDef[]> => {
+  const { data, error } = await getClient()
+    .from('work_defs')
+    .select('id, code, name, labor, hours, position, work_def_items(sku, name, qty, price, position)')
+    .order('position');
+  if (error) throw error;
+  return (data ?? []).map(rowToWorkDef);
+};
+
+/* Create a work and its parts.
+
+   Two statements, not one: the parts need the work's id. If the parts insert
+   fails the work is removed again, because a catalog work that silently lost
+   its parts is worse than one that was never created — it looks correct in the
+   list and produces a wrong quote when someone picks it. */
+export const createWorkDef = async (def: Omit<WorkDef, 'id'>): Promise<WorkDef> => {
+  const { data: row, error } = await getClient()
+    .from('work_defs')
+    .insert({ code: def.code, name: def.name, labor: def.labor, hours: def.hours })
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  if (def.items.length) {
+    const { error: partErr } = await getClient().from('work_def_items').insert(
+      def.items.map((p, i) => ({
+        work_def_id: row.id,
+        sku: p.sku || null,
+        name: p.name,
+        qty: p.qty,
+        price: p.price,
+        position: i,
+      })),
+    );
+    if (partErr) {
+      await getClient().from('work_defs').delete().eq('id', row.id);
+      throw partErr;
+    }
+  }
+  return { ...def, id: row.id };
+};
+
+/** Rewrite a work and its parts. Wipe and re-insert, as saveWorks does. */
+export const updateWorkDef = async (id: string, def: Omit<WorkDef, 'id'>): Promise<void> => {
+  const { error } = await getClient()
+    .from('work_defs')
+    .update({ code: def.code, name: def.name, labor: def.labor, hours: def.hours })
+    .eq('id', id);
+  if (error) throw error;
+
+  const { error: delErr } = await getClient().from('work_def_items').delete().eq('work_def_id', id);
+  if (delErr) throw delErr;
+  if (!def.items.length) return;
+
+  const { error: partErr } = await getClient().from('work_def_items').insert(
+    def.items.map((p, i) => ({
+      work_def_id: id,
+      sku: p.sku || null,
+      name: p.name,
+      qty: p.qty,
+      price: p.price,
+      position: i,
+    })),
+  );
+  if (partErr) throw partErr;
+};
+
+/** Parts go with it — work_def_items cascades on the foreign key. */
+export const deleteWorkDef = async (id: string) => {
+  const { error } = await getClient().from('work_defs').delete().eq('id', id);
   if (error) throw error;
 };
 
@@ -315,31 +421,56 @@ export const deleteTicket = async (key: string) => {
    Both halves live here now, so the two apps cannot disagree about the shape of
    a photo or the order of an upload's two writes.
 
-   The bucket is public, so a photo is a plain <img src>. Phase 2 makes it
-   private with signed URLs — see docs/PRODUCTION.md §3.3. */
+   The bucket is PRIVATE as of 2c. A photo is no longer a permanent CDN link but
+   a signed URL minted for a caller the database has already authorised, so
+   `url` is now produced by a round trip rather than by string concatenation —
+   which is why building a TicketPhoto is async. See docs/PRODUCTION.md §3.3. */
 
 export const PHOTO_BUCKET = 'ticket-photos';
+
+/* Long enough that a board left open across a shift does not fill with broken
+   images, short enough that a URL copied out of devtools is not a permanent
+   grant. Photos are re-listed on every ticket open, so this is refreshed often
+   in practice. */
+const PHOTO_URL_TTL_SECONDS = 60 * 60 * 8;
 
 export interface TicketPhoto {
   id: string;
   path: string;      // object path inside the bucket - what we delete by
-  url: string;       // public CDN url - what the board and <Image> render
+  url: string;       // signed, expiring url - what the board and <Image> render
   caption: string;
   createdAt: string;
 }
 
-const photoUrl = (path: string) =>
-  getClient().storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+/* One signed URL per object.
 
-const rowToPhoto = (r: any): TicketPhoto => ({
+   Signing is a network call, so this is batched by the caller rather than
+   invoked per row in a loop. An object whose signature fails yields an empty
+   string rather than throwing: one unreadable photo should leave the rest of
+   the ticket usable, and a broken <img> is a better failure than a blank
+   screen. */
+const signPhotoUrls = async (paths: string[]): Promise<Map<string, string>> => {
+  const out = new Map<string, string>();
+  if (!paths.length) return out;
+  const { data, error } = await getClient()
+    .storage.from(PHOTO_BUCKET)
+    .createSignedUrls(paths, PHOTO_URL_TTL_SECONDS);
+  if (error) throw error;
+  for (const entry of data ?? []) {
+    if (entry.path) out.set(entry.path, entry.signedUrl ?? '');
+  }
+  return out;
+};
+
+const rowToPhoto = (r: any, url: string): TicketPhoto => ({
   id: r.id,
   path: r.path,
-  url: photoUrl(r.path),
+  url,
   caption: r.caption ?? '',
   createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
 });
 
-/** A ticket's photos, oldest first. One round trip: the embed filters by ticket key. */
+/** A ticket's photos, oldest first. One query, then one batched signing call. */
 export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
   const { data, error } = await getClient()
     .from('ticket_photos')
@@ -347,7 +478,10 @@ export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
     .eq('tickets.key', key)
     .order('created_at');
   if (error) throw error;
-  return (data ?? []).map(rowToPhoto);
+
+  const rows = data ?? [];
+  const urls = await signPhotoUrls(rows.map((r) => r.path));
+  return rows.map((r) => rowToPhoto(r, urls.get(r.path) ?? ''));
 };
 
 /* RN's fetch can't reliably turn a file:// uri into a Blob, so the picker hands us
@@ -370,12 +504,34 @@ const decodeBase64 = (input: string): Uint8Array => {
   return bytes;
 };
 
+/* The caller's garage, asked of the database rather than assumed.
+
+   Every other table fills garage_id from a column default, so the client has
+   never needed to know this. Storage has no defaults — an object path is
+   whatever the uploader says it is — so the prefix has to be built here, and
+   the storage INSERT policy checks it.
+
+   Not cached. A cached value outlives a sign-out, and the next user's photos
+   would be written into the previous user's folder, where the policy would
+   accept them because the path looks right. One round trip per upload is
+   nothing next to the image bytes that follow it. */
+const currentGarageId = async (): Promise<string> => {
+  const { data, error } = await getClient().rpc('current_garage_id');
+  if (error) throw error;
+  if (!data) throw new Error('No garage for the current session — cannot upload a photo.');
+  return data as string;
+};
+
 export const uploadTicketPhoto = async (
   key: string,
   file: { base64: string; mime: string; ext: string },
 ): Promise<TicketPhoto> => {
   const ticketId = await ticketIdByKey(key);
-  const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
+  const garageId = await currentGarageId();
+  // The garage prefix is what the storage policy checks. The ticket key stays
+  // in the path because it is what makes an object recognisable in the
+  // dashboard when something needs looking at by hand.
+  const path = `${garageId}/${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.ext}`;
 
   const { error: upErr } = await getClient()
     .storage.from(PHOTO_BUCKET)
@@ -392,7 +548,9 @@ export const uploadTicketPhoto = async (
     await getClient().storage.from(PHOTO_BUCKET).remove([path]);
     throw error;
   }
-  return rowToPhoto(data);
+
+  const urls = await signPhotoUrls([data.path]);
+  return rowToPhoto(data, urls.get(data.path) ?? '');
 };
 
 /** Object first, then row: a failed object delete leaves the photo intact rather than broken. */

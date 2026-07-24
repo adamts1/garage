@@ -150,6 +150,61 @@ check(
   `got ${JSON.stringify(aSeesMembers)}`,
 );
 
+/* ---------- the works catalog is per-garage ----------
+ *
+ * work_defs and work_def_items were created with tenant policies from the
+ * start, so unlike tickets they can be asserted before the flip. These are the
+ * first checks in this file that prove data isolation rather than just
+ * membership privacy.
+ */
+
+const seedWork = async (tenant, code, name, labor) => {
+  const res = await rest('work_defs', tenant.token, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ garage_id: tenant.garage.id, code, name, labor }),
+  });
+  const body = await res.json();
+  return Array.isArray(body) ? body[0] : body;
+};
+
+const aWork = await seedWork(a, 'AAA-01', 'A only', 111);
+const bWork = await seedWork(b, 'AAA-01', 'B only', 222);
+
+check(
+  'two garages can hold the same work code',
+  Boolean(aWork?.id && bWork?.id),
+  `a=${aWork?.id ?? JSON.stringify(aWork)} b=${bWork?.id ?? JSON.stringify(bWork)}`,
+);
+
+const aSeesWorks = await (await rest('work_defs?select=code,name', a.token)).json();
+check(
+  "A's catalog contains A's work and not B's",
+  Array.isArray(aSeesWorks) &&
+    aSeesWorks.some((w) => w.name === 'A only') &&
+    !aSeesWorks.some((w) => w.name === 'B only'),
+  `got ${JSON.stringify(aSeesWorks)}`,
+);
+
+const bReadsAWork = await (await rest(`work_defs?id=eq.${aWork?.id}&select=id`, b.token)).json();
+check(
+  "B cannot read A's work by its id",
+  Array.isArray(bReadsAWork) && bReadsAWork.length === 0,
+  `got ${JSON.stringify(bReadsAWork)}`,
+);
+
+// WITH CHECK, not USING: the row would be invisible to B either way, but
+// without WITH CHECK the insert itself would succeed and quietly land in A.
+const forge = await rest('work_defs', b.token, {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, code: 'FORGED', name: 'forged', labor: 1 }),
+});
+check(
+  "B cannot insert a work into A's garage",
+  forge.status === 403 || forge.status === 401,
+  `got ${forge.status}`,
+);
+
 /* ---------- a user with no membership resolves to nothing ---------- */
 
 const orphanEmail = `iso-orphan-${stamp}@garage.test`;
@@ -177,19 +232,211 @@ check(
 // This is the state AuthGate must refuse to render a board for. The app-side
 // half of this rule is covered in packages/shared/src/auth.test.ts.
 
-/* ---------- 2c: the gate this file exists to become ----------
+/* ---------- the gate ----------
  *
- * Until the demo_all policies are replaced, anon and every session can read
- * every tenant's rows, so these cannot pass yet. They are written out rather
- * than left to memory because the point of 2c is that they start passing and
- * never stop.
- *
- *   check("A cannot read B's tickets", ...)
- *   check("A cannot write into B's garage", ...)
- *   check('anon cannot read tickets at all', ...)
- *   check("A cannot read B's ticket photos from storage", ...)
+ * docs/PRODUCTION.md §5 requires an automated test proving garage A cannot read
+ * garage B, running in CI permanently. This is it. These assertions were
+ * written as comments through 2a and 2b and turned on with the flip; they must
+ * never be commented out again.
  */
-console.log('\n  (2c will add: A cannot read B\'s tickets, and anon cannot read any)\n');
+
+const makeTicket = async (tenant, key, title) => {
+  const res = await rest('tickets', tenant.token, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ key, title, status: 'todo' }),
+  });
+  const body = await res.json();
+  return { status: res.status, row: Array.isArray(body) ? body[0] : body };
+};
+
+const aTicket = await makeTicket(a, `ISO-A-${stamp}`, 'A ticket');
+check(
+  'A can create a ticket without naming a garage',
+  aTicket.status === 201 && Boolean(aTicket.row?.id),
+  `got ${aTicket.status} ${JSON.stringify(aTicket.row).slice(0, 120)}`,
+);
+check(
+  "the ticket landed in A's garage, from the column default",
+  aTicket.row?.garage_id === a.garage.id,
+  `got ${aTicket.row?.garage_id}`,
+);
+
+await makeTicket(b, `ISO-B-${stamp}`, 'B ticket');
+
+const aTickets = await (await rest('tickets?select=key,garage_id', a.token)).json();
+check(
+  "A sees only A's tickets",
+  Array.isArray(aTickets) && aTickets.every((t) => t.garage_id === a.garage.id),
+  `${Array.isArray(aTickets) ? aTickets.length : '?'} rows, garages ${[...new Set((aTickets ?? []).map((t) => t.garage_id))].length}`,
+);
+check(
+  "A cannot see B's ticket",
+  Array.isArray(aTickets) && !aTickets.some((t) => t.key === `ISO-B-${stamp}`),
+);
+
+const bReadsA = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, b.token)).json();
+check(
+  "B cannot read A's ticket by its id",
+  Array.isArray(bReadsA) && bReadsA.length === 0,
+  `got ${JSON.stringify(bReadsA)}`,
+);
+
+// The update reports success with zero rows affected rather than an error —
+// PostgREST cannot update a row the policy hides. Asserting on the row's
+// contents afterwards is what actually proves it.
+await rest(`tickets?id=eq.${aTicket.row?.id}`, b.token, {
+  method: 'PATCH',
+  body: JSON.stringify({ title: 'B was here' }),
+});
+const stillMine = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=title`, a.token)).json();
+check(
+  "B cannot modify A's ticket",
+  stillMine?.[0]?.title === 'A ticket',
+  `title is now ${JSON.stringify(stillMine?.[0]?.title)}`,
+);
+
+await rest(`tickets?id=eq.${aTicket.row?.id}`, b.token, { method: 'DELETE' });
+const stillThere = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, a.token)).json();
+check("B cannot delete A's ticket", stillThere?.length === 1);
+
+const forgedTicket = await rest('tickets', b.token, {
+  method: 'POST',
+  body: JSON.stringify({ key: `ISO-FORGE-${stamp}`, title: 'forged', status: 'todo', garage_id: a.garage.id }),
+});
+check(
+  "B cannot create a ticket inside A's garage",
+  forgedTicket.status === 403 || forgedTicket.status === 401,
+  `got ${forgedTicket.status}`,
+);
+
+/* ---------- ticket photos: a private bucket, per garage ----------
+ *
+ * Photos of customers' cars, number plates included. Before 2c the bucket was
+ * public and its policies checked only the bucket name, so any leaked URL was a
+ * permanent, unauthenticated grant.
+ */
+
+const storage = (path, token, init = {}) =>
+  fetch(`${API}/storage/v1/${path}`, {
+    ...init,
+    headers: { apikey: ANON, Authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
+  });
+
+const aPhotoPath = `${a.garage.id}/ISO-A-${stamp}/photo.txt`;
+const upA = await storage(`object/ticket-photos/${aPhotoPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain' },
+  body: 'pretend this is a car',
+});
+check('A can upload into its own garage folder', upA.status === 200, `got ${upA.status}`);
+
+const forgedUpload = await storage(`object/ticket-photos/${a.garage.id}/forged/x.txt`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain' },
+  body: 'B writing into A',
+});
+check(
+  "B cannot upload into A's garage folder",
+  forgedUpload.status === 400 || forgedUpload.status === 403 || forgedUpload.status === 401,
+  `got ${forgedUpload.status}`,
+);
+
+const signA = await storage(`object/sign/ticket-photos/${aPhotoPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check('A can sign a URL for its own photo', signA.status === 200, `got ${signA.status}`);
+
+const signB = await storage(`object/sign/ticket-photos/${aPhotoPath}`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  "B cannot sign a URL for A's photo",
+  signB.status !== 200,
+  `got ${signB.status}`,
+);
+
+// The whole point of a private bucket: the unsigned path is not a URL any more.
+const unsigned = await fetch(`${API}/storage/v1/object/public/ticket-photos/${aPhotoPath}`);
+check(
+  'the public URL for a photo no longer resolves',
+  unsigned.status !== 200,
+  `got ${unsigned.status}`,
+);
+
+const anonSign = await storage(`object/sign/ticket-photos/${aPhotoPath}`, ANON, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check('anon cannot sign a URL for any photo', anonSign.status !== 200, `got ${anonSign.status}`);
+
+/* Photos uploaded before 2c have no garage prefix — their paths start with the
+ * ticket key. Those objects cannot be renamed from SQL (moving a stored object
+ * is a storage API call), so the policy authorises them through the
+ * ticket_photos row instead. Staging and production both hold such photos, and
+ * if this arm is wrong they become permanently unreadable to their owner while
+ * every new upload keeps working — a failure that would look like corruption
+ * rather than a policy bug.
+ *
+ * Placed with service_role, because the INSERT policy rightly refuses to create
+ * an unprefixed object now. */
+const legacyPath = `GAR-LEGACY-${stamp}/old-photo.txt`;
+await fetch(`${API}/storage/v1/object/ticket-photos/${legacyPath}`, {
+  method: 'POST',
+  headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'text/plain' },
+  body: 'uploaded before 2c',
+});
+// Checked, not fired and forgotten: this insert failed silently once, and the
+// assertion below then failed for a reason that had nothing to do with the
+// policy it was testing.
+const legacyRow = await admin('/rest/v1/ticket_photos', {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ ticket_id: aTicket.row?.id, path: legacyPath }),
+});
+check(
+  'setup: a pre-2c photo row can be created by service_role',
+  legacyRow.status === 201,
+  `got ${legacyRow.status} ${(await legacyRow.clone().text()).slice(0, 140)}`,
+);
+
+const signLegacyA = await storage(`object/sign/ticket-photos/${legacyPath}`, a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  'A can still sign a pre-2c photo of its own (no garage prefix)',
+  signLegacyA.status === 200,
+  `got ${signLegacyA.status}`,
+);
+
+const signLegacyB = await storage(`object/sign/ticket-photos/${legacyPath}`, b.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ expiresIn: 60 }),
+});
+check(
+  "B cannot sign A's pre-2c photo",
+  signLegacyB.status !== 200,
+  `got ${signLegacyB.status}`,
+);
+
+/* ---------- and the anon key, which is public ---------- */
+for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 'vehicles', 'ticket_photos']) {
+  const res = await rest(`${table}?select=id&limit=1`, ANON);
+  const body = res.status === 200 ? await res.json() : null;
+  check(
+    `anon reads nothing from ${table}`,
+    res.status === 401 || res.status === 403 || (Array.isArray(body) && body.length === 0),
+    `got ${res.status}${body ? ` with ${body.length} rows` : ''}`,
+  );
+}
 
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);

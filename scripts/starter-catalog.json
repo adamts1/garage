@@ -1,0 +1,323 @@
+{
+  "works": [
+    {
+      "code": "OIL-01",
+      "name": "טיפול שמן מלא",
+      "labor": 120,
+      "hours": 1,
+      "position": 0,
+      "items": [
+        {
+          "sku": "OIL-530",
+          "name": "שמן מנוע 5W-30 (ליטר)",
+          "qty": 5,
+          "price": 45
+        },
+        {
+          "sku": "FLT-OIL",
+          "name": "פילטר שמן",
+          "qty": 1,
+          "price": 65
+        },
+        {
+          "sku": "FLT-AIR",
+          "name": "פילטר אוויר",
+          "qty": 1,
+          "price": 90
+        }
+      ]
+    },
+    {
+      "code": "BRK-F",
+      "name": "בלמים קדמיים",
+      "labor": 250,
+      "hours": 2,
+      "position": 1,
+      "items": [
+        {
+          "sku": "BRK-F22",
+          "name": "רפידות בלם קדמי",
+          "qty": 1,
+          "price": 240
+        },
+        {
+          "sku": "DSC-F10",
+          "name": "דיסקיות בלם קדמי",
+          "qty": 2,
+          "price": 180
+        },
+        {
+          "sku": "FLD-BRK",
+          "name": "נוזל בלמים DOT4",
+          "qty": 1,
+          "price": 35
+        }
+      ]
+    },
+    {
+      "code": "BRK-R",
+      "name": "בלמים אחוריים",
+      "labor": 220,
+      "hours": 2,
+      "position": 2,
+      "items": [
+        {
+          "sku": "BRK-R18",
+          "name": "רפידות בלם אחורי",
+          "qty": 1,
+          "price": 190
+        },
+        {
+          "sku": "DSC-R08",
+          "name": "דיסקיות בלם אחורי",
+          "qty": 2,
+          "price": 150
+        }
+      ]
+    },
+    {
+      "code": "BAT-01",
+      "name": "החלפת מצבר",
+      "labor": 60,
+      "hours": 0.5,
+      "position": 3,
+      "items": [
+        {
+          "sku": "BAT-70A",
+          "name": "מצבר 70 אמפר",
+          "qty": 1,
+          "price": 520
+        }
+      ]
+    },
+    {
+      "code": "AC-01",
+      "name": "טיפול מזגן",
+      "labor": 180,
+      "hours": 1.5,
+      "position": 4,
+      "items": [
+        {
+          "sku": "GAS-134",
+          "name": "גז מזגן R134",
+          "qty": 1,
+          "price": 220
+        },
+        {
+          "sku": "FLT-CAB",
+          "name": "מסנן אבקנים",
+          "qty": 1,
+          "price": 75
+        }
+      ]
+    },
+    {
+      "code": "SUS-01",
+      "name": "החלפת בולמים אחוריים",
+      "labor": 320,
+      "hours": 3,
+      "position": 5,
+      "items": [
+        {
+          "sku": "SHK-R09",
+          "name": "בולם זעזועים אחורי",
+          "qty": 2,
+          "price": 360
+        },
+        {
+          "sku": "MNT-R01",
+          "name": "תותב בולם",
+          "qty": 2,
+          "price": 45
+        }
+      ]
+    },
+    {
+      "code": "TIM-01",
+      "name": "החלפת רצועת טיימינג",
+      "labor": 650,
+      "hours": 5,
+      "position": 6,
+      "items": [
+        {
+          "sku": "TIM-KIT",
+          "name": "ערכת רצועת טיימינג",
+          "qty": 1,
+          "price": 890
+        },
+        {
+          "sku": "PMP-WTR",
+          "name": "משאבת מים",
+          "qty": 1,
+          "price": 320
+        }
+      ]
+    },
+    {
+      "code": "CLT-01",
+      "name": "החלפת מצמד מלא",
+      "labor": 900,
+      "hours": 6,
+      "position": 7,
+      "items": [
+        {
+          "sku": "CLT-FRD",
+          "name": "ערכת מצמד מלאה",
+          "qty": 1,
+          "price": 1650
+        },
+        {
+          "sku": "BRG-CLT",
+          "name": "מיסב מצמד",
+          "qty": 1,
+          "price": 180
+        }
+      ]
+    },
+    {
+      "code": "DIA-01",
+      "name": "אבחון מחשב (OBD)",
+      "labor": 150,
+      "hours": 1,
+      "position": 8,
+      "items": []
+    },
+    {
+      "code": "TST-01",
+      "name": "בדיקת טסט שנתי",
+      "labor": 200,
+      "hours": 1,
+      "position": 9,
+      "items": [
+        {
+          "sku": "BLB-H7",
+          "name": "נורת הלוגן H7",
+          "qty": 2,
+          "price": 25
+        }
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "sku": "BAT-70A",
+      "name": "מצבר 70 אמפר",
+      "price": 520
+    },
+    {
+      "sku": "BLB-H7",
+      "name": "נורת הלוגן H7",
+      "price": 25
+    },
+    {
+      "sku": "BLT-ALT",
+      "name": "רצועת אלטרנטור",
+      "price": 95
+    },
+    {
+      "sku": "BRG-CLT",
+      "name": "מיסב מצמד",
+      "price": 180
+    },
+    {
+      "sku": "BRK-F22",
+      "name": "רפידות בלם קדמי",
+      "price": 240
+    },
+    {
+      "sku": "BRK-R18",
+      "name": "רפידות בלם אחורי",
+      "price": 190
+    },
+    {
+      "sku": "CLT-FRD",
+      "name": "ערכת מצמד מלאה",
+      "price": 1650
+    },
+    {
+      "sku": "COOL-12",
+      "name": "נוזל קירור G12 (ליטר)",
+      "price": 40
+    },
+    {
+      "sku": "DSC-F10",
+      "name": "דיסקיות בלם קדמי",
+      "price": 180
+    },
+    {
+      "sku": "DSC-R08",
+      "name": "דיסקיות בלם אחורי",
+      "price": 150
+    },
+    {
+      "sku": "FLD-BRK",
+      "name": "נוזל בלמים DOT4",
+      "price": 35
+    },
+    {
+      "sku": "FLT-AIR",
+      "name": "פילטר אוויר",
+      "price": 90
+    },
+    {
+      "sku": "FLT-CAB",
+      "name": "מסנן אבקנים",
+      "price": 75
+    },
+    {
+      "sku": "FLT-FUE",
+      "name": "פילטר דלק",
+      "price": 110
+    },
+    {
+      "sku": "FLT-OIL",
+      "name": "פילטר שמן",
+      "price": 65
+    },
+    {
+      "sku": "GAS-134",
+      "name": "גז מזגן R134",
+      "price": 220
+    },
+    {
+      "sku": "MNT-R01",
+      "name": "תותב בולם",
+      "price": 45
+    },
+    {
+      "sku": "OIL-530",
+      "name": "שמן מנוע 5W-30 (ליטר)",
+      "price": 45
+    },
+    {
+      "sku": "OIL-540",
+      "name": "שמן מנוע 5W-40 (ליטר)",
+      "price": 52
+    },
+    {
+      "sku": "PMP-WTR",
+      "name": "משאבת מים",
+      "price": 320
+    },
+    {
+      "sku": "SHK-R09",
+      "name": "בולם זעזועים אחורי",
+      "price": 360
+    },
+    {
+      "sku": "SPK-IRD",
+      "name": "נרות הצתה אירידיום",
+      "price": 55
+    },
+    {
+      "sku": "TIM-KIT",
+      "name": "ערכת רצועת טיימינג",
+      "price": 890
+    },
+    {
+      "sku": "WPR-BLD",
+      "name": "מגבי שמשה (זוג)",
+      "price": 80
+    }
+  ]
+}

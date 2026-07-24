@@ -22,6 +22,58 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- ============================================================
+--  Who this data belongs to.
+--
+--  Added by Phase 2c. Before the flip, garage_id defaulted to a fixed backfill
+--  UUID, so a dump with no garage_id column loaded fine. The default is now
+--  current_garage_id(), which reads auth.uid() — and a seed script has no JWT,
+--  so every insert below would fail NOT NULL.
+--
+--  Rather than add a garage_id to two hundred lines of dumped INSERTs, the seed
+--  adopts an identity: a dev user, a membership joining them to the backfill
+--  garage, and a JWT claim so current_garage_id() resolves for the rest of the
+--  file. The dump stays a dump.
+--
+--  The side benefit is the point at which this stops being a workaround: the
+--  account below survives `db reset`, so local development has a stable login
+--  instead of one that has to be recreated after every schema change.
+--
+--    dev@garage.test / devpassword
+--
+--  Local only. supabase/seed.sql is never loaded into staging or production.
+-- ============================================================
+
+INSERT INTO "auth"."users" (
+  "id", "instance_id", "aud", "role", "email", "encrypted_password",
+  "email_confirmed_at", "created_at", "updated_at",
+  "raw_app_meta_data", "raw_user_meta_data",
+  -- GoTrue reads these as strings, not nullables. Left NULL, sign-in fails with
+  -- a 500 "Database error querying schema" that says nothing about the cause —
+  -- the row looks perfectly fine in the table editor.
+  "confirmation_token", "recovery_token", "email_change",
+  "email_change_token_new", "email_change_token_current",
+  "phone_change", "phone_change_token", "reauthentication_token"
+) VALUES (
+  '11111111-1111-1111-1111-111111111111',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'dev@garage.test',
+  -- bcrypt, generated here so the file carries no hash from another machine
+  "extensions"."crypt"('devpassword', "extensions"."gen_salt"('bf')),
+  now(), now(), now(),
+  '{"provider":"email","providers":["email"]}', '{}',
+  '', '', '', '', '', '', '', ''
+) ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "public"."garage_members" ("garage_id", "user_id") VALUES
+  ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111')
+ON CONFLICT DO NOTHING;
+
+-- Everything below now inserts into the backfill garage, because that is the
+-- garage this user belongs to.
+SET "request.jwt.claims" = '{"sub":"11111111-1111-1111-1111-111111111111"}';
+
+--
 -- Data for Name: customers; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
