@@ -331,48 +331,11 @@ const worksPayload = (works: TicketWork[]) =>
     })),
   }));
 
-/** A new ticket names its customer. Reuse that customer if we know them, otherwise open a card. */
-export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> => {
-  if (!t.customer) return null;
-
-  const idNumber = t.idNumber?.trim() || null;
-
-  const { data: found, error } = await getClient()
-    .from('customers')
-    .select('id, id_number')
-    .eq('name', t.customer)
-    .maybeSingle();
-  if (error) throw error;
-
-  if (found) {
-    // Fill in a ת״ז we did not have. Never overwrite one we do — a correction
-    // should be a deliberate edit on the customer, not a side effect of opening
-    // a ticket with a typo in it.
-    if (idNumber && !found.id_number) {
-      const { error: upErr } = await getClient()
-        .from('customers')
-        .update({ id_number: idNumber })
-        .eq('id', found.id);
-      if (upErr) throw upErr;
-    }
-    return found.id;
-  }
-
-  const { data: created, error: insErr } = await getClient()
-    .from('customers')
-    .insert({
-      name: t.customer,
-      phone: t.phone ?? null,
-      email: t.email ?? null,
-      address: t.address ?? null,
-      id_number: idNumber,
-      kind: (t.flags ?? []).includes('עסקי') ? 'עסקי' : 'פרטי',
-    })
-    .select('id')
-    .single();
-  if (insErr) throw insErr;
-  return created.id;
-};
+/* Customer resolution used to live here as findOrCreateCustomer, matching on
+   name with .maybeSingle(). It is gone: matching by name merged two different
+   people and threw outright on a duplicate. Resolution now happens inside
+   create_ticket — by ת״ז, then phone — in the ticket's own transaction. See
+   §3.6 and migration 20260725020000. */
 
 /* Create a ticket atomically. The server assigns the key and job number under a
    per-garage lock and resolves the customer, all in one transaction, so this no
