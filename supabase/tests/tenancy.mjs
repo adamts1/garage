@@ -438,6 +438,73 @@ for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 've
   );
 }
 
+/* ============================================================
+ *  Phase 3 — data integrity. These share the isolation harness because they
+ *  need the same thing: real sessions over PostgREST, two tenants, a clean DB.
+ * ============================================================ */
+
+const rpc = (name, token, body) =>
+  rest(`rpc/${name}`, token, { method: 'POST', body: JSON.stringify(body) });
+
+/* 3.4 — concurrent create_ticket calls get distinct, consecutive keys. Ten at
+ * once through the same counter row; a client-side max+1 would have collided. */
+const raceResults = await Promise.all(
+  Array.from({ length: 10 }, (_, i) =>
+    rpc('create_ticket', a.token, { t: { title: `race-${i}`, status: 'todo' } }).then((r) => r.json()),
+  ),
+);
+const raceKeys = raceResults.map((r) => r.key).filter(Boolean);
+check(
+  '10 concurrent create_ticket calls get 10 unique keys',
+  new Set(raceKeys).size === 10,
+  `got ${raceKeys.length} keys, ${new Set(raceKeys).size} unique`,
+);
+
+/* create_ticket assigns the garage from the session, not the payload: a forged
+ * garage_id in the body must be ignored, not honoured. */
+const forgedCreate = await (await rpc('create_ticket', b.token, {
+  t: { title: 'forge', status: 'todo', garage_id: a.garage.id },
+})).json();
+const forgedId = forgedCreate.id;
+const forgedSeenByA = await (await rest(`tickets?id=eq.${forgedId}&select=id`, a.token)).json();
+check(
+  "create_ticket ignores a forged garage_id — B's ticket is not in A's garage",
+  Array.isArray(forgedSeenByA) && forgedSeenByA.length === 0,
+  `got ${JSON.stringify(forgedSeenByA)}`,
+);
+
+/* 3.5 — a create that fails partway rolls back completely. A work with a
+ * non-numeric labor aborts the cast; no ticket may survive. */
+const beforeCount = (await (await rest('tickets?select=id', a.token)).json()).length;
+await rpc('create_ticket', a.token, {
+  t: { title: 'should roll back', status: 'todo' },
+  works: [{ uid: 'ok', name: 'ok', labor: 1 }, { uid: 'bad', name: 'bad', labor: 'not-a-number' }],
+});
+const afterCount = (await (await rest('tickets?select=id', a.token)).json()).length;
+check('a failed create_ticket leaves no orphan ticket', beforeCount === afterCount, `${beforeCount} → ${afterCount}`);
+
+/* 3.6 — customers are identified by ת״ז, then phone, never by name. */
+await rpc('create_ticket', a.token, { t: { title: 't1', customer_name: 'שם זהה', id_number: 'IDA-1' } });
+await rpc('create_ticket', a.token, { t: { title: 't2', customer_name: 'שם זהה', id_number: 'IDA-2' } });
+const sameName = await (await rest(`customers?name=eq.${encodeURIComponent('שם זהה')}&select=id`, a.token)).json();
+check(
+  'same name, different ת״ז stays two customers (no name merge)',
+  Array.isArray(sameName) && sameName.length === 2,
+  `got ${Array.isArray(sameName) ? sameName.length : '?'}`,
+);
+
+await rpc('create_ticket', a.token, { t: { title: 't3', customer_name: 'שם זהה', id_number: 'IDA-1' } });
+const reused = await (await rest('customers?id_number=eq.IDA-1&select=id', a.token)).json();
+check('the same ת״ז reuses one customer', Array.isArray(reused) && reused.length === 1, `got ${reused.length}`);
+
+/* A duplicate ת״ז cannot be inserted directly either — the partial unique index,
+ * not just the RPC's politeness, is what guarantees it. */
+const dupIns = await rest('customers', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ name: 'dup', id_number: 'IDA-1' }),
+});
+check('a duplicate ת״ז insert is rejected by the unique index', dupIns.status >= 400, `got ${dupIns.status}`);
+
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);
   process.exit(1);
