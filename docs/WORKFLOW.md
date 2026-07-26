@@ -343,7 +343,7 @@ Ordered. Each phase gates the next.
 | **A** | **Android prebuild** — before auth, see below | ✅ built; RTL device testing outstanding |
 | **2b** | Auth: login on web, iOS **and Android** | ✅ merged and live |
 | **2c** | Tenant policies replace `demo_all`; per-garage catalog; private photos | ✅ gate passing in CI |
-| **3** | Ticket-key races, transactional saves, customer identity, realtime | |
+| **3** | Ticket-key races, transactional saves, customer identity, realtime | ✅ done |
 | **4a** | Real invoices: immutable, numbered, provider-issued | 🔒 gate |
 | **5** | Onboarding, alerting, runbook, privacy review | |
 | **6** | **Pilot: one garage** | |
