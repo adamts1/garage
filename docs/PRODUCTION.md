@@ -382,11 +382,24 @@ apps and both go dark. So schema first, then auth, then the flip.
 > the caller. Verified by attempting the forgery on `works`, `work_items` and
 > `vehicles`; all three were corrected to the parent's garage.
 
-### Phase 3 — Data integrity
-- [ ] Ticket keys → per-garage sequence, `unique (garage_id, key)`  (§3.4)
-- [ ] `saveWorks` → one transactional RPC  (§3.5)
-- [ ] Customer matching → stable identity, not name  (§3.6)
-- [ ] Realtime → garage-scoped subscriptions, fix the dropped-update race  (§3.7)
+### Phase 3 — Data integrity ✅
+- [x] Ticket keys → per-garage counter + `unique (garage_id, key)`, assigned
+      inside `create_ticket` under a row lock  (§3.4)
+- [x] `saveWorks` → transactional `create_ticket` / `save_ticket_works` RPCs  (§3.5)
+- [x] Customer matching → by ת״ז then phone, never name; partial unique index on
+      `(garage_id, id_number)`  (§3.6)
+- [x] Realtime → a change arriving mid-write is deferred and re-pulled once the
+      write settles, not discarded  (§3.7)
+
+> Proven on every CI run by `supabase/tests/tenancy.mjs` (42 checks): ten
+> concurrent creates get ten unique keys, a failed create leaves no orphan, a
+> forged garage_id is ignored, and two people with one name stay two customers.
+>
+> Still open from the original §3.7 wording: **garage-scoped** realtime
+> *channels*. Subscriptions are correct because RLS filters every payload to the
+> caller's garage, but each client still receives (and discards) other garages'
+> events. That is efficiency, not correctness, and is deferred — noted here so it
+> is not mistaken for done.
 
 ### Phase 4a — Invoicing 🔒
 - [ ] Edge Functions: provider credentials server-side, webhook endpoints
