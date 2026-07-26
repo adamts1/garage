@@ -15,11 +15,22 @@ export function useTickets() {
   const [error, setError] = useState<string | null>(null);
 
   const writing = useRef(0);   // >0 while our own writes are in flight
+  const pending = useRef(false); // a realtime change arrived mid-write, deferred not dropped
 
   const refetch = useCallback(async () => {
     const rows = await listTickets();
     setTickets(rows);
   }, []);
+
+  // One resync point after a write settles: pull a concurrent change that
+  // arrived mid-write (or an error that made our optimistic state a lie).
+  const settleWrite = useCallback(async () => {
+    writing.current--;
+    if (writing.current === 0 && pending.current) {
+      pending.current = false;
+      await refetch().catch(() => {});
+    }
+  }, [refetch]);
 
   useEffect(() => {
     if (!isConfigured) { setLoading(false); return; }   // the list screen shows setup instructions
@@ -31,7 +42,10 @@ export function useTickets() {
       .finally(() => alive && setLoading(false));
 
     const unsubscribe = subscribeToTickets(() => {
-      if (writing.current === 0) void refetch().catch(() => {});
+      // Defer, don't drop: a change arriving mid-write must still be applied once
+      // our own write settles, or this phone diverges from the board.
+      if (writing.current > 0) { pending.current = true; return; }
+      void refetch().catch(() => {});
     });
 
     return () => { alive = false; unsubscribe(); };
@@ -47,11 +61,11 @@ export function useTickets() {
       await updateTicket(next, worksChanged);                            // save second
     } catch (e: any) {
       setError(e.message ?? String(e));
-      await refetch().catch(() => {});   // our optimistic state may be a lie now - resync
+      pending.current = true;   // resync in settleWrite once our writes are done
     } finally {
-      writing.current--;
+      await settleWrite();
     }
-  }, [refetch]);
+  }, [settleWrite]);
 
   const removeTicket = useCallback(async (key: string) => {
     setError(null);
@@ -62,11 +76,11 @@ export function useTickets() {
       await deleteTicket(key);
     } catch (e: any) {
       setError(e.message ?? String(e));
-      await refetch().catch(() => {});
+      pending.current = true;
     } finally {
-      writing.current--;
+      await settleWrite();
     }
-  }, [refetch]);
+  }, [settleWrite]);
 
   return { tickets, loading, error, refetch, saveTicket, removeTicket };
 }

@@ -20,6 +20,7 @@ export function useTickets() {
 
   const current = useRef<Ticket[]>([]);   // what we last showed - the base for the next diff
   const writing = useRef(0);              // >0 while our own writes are in flight
+  const pending = useRef(false);          // a realtime change arrived mid-write, deferred not dropped
 
   const refetch = useCallback(async () => {
     const rows = await listTickets();
@@ -36,9 +37,12 @@ export function useTickets() {
       .catch((e) => alive && setError(e.message ?? String(e)))
       .finally(() => alive && setLoading(false));
 
-    // someone else changed something - pull it in, unless we're mid-write ourselves
+    // Someone else changed something. If we're mid-write, defer the pull rather
+    // than drop it — otherwise a concurrent edit is lost until an unrelated event
+    // happens to trigger the next refetch, and two boards silently diverge.
     const unsubscribe = subscribeToTickets(() => {
-      if (writing.current === 0) void refetch().catch(() => {});
+      if (writing.current > 0) { pending.current = true; return; }
+      void refetch().catch(() => {});
     });
 
     return () => { alive = false; unsubscribe(); };
@@ -66,14 +70,18 @@ export function useTickets() {
       for (const k of before.keys()) {
         if (!after.has(k)) await deleteTicket(k);
       }
-      // Pull the server-assigned key back over the temporary one we optimistically
-      // painted. Only after a create — updates and deletes keep their real keys.
-      if (created) await refetch();
     } catch (e: any) {
       setError(e.message ?? String(e));
-      await refetch().catch(() => {});   // our optimistic state may be a lie now - resync
+      pending.current = true;   // our optimistic state may be a lie now - force a resync below
     } finally {
       writing.current--;
+      // One resync point, once our own writes have settled:
+      //  - created: pull the server-assigned key over the temporary one we painted
+      //  - pending: apply a concurrent edit that arrived (or errored) mid-write
+      if (writing.current === 0 && (created || pending.current)) {
+        pending.current = false;
+        await refetch().catch(() => {});
+      }
     }
   }, [refetch]);
 
