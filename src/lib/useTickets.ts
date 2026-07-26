@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Ticket } from '@garage/shared';
 import { isConfigured } from './supabase';
 import {
-  createTicket, deleteTicket, findOrCreateCustomer, listTickets, subscribeToTickets, updateTicket,
+  createTicket, deleteTicket, listTickets, subscribeToTickets, updateTicket,
 } from '@garage/shared';
 
 type Setter = (update: Ticket[] | ((prev: Ticket[]) => Ticket[])) => void;
@@ -49,11 +49,15 @@ export function useTickets() {
     const after = new Map(next.map((t) => [t.k, t]));
 
     writing.current++;
+    let created = false;
     try {
       for (const [k, t] of after) {
         const old = before.get(k);
         if (!old) {
-          await createTicket(t, await findOrCreateCustomer(t));
+          // The server assigns the real GAR-/W- numbers; the key we painted was
+          // a client-side guess. createTicket also resolves the customer now.
+          await createTicket(t);
+          created = true;
         } else if (JSON.stringify(old) !== JSON.stringify(t)) {
           const worksChanged = JSON.stringify(old.works ?? []) !== JSON.stringify(t.works ?? []);
           await updateTicket(t, worksChanged);
@@ -62,6 +66,9 @@ export function useTickets() {
       for (const k of before.keys()) {
         if (!after.has(k)) await deleteTicket(k);
       }
+      // Pull the server-assigned key back over the temporary one we optimistically
+      // painted. Only after a create — updates and deletes keep their real keys.
+      if (created) await refetch();
     } catch (e: any) {
       setError(e.message ?? String(e));
       await refetch().catch(() => {});   // our optimistic state may be a lie now - resync

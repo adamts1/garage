@@ -311,44 +311,25 @@ const ticketIdByKey = async (key: string): Promise<string> => {
   return data.id as string;
 };
 
-/** Rewrite a ticket's works and their parts. Simple and correct: wipe, re-insert. */
-const saveWorks = async (ticketId: string, works: TicketWork[]) => {
-  const { error: delErr } = await getClient().from('works').delete().eq('ticket_id', ticketId);
-  if (delErr) throw delErr;
-  if (!works.length) return;
-
-  const { data: rows, error: workErr } = await getClient()
-    .from('works')
-    .insert(
-      works.map((w, i) => ({
-        ticket_id: ticketId,
-        uid: w.uid,
-        code: w.code,
-        name: w.name,
-        labor: w.labor,
-        custom: w.custom ?? false,
-        position: i,
-      })),
-    )
-    .select('id, uid');
-  if (workErr) throw workErr;
-
-  const idByUid = new Map((rows ?? []).map((r) => [r.uid as string, r.id as string]));
-  const parts = works.flatMap((w) =>
-    w.items.map((p, i) => ({
-      work_id: idByUid.get(w.uid)!,
+/* Works and their parts, shaped for the create_ticket / save_ticket_works RPCs.
+   position is assigned from array order here, so the server does not have to
+   trust — or the client remember — a position field on every row. */
+const worksPayload = (works: TicketWork[]) =>
+  works.map((w, i) => ({
+    uid: w.uid,
+    code: w.code,
+    name: w.name,
+    labor: w.labor,
+    custom: w.custom ?? false,
+    position: i,
+    items: w.items.map((p, j) => ({
       sku: p.sku,
       name: p.name,
       qty: p.qty,
       price: p.price,
-      position: i,
+      position: j,
     })),
-  );
-  if (!parts.length) return;
-
-  const { error: partErr } = await getClient().from('work_items').insert(parts);
-  if (partErr) throw partErr;
-};
+  }));
 
 /** A new ticket names its customer. Reuse that customer if we know them, otherwise open a card. */
 export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> => {
@@ -393,21 +374,37 @@ export const findOrCreateCustomer = async (t: Ticket): Promise<string | null> =>
   return created.id;
 };
 
-export const createTicket = async (t: Ticket, customerId?: string | null) => {
-  const { data, error } = await getClient()
-    .from('tickets')
-    .insert({ ...ticketToRow(t), customer_id: customerId ?? null })
-    .select('id')
-    .single();
+/* Create a ticket atomically. The server assigns the key and job number under a
+   per-garage lock and resolves the customer, all in one transaction, so this no
+   longer takes a customerId — create_ticket does that itself.
+
+   Returns the server-assigned key so the optimistic UI can reconcile the
+   temporary key it painted: two advisors submitting at once each get a distinct
+   real number, which need not match what either client guessed. */
+export const createTicket = async (t: Ticket): Promise<{ key: string; job: string }> => {
+  const payload = { ...ticketToRow(t), id_number: t.idNumber?.trim() || null };
+  const { data, error } = await getClient().rpc('create_ticket', {
+    t: payload,
+    works: worksPayload(t.works ?? []),
+  });
   if (error) throw error;
-  await saveWorks(data.id, t.works ?? []);
+  const r = data as { key: string; job: string };
+  return { key: r.key, job: r.job };
 };
 
 /** `worksChanged` is false on a status drag, so we don't rewrite the works tables for nothing. */
 export const updateTicket = async (t: Ticket, worksChanged: boolean) => {
   const { error } = await getClient().from('tickets').update(ticketToRow(t)).eq('key', t.k);
   if (error) throw error;
-  if (worksChanged) await saveWorks(await ticketIdByKey(t.k), t.works ?? []);
+  if (worksChanged) {
+    // One transactional wipe-and-reinsert, not the old delete-then-insert that
+    // could lose a ticket's job lines if it failed in between.
+    const { error: wErr } = await getClient().rpc('save_ticket_works', {
+      p_ticket_id: await ticketIdByKey(t.k),
+      works: worksPayload(t.works ?? []),
+    });
+    if (wErr) throw wErr;
+  }
 };
 
 export const deleteTicket = async (key: string) => {
