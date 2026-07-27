@@ -130,10 +130,17 @@ export const icountAdapter: InvoiceProvider = {
     const typeId = await resolveExpenseType(c, typeName);
 
     // 3) the expense itself. docnum is required by iCount.
+    //    IMPORTANT: iCount's expense_sum is the GROSS total (VAT-inclusive), and
+    //    it derives VAT from it. So send subtotal+vat, and pin the exact VAT with
+    //    expense_manual_vat so our figure is used verbatim rather than re-derived.
+    //    (VAT-free expenses (vat 0) are an iCount type-level setting we don't set
+    //    yet — the native record stays correct; see docs/PRODUCTION.md §4c.)
+    const gross = Math.round((input.subtotal + input.vat) * 100) / 100;
     const exp = await call(c, 'expense/create', {
       supplier_id: supplierId,
       expense_type_id: typeId,
-      expense_sum: input.subtotal,
+      expense_sum: gross,
+      expense_manual_vat: 1,
       expense_vat: input.vat,
       expense_date: input.date,
       expense_docnum: input.docnum,
