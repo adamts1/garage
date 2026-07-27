@@ -8,6 +8,7 @@
 
 import type {
   InvoiceProvider, IssueInput, CancelInput, IssuedDoc, ProviderCredentials,
+  RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 
 const BASE = 'https://api.icount.co.il/api/v3.php';
@@ -98,4 +99,71 @@ export const icountAdapter: InvoiceProvider = {
     const info = await docInfo(c, DOCTYPE.credit_note, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
   },
+
+  // ---- expenses ----
+  // iCount needs three things an expense references to exist first: the supplier,
+  // an expense type (category), and a document number. Resolve/create the first
+  // two, then create the expense. Returns both provider ids to store back.
+  async recordExpense(input: RecordExpenseInput): Promise<RecordedExpense> {
+    const c = readCreds(input.credentials);
+
+    // 1) supplier — reuse if we already synced one; else match an existing iCount
+    //    supplier by vat_id (iCount enforces it unique, so a blind add would fail
+    //    for a supplier created earlier or outside our app); else create.
+    let supplierId = input.supplier.providerSupplierId ?? null;
+    if (!supplierId && input.supplier.taxId) {
+      supplierId = await findSupplierByVatId(c, input.supplier.taxId);
+    }
+    if (!supplierId) {
+      const s = await call(c, 'supplier/add', {
+        supplier_name: input.supplier.name,
+        vat_id: input.supplier.taxId || undefined,
+        email: input.supplier.email || undefined,
+        phone: input.supplier.phone || undefined,
+      });
+      supplierId = String(s.supplier_id);
+    }
+
+    // 2) expense type — match the category by name, or create it. Default the
+    //    category to "כללי" (general) when the expense has none.
+    const typeName = (input.category && input.category.trim()) || 'כללי';
+    const typeId = await resolveExpenseType(c, typeName);
+
+    // 3) the expense itself. docnum is required by iCount.
+    const exp = await call(c, 'expense/create', {
+      supplier_id: supplierId,
+      expense_type_id: typeId,
+      expense_sum: input.subtotal,
+      expense_vat: input.vat,
+      expense_date: input.date,
+      expense_docnum: input.docnum,
+      expense_description: input.description || undefined,
+    });
+
+    return { providerSupplierId: supplierId, providerExpenseId: String(exp.expense_id) };
+  },
 };
+
+/** Match an existing iCount supplier by vat_id, or null. iCount enforces vat_id
+ *  unique per account, so a supplier already there must be reused, not re-added. */
+async function findSupplierByVatId(c: IcountCreds, vatId: string): Promise<string | null> {
+  const list = await call(c, 'supplier/get_list', {});
+  const suppliers = (list.suppliers ?? []) as Array<{ supplier_id: number | string; vat_id?: string }>;
+  const arr = Array.isArray(suppliers) ? suppliers : Object.values(suppliers);
+  for (const s of arr) {
+    if (s.vat_id && String(s.vat_id) === String(vatId)) return String(s.supplier_id);
+  }
+  return null;
+}
+
+/** Find an expense type by name, creating it if the account has none matching.
+ *  iCount rejects expense/create without a valid expense_type_id. */
+async function resolveExpenseType(c: IcountCreds, name: string): Promise<string> {
+  const list = await call(c, 'expense/types', {});
+  const types = (list.expense_types ?? {}) as Record<string, { expense_type_id: number; expense_type_name: string }>;
+  for (const t of Object.values(types)) {
+    if (t.expense_type_name === name) return String(t.expense_type_id);
+  }
+  const added = await call(c, 'expense_type/add', { expense_type_name: name });
+  return String(added.expense_type_id);
+}

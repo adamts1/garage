@@ -14,7 +14,9 @@ import {
   type PartDef, type TicketWork, type WorkDef,
 } from '@garage/shared';
 import InvoicesPage from './InvoicesPage';
-import { IconBoard, IconCar, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
+import SuppliersPage from './SuppliersPage';
+import ExpensesPage from './ExpensesPage';
+import { IconBoard, IconBox, IconCar, IconCard, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
 import {
   COLUMNS, EPICS, TEAM, TYPES,
   type Priority, type Ticket,
@@ -73,6 +75,8 @@ const emptyForm: TicketForm = {
 const navItems = [
   { name: 'לוח בקרה', Icon: IconBoard },
   { name: 'חשבוניות', Icon: IconDoc },
+  { name: 'הוצאות', Icon: IconCard },
+  { name: 'ספקים', Icon: IconBox },
   { name: 'לקוחות', Icon: IconCustomers },
   { name: 'פריטים', Icon: IconParts },
   { name: 'דוחות', Icon: IconReports },
@@ -576,6 +580,10 @@ function App() {
                   onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
                 />
               )}
+
+              {active === 'הוצאות' && <ExpensesPage />}
+
+              {active === 'ספקים' && <SuppliersPage />}
 
               {active === 'לקוחות' && <CustomersPage />}
 

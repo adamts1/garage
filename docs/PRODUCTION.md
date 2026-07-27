@@ -424,6 +424,15 @@ apps and both go dark. So schema first, then auth, then the flip.
 > row's `status` issued→cancelled with `cancelled_by`.
 > **The token is pasted in plaintext during setup → rotate it after go-live.**
 
+### Phase 4c — Supplier expenses ✅ *(built)*
+The "money out" counterpart to 4a. Unlike an invoice (a legal document the garage *issues*), a supplier expense is a document the supplier issued and the garage merely *records* — so these are the garage's own bookkeeping entries: full CRUD, no provider-owned number, no immutability.
+- [x] `suppliers` + `supplier_expenses` tables — tenant-scoped like every other table (`current_garage_id()` default + `tenant_isolation` policy). `20260728000000_suppliers_and_expenses.sql`
+- [x] Native + provider sync: `record-expense` Edge Function pushes each expense to the accounting provider (resolves/creates the supplier by vat_id, resolves/creates the expense type, creates the expense), writes the provider ids back, and is idempotent (won't double-post). Reuses the same `ADAPTERS` seam as 4a.
+- [x] iCount expense API (verified): `supplier/add` / `supplier/get_list` (vat_id unique) · `expense_type/add` / `expense/types` · `expense/create` (needs supplier_id + expense_type_id + expense_sum + expense_vat + expense_date + **expense_docnum**).
+- [x] Web: Suppliers page + Expenses page (add form with live VAT preview, per-row sync status + retry, paid toggle). Nav: הוצאות, ספקים.
+- [x] CI: supplier/expense isolation checks added to the tenancy gate.
+- [ ] Not in MVP (deferred): paid/unpaid A/P reporting depth, attach the supplier's document scan, link parts expenses to inventory.
+
 ### Phase 5 — Operate
 - [ ] Garage onboarding + per-garage settings
 - [ ] Uptime and error alerting that actually reaches someone

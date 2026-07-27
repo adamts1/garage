@@ -16,4 +16,5 @@ export * from './catalog';
 export * from './db';
 export * from './auth';
 export * from './invoices';
+export * from './expenses';
 export { setSupabaseClient, getClient } from './client';

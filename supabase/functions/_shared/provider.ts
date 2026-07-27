@@ -44,7 +44,34 @@ export interface IssuedDoc {
   issueDate: string | null;        // ISO date, or null to default to now
 }
 
+// ---- expenses (money out) ----
+// A supplier expense the garage recorded, pushed to the provider for the
+// accountant's books / input-VAT. The provider resolves the supplier and the
+// expense category (creating them if needed) and returns the ids to store back.
+export interface RecordExpenseInput {
+  credentials: ProviderCredentials;
+  supplier: {
+    name: string;
+    taxId?: string;
+    email?: string;
+    phone?: string;
+    providerSupplierId?: string | null; // reuse if already synced
+  };
+  category: string | null; // maps to a provider expense type
+  date: string;            // YYYY-MM-DD
+  docnum: string;          // the supplier's document number (required by iCount)
+  subtotal: number;        // pre-VAT
+  vat: number;
+  description?: string;
+}
+
+export interface RecordedExpense {
+  providerSupplierId: string;
+  providerExpenseId: string;
+}
+
 export interface InvoiceProvider {
   issue(input: IssueInput): Promise<IssuedDoc>;
   cancel(input: CancelInput): Promise<IssuedDoc>;
+  recordExpense(input: RecordExpenseInput): Promise<RecordedExpense>;
 }
