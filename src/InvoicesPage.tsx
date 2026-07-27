@@ -1,150 +1,81 @@
-import { useMemo, useState } from 'react';
-import { VAT, partsTotal } from '@garage/shared';
-import type { Ticket } from '@garage/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { listInvoices, subscribeToInvoices, type Invoice } from '@garage/shared';
 import {
-  IconCar, IconCard, IconCheck, IconClock, IconCustomers,
-  IconDoc, IconPrint, IconWrench,
+  IconCar, IconCard, IconCheck, IconCustomers, IconDoc, IconPrint, IconWrench,
 } from './icons';
 
 const shekel = (n: number) =>
   '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const shekelRound = (n: number) => '₪' + Math.round(n).toLocaleString('he-IL');
+const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('he-IL') : '-');
 
-/** an unpaid invoice is late once it is older than this */
-const NET_DAYS = 14;
-
-type InvStatus = 'paid' | 'due' | 'overdue';
-
-const STATUS_LABEL: Record<InvStatus, string> = {
-  paid: 'שולם',
-  due: 'ממתין לתשלום',
-  overdue: 'באיחור',
+const DOC_LABEL: Record<Invoice['docType'], string> = {
+  invoice_receipt: 'חשבונית מס-קבלה',
+  credit_note: 'חשבונית זיכוי',
+};
+const STATUS_LABEL: Record<Invoice['status'], string> = {
+  issued: 'הופקה',
+  cancelled: 'בוטלה',
 };
 
-export interface Invoice {
-  number: number;
-  ticketKey: string;
-  customer: string;
-  car: string;
-  plate: string;
-  type: string;               // 'חשבונית מס-קבלה' | 'חשבונית מס (חיוב פתוח)'
-  status: InvStatus;
-  issued?: Date;
-  issuedLabel: string;
-  dueLabel: string;
-  subtotal: number;
-  vat: number;
-  total: number;
-  method?: string;
-  reference?: string;
-  workCount: number;
-  itemCount: number;
-}
-
-const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400000);
-const fmt = (d?: Date) => (d ? d.toLocaleDateString('he-IL') : '-');
-
-/**
- * An invoice is a *view* of a billed ticket - CloseTicketDrawer is what stamps
- * doc / paid / payMethod / reference onto it. A ticket with no doc was never
- * billed, so it has no invoice.
- */
-export function invoiceFrom(t: Ticket, now: Date): Invoice {
-  const works = t.works ?? [];
-  const labour = works.reduce((s, w) => s + w.labor, 0);
-  const parts = works.reduce((s, w) => s + partsTotal(w), 0);
-
-  // prefer the live works; fall back to the stored total (which already includes VAT)
-  const subtotal = labour + parts > 0
-    ? labour + parts
-    : (t.amount ? t.amount / (1 + VAT) : 0);
-  const vat = subtotal * VAT;
-  const total = subtotal + vat;
-
-  const issued = t.createdAtISO ? new Date(t.createdAtISO) : undefined;
-  const due = issued ? addDays(issued, NET_DAYS) : undefined;
-
-  const status: InvStatus = t.paid
-    ? 'paid'
-    : due && now > due
-      ? 'overdue'
-      : 'due';
-
-  return {
-    number: 10000 + (Number(t.k.split('-')[1]) || 0),
-    ticketKey: t.k,
-    customer: t.customer,
-    car: t.car,
-    plate: t.plate,
-    type: t.doc ?? '-',
-    status,
-    issued,
-    issuedLabel: fmt(issued),
-    dueLabel: fmt(due),
-    subtotal,
-    vat,
-    total,
-    method: t.payMethod,
-    reference: t.reference,
-    workCount: works.length,
-    itemCount: works.reduce((s, w) => s + w.items.length, 0),
-  };
-}
-
 interface Props {
-  tickets: Ticket[];
   onOpenTicket: (key: string) => void;
 }
 
-export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
+/* Invoices are now READ from the stored, immutable invoices table — one row per
+   real document iCount issued. This page no longer recomputes anything from live
+   tickets (the §3.1 bug): number, VAT and totals are whatever was frozen at
+   issue. See docs/PRODUCTION.md §4a. */
+export default function InvoicesPage({ onOpenTicket }: Props) {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | InvStatus>('all');
-  const [type, setType] = useState('all');
-  const [selected, setSelected] = useState<number | null>(null);
+  const [status, setStatus] = useState<'all' | Invoice['status']>('all');
+  const [docType, setDocType] = useState<'all' | Invoice['docType']>('all');
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const invoices = useMemo(() => {
-    const now = new Date();
-    return tickets
-      .filter((t) => t.doc)                       // billed tickets only
-      .map((t) => invoiceFrom(t, now))
-      .sort((a, b) => (b.issued?.getTime() ?? 0) - (a.issued?.getTime() ?? 0));
-  }, [tickets]);
-
-  const types = useMemo(
-    () => Array.from(new Set(invoices.map((i) => i.type))),
-    [invoices],
-  );
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      listInvoices()
+        .then((rows) => { if (alive) setInvoices(rows); })
+        .catch(() => { if (alive) setInvoices([]); })
+        .finally(() => { if (alive) setLoading(false); });
+    load();
+    const off = subscribeToInvoices(load);
+    return () => { alive = false; off(); };
+  }, []);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return invoices.filter((i) => {
       if (status !== 'all' && i.status !== status) return false;
-      if (type !== 'all' && i.type !== type) return false;
+      if (docType !== 'all' && i.docType !== docType) return false;
       if (!q) return true;
       return (
-        String(i.number).includes(q) ||
-        i.customer.toLowerCase().includes(q) ||
-        i.plate.toLowerCase().includes(q) ||
-        i.car.toLowerCase().includes(q)
+        i.docnum.toLowerCase().includes(q) ||
+        (i.customerName ?? '').toLowerCase().includes(q) ||
+        (i.ticketKey ?? '').toLowerCase().includes(q)
       );
     });
-  }, [invoices, query, status, type]);
+  }, [invoices, query, status, docType]);
 
-  const sum = (list: Invoice[]) => list.reduce((s, i) => s + i.total, 0);
-  const by = (s: InvStatus) => invoices.filter((i) => i.status === s);
+  // Money view counts issued invoice-receipts only: cancelled docs and credit
+  // notes must not inflate "how much did we bill".
+  const receipts = invoices.filter((i) => i.docType === 'invoice_receipt');
+  const issuedSum = receipts.filter((i) => i.status === 'issued').reduce((s, i) => s + i.total, 0);
+  const cancelledCount = receipts.filter((i) => i.status === 'cancelled').length;
+  const sumShown = shown.reduce((s, i) => s + i.total, 0);
 
-  const current = shown.find((i) => i.number === selected)
-    ?? invoices.find((i) => i.number === selected)
-    ?? null;
-
-  const filtered = status !== 'all' || type !== 'all' || query.trim() !== '';
+  const current = invoices.find((i) => i.id === selected) ?? null;
+  const filtered = status !== 'all' || docType !== 'all' || query.trim() !== '';
 
   return (
     <div className="inv">
       <div className="panel-header">
         <div>
           <h2>חשבוניות</h2>
-          <p className="inv-sub">ניהול חשבוניות ומסמכי חיוב</p>
+          <p className="inv-sub">מסמכי מס שהופקו — חשבוניות מס-קבלה וזיכויים</p>
         </div>
       </div>
 
@@ -152,23 +83,18 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
       <div className="inv-kpis">
         <Kpi
           icon={<IconDoc />} tone="navy"
-          value={shekelRound(sum(invoices))} label="סה״כ חשבוניות"
-          note={`${invoices.length} חשבוניות`}
-        />
-        <Kpi
-          icon={<IconClock />} tone="warn"
-          value={shekelRound(sum(by('due')))} label="ממתין לתשלום"
-          note={`${by('due').length} חשבוניות`}
+          value={shekelRound(issuedSum)} label="סה״כ הופק"
+          note={`${receipts.filter((i) => i.status === 'issued').length} חשבוניות פעילות`}
         />
         <Kpi
           icon={<IconCheck />} tone="ok"
-          value={shekelRound(sum(by('paid')))} label="שולם"
-          note={`${by('paid').length} חשבוניות`}
+          value={String(receipts.length)} label="חשבוניות מס-קבלה"
+          note="סך המסמכים שהופקו"
         />
         <Kpi
           icon={<IconCard />} tone="danger"
-          value={shekelRound(sum(by('overdue')))} label="באיחור"
-          note={`${by('overdue').length} חשבוניות · מעל ${NET_DAYS} ימים`}
+          value={String(cancelledCount)} label="בוטלו"
+          note="חשבוניות שבוטלו בזיכוי"
         />
       </div>
 
@@ -176,24 +102,24 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
       <div className="inv-filters">
         <input
           className="inv-search"
-          placeholder="חיפוש לפי לקוח, רכב או מספר מסמך…"
+          placeholder="חיפוש לפי לקוח, מספר מסמך או כרטיס…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select value={type} onChange={(e) => setType(e.target.value)}>
+        <select value={docType} onChange={(e) => setDocType(e.target.value as typeof docType)}>
           <option value="all">כל סוגי המסמכים</option>
-          {types.map((t) => <option key={t} value={t}>{t}</option>)}
+          <option value="invoice_receipt">חשבונית מס-קבלה</option>
+          <option value="credit_note">חשבונית זיכוי</option>
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as 'all' | InvStatus)}>
+        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
           <option value="all">כל הסטטוסים</option>
-          <option value="paid">שולם</option>
-          <option value="due">ממתין לתשלום</option>
-          <option value="overdue">באיחור</option>
+          <option value="issued">הופקה</option>
+          <option value="cancelled">בוטלה</option>
         </select>
         <button
           className="btn ghost"
           disabled={!filtered}
-          onClick={() => { setQuery(''); setStatus('all'); setType('all'); }}
+          onClick={() => { setQuery(''); setStatus('all'); setDocType('all'); }}
         >
           איפוס סינונים
         </button>
@@ -201,11 +127,13 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
 
       {/* ---------- table ---------- */}
       <section className="card">
-        {invoices.length === 0 ? (
+        {loading ? (
+          <div className="ws-empty"><p>טוען חשבוניות…</p></div>
+        ) : invoices.length === 0 ? (
           <div className="ws-empty">
             <div className="ws-empty-ic big"><IconDoc /></div>
             <h4>אין עדיין חשבוניות</h4>
-            <p>חשבונית נוצרת כשסוגרים כרטיס עבודה ומחייבים את הלקוח</p>
+            <p>חשבונית מופקת מתוך כרטיס עבודה, לאחר גביית התשלום</p>
           </div>
         ) : shown.length === 0 ? (
           <div className="ws-empty">
@@ -220,41 +148,34 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
                 <tr>
                   <th style={{ width: 96 }}>מספר</th>
                   <th>לקוח</th>
-                  <th style={{ width: 190 }}>רכב</th>
                   <th style={{ width: 104 }}>תאריך</th>
                   <th style={{ width: 170 }}>סוג מסמך</th>
                   <th style={{ width: 110 }}>סכום כולל</th>
-                  <th style={{ width: 130 }}>סטטוס</th>
-                  <th style={{ width: 120 }}>אמצעי תשלום</th>
+                  <th style={{ width: 120 }}>סטטוס</th>
+                  <th style={{ width: 130 }}>מספר הקצאה</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map((i) => (
                   <tr
-                    key={i.number}
-                    className={i.number === selected ? 'is-selected' : ''}
-                    onClick={() => setSelected(i.number === selected ? null : i.number)}
+                    key={i.id}
+                    className={i.id === selected ? 'is-selected' : ''}
+                    onClick={() => setSelected(i.id === selected ? null : i.id)}
                   >
-                    <td><b className="inv-num">{i.number}</b></td>
-                    <td>{i.customer}</td>
-                    <td>
-                      <div className="inv-car">
-                        {i.car}
-                        {i.plate && <span className="plate sm">{i.plate}</span>}
-                      </div>
-                    </td>
-                    <td className="muted-cell">{i.issuedLabel}</td>
-                    <td className="muted-cell">{i.type}</td>
+                    <td><b className="inv-num">{i.docnum}</b></td>
+                    <td>{i.customerName ?? '-'}</td>
+                    <td className="muted-cell">{fmt(i.issuedAt)}</td>
+                    <td className="muted-cell">{DOC_LABEL[i.docType]}</td>
                     <td><strong>{shekel(i.total)}</strong></td>
                     <td><StatusPill status={i.status} /></td>
-                    <td className="muted-cell">{i.method ?? '-'}</td>
+                    <td className="muted-cell">{i.allocationNumber ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={5}>{filtered ? 'סה״כ מסונן' : 'סה״כ'}</td>
-                  <td><strong>{shekel(sum(shown))}</strong></td>
+                  <td colSpan={4}>{filtered ? 'סה״כ מסונן' : 'סה״כ'}</td>
+                  <td><strong>{shekel(sumShown)}</strong></td>
                   <td colSpan={2} className="muted-cell">{shown.length} מתוך {invoices.length}</td>
                 </tr>
               </tfoot>
@@ -268,44 +189,64 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
       {current && (
         <section className="card inv-detail">
           <div className="tp-works-head">
-            <h3 className="card-title"><IconDoc /> חשבונית {current.number}</h3>
+            <h3 className="card-title"><IconDoc /> {DOC_LABEL[current.docType]} {current.docnum}</h3>
             <StatusPill status={current.status} />
           </div>
 
           <div className="inv-detail-grid">
             <dl className="kv">
-              <dt><IconCustomers /> לקוח</dt><dd><b>{current.customer}</b></dd>
-              <dt><IconCar /> רכב</dt>
-              <dd>{current.car}{current.plate ? ` · ${current.plate}` : ''}</dd>
-              <dt><IconDoc /> סוג מסמך</dt><dd>{current.type}</dd>
-              <dt><IconClock /> תאריך הנפקה</dt><dd>{current.issuedLabel}</dd>
-              <dt><IconClock /> תאריך פירעון</dt><dd>{current.dueLabel}</dd>
+              <dt><IconCustomers /> לקוח</dt><dd><b>{current.customerName ?? '-'}</b></dd>
+              {current.customerIdNumber && (<><dt><IconDoc /> ת״ז / ח״פ</dt><dd>{current.customerIdNumber}</dd></>)}
+              <dt><IconDoc /> סוג מסמך</dt><dd>{DOC_LABEL[current.docType]}</dd>
+              <dt><IconCard /> תאריך הפקה</dt><dd>{fmt(current.issuedAt)}</dd>
+              <dt><IconDoc /> מספר הקצאה</dt>
+              <dd>{current.allocationNumber ?? <span className="kv-empty">-</span>}</dd>
               <dt><IconCard /> אמצעי תשלום</dt>
-              <dd>{current.method ?? <span className="kv-empty">-</span>}</dd>
-              <dt><IconDoc /> אסמכתא</dt>
-              <dd>{current.reference ?? <span className="kv-empty">-</span>}</dd>
+              <dd>{current.payMethod ?? <span className="kv-empty">-</span>}</dd>
             </dl>
 
             <div className="sum inv-sum">
               <div>
-                <span>סכום לפני מע״מ <i className="sum-n">{current.workCount} עבודות</i></span>
+                <span>סכום לפני מע״מ</span>
                 <b>{shekel(current.subtotal)}</b>
               </div>
               <div>
-                <span>מע״מ ({Math.round(VAT * 100)}%)</span>
+                <span>מע״מ ({Math.round(current.vatRate * 100)}%)</span>
                 <b>{shekel(current.vat)}</b>
               </div>
-              <div className="grand"><span>סה״כ לתשלום</span><b>{shekel(current.total)}</b></div>
+              <div className="grand"><span>סה״כ</span><b>{shekel(current.total)}</b></div>
             </div>
           </div>
 
+          {current.lines.length > 0 && (
+            <table className="works-table" style={{ marginTop: 16 }}>
+              <thead>
+                <tr><th>פירוט</th><th style={{ width: 80 }}>כמות</th><th style={{ width: 110 }}>מחיר</th><th style={{ width: 120 }}>סה״כ</th></tr>
+              </thead>
+              <tbody>
+                {current.lines.map((l, idx) => (
+                  <tr key={idx}>
+                    <td>{l.desc}</td>
+                    <td className="muted-cell">{l.qty}</td>
+                    <td className="muted-cell">{shekel(l.unit_price)}</td>
+                    <td><strong>{shekel(l.line_total)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
           <div className="inv-actions">
-            <button className="btn primary" onClick={() => onOpenTicket(current.ticketKey)}>
-              <IconWrench /> פתח כרטיס עבודה #{current.ticketKey.split('-')[1]}
-            </button>
-            <button className="btn ghost" onClick={() => window.print()}>
-              <IconPrint /> הדפס חשבונית
-            </button>
+            {current.ticketKey && (
+              <button className="btn primary" onClick={() => onOpenTicket(current.ticketKey!)}>
+                <IconWrench /> פתח כרטיס עבודה #{current.ticketKey.split('-')[1]}
+              </button>
+            )}
+            {current.pdfUrl && (
+              <a className="btn ghost" href={current.pdfUrl} target="_blank" rel="noreferrer">
+                <IconPrint /> צפה / הדפס (PDF)
+              </a>
+            )}
           </div>
         </section>
       )}
@@ -313,8 +254,9 @@ export default function InvoicesPage({ tickets, onOpenTicket }: Props) {
   );
 }
 
-function StatusPill({ status }: { status: InvStatus }) {
-  return <span className={`inv-pill ${status}`}>{STATUS_LABEL[status]}</span>;
+function StatusPill({ status }: { status: Invoice['status'] }) {
+  const cls = status === 'issued' ? 'paid' : 'overdue';
+  return <span className={`inv-pill ${cls}`}>{STATUS_LABEL[status]}</span>;
 }
 
 function Kpi({ icon, tone, value, label, note }: {

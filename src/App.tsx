@@ -573,7 +573,6 @@ function App() {
 
               {active === 'חשבוניות' && (
                 <InvoicesPage
-                  tickets={tickets}
                   onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
                 />
               )}

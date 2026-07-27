@@ -1952,6 +1952,32 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   margin-bottom: 14px;
 }
 .bill-note.ok { background: var(--ok-soft); border-color: #cfe0d2; color: var(--ok); }
+
+/* issued-invoice block inside the billing panel */
+.bill-invoice {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #e6e6e6);
+  border-radius: 10px;
+  background: var(--card-2, #fafafa);
+}
+.bill-invoice .kv { margin-bottom: 10px; }
+.bill-invoice .btn.block { margin-top: 8px; }
+
+/* confirm dialog (issue an irreversible tax document) */
+.confirm-card {
+  max-width: 420px;
+  margin: auto;
+  padding: 22px 24px;
+}
+.confirm-card p { font-size: 13.5px; line-height: 1.6; margin: 10px 0 0; }
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.confirm-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
 .btn.block {
   width: 100%;
   justify-content: center;

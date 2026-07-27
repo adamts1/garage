@@ -505,6 +505,59 @@ const dupIns = await rest('customers', a.token, {
 });
 check('a duplicate ת״ז insert is rejected by the unique index', dupIns.status >= 400, `got ${dupIns.status}`);
 
+/* ============================================================
+ *  Phase 4a — invoices are stored, tenant-scoped, and client-unforgeable.
+ *  A tax document may be READ by its garage and by nobody else, and may be
+ *  WRITTEN by no client at all — only the service_role Edge Function issues one.
+ * ============================================================ */
+
+// Seed one invoice for A, as the Edge Function would (service_role, explicit
+// garage_id since there is no session default under service_role).
+const invSeedRes = await admin('/rest/v1/invoices', {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({
+    garage_id: a.garage.id,
+    doc_type: 'invoice_receipt',
+    provider: 'icount',
+    provider_docnum: `TST-${stamp}`,
+    subtotal: 100, vat_rate: 0.18, vat: 18, total: 118,
+    status: 'issued',
+  }),
+});
+const invSeed = (await invSeedRes.json())[0];
+check('service_role can store an invoice for a garage', invSeedRes.status === 201 && Boolean(invSeed?.id), `got ${invSeedRes.status}`);
+
+const aSeesInv = await (await rest(`invoices?provider_docnum=eq.TST-${stamp}&select=id`, a.token)).json();
+check('A reads its own invoice', Array.isArray(aSeesInv) && aSeesInv.length === 1, `got ${Array.isArray(aSeesInv) ? aSeesInv.length : '?'}`);
+
+const bSeesInv = await (await rest(`invoices?provider_docnum=eq.TST-${stamp}&select=id`, b.token)).json();
+check("B cannot read A's invoice", Array.isArray(bSeesInv) && bSeesInv.length === 0, `got ${JSON.stringify(bSeesInv)}`);
+
+// A client must not be able to fabricate a tax document.
+const forgeInv = await rest('invoices', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, doc_type: 'invoice_receipt', provider_docnum: `FORGE-${stamp}`, subtotal: 1, vat_rate: 0.18, vat: 0, total: 1 }),
+});
+check('authenticated cannot INSERT an invoice (no grant)', forgeInv.status >= 400, `got ${forgeInv.status}`);
+
+// Nor edit or delete an issued one.
+const editInv = await rest(`invoices?id=eq.${invSeed?.id}`, a.token, { method: 'PATCH', body: JSON.stringify({ total: 1 }) });
+check('authenticated cannot UPDATE an invoice', editInv.status >= 400 || (Array.isArray(await editInv.json().catch(() => [])) === false), `got ${editInv.status}`);
+
+const delInv = await rest(`invoices?id=eq.${invSeed?.id}`, a.token, { method: 'DELETE' });
+const stillThereInv = await (await rest(`invoices?id=eq.${invSeed?.id}&select=id`, a.token)).json();
+check('authenticated cannot DELETE an invoice', Array.isArray(stillThereInv) && stillThereInv.length === 1, `delete got ${delInv.status}`);
+
+// The provider credentials are invisible to every client — no grant on the secrets table.
+const secretPeek = await rest('garage_billing_secrets?select=credentials', a.token);
+const secretBody = secretPeek.status === 200 ? await secretPeek.json() : null;
+check(
+  'authenticated cannot read garage_billing_secrets',
+  secretPeek.status >= 400 || (Array.isArray(secretBody) && secretBody.length === 0),
+  `got ${secretPeek.status}${secretBody ? ` with ${secretBody.length} rows` : ''}`,
+);
+
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);
   process.exit(1);
