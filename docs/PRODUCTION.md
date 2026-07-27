@@ -401,13 +401,28 @@ apps and both go dark. So schema first, then auth, then the flip.
 > events. That is efficiency, not correctness, and is deferred — noted here so it
 > is not mistaken for done.
 
-### Phase 4a — Invoicing 🔒
-- [ ] Edge Functions: provider credentials server-side, webhook endpoints
-- [ ] Immutable `invoices` table, frozen line items, stored VAT rate
-- [ ] Provider integration; per-garage credentials encrypted at rest
-- [ ] Credit notes; soft-delete for invoiced tickets
-- [ ] `PaymentResult` seam, `TerminalPayment` implementation
-- [ ] **Gate:** accountant signs off on real issued documents in staging
+### Phase 4a — Invoicing 🔒 *(build complete; awaiting the accountant gate)*
+- [x] Immutable `invoices` table — frozen line items, per-invoice VAT rate, provider-owned numbering, cannot be edited or deleted (trigger). `20260727000000_invoices.sql`
+- [x] Per-garage credentials — `garage_billing` (provider + vat_rate + active, readable by the garage) + `garage_billing_secrets` (a provider-agnostic `credentials jsonb`, no client grant at all, service_role only). `20260727010000_garage_billing.sql`
+- [x] Edge Function `issue-invoice` — issues חשבונית מס-קבלה and cancels via חשבונית זיכוי; RLS is the authorization boundary; idempotent per ticket. **Provider-agnostic**: dispatches on `garage_billing.provider` via an `ADAPTERS` registry. `supabase/functions/issue-invoice/`
+- [x] **Multi-provider seam** — `_shared/provider.ts` defines the `InvoiceProvider` interface (issue/cancel → normalized `IssuedDoc`); `_shared/icount.ts` is the first adapter. A second accounting service (Green Invoice, Rivhit, …) is **one new adapter module + one registry line** — the invoices table, the UI, and the shared data layer do not change.
+- [x] iCount adapter (`_shared/icount.ts`) — auth + doc shapes verified against a live account (invrec/refund, doc/info for docnum→doc_id + allocation); credentials read from the jsonb bag as `{cid, token}`.
+- [x] Web wiring — explicit "הפק חשבונית מס-קבלה" button (confirm dialog) in the ticket's billing panel; `InvoicesPage` now READS the stored table, no longer recomputes from live tickets (kills §3.1).
+- [x] CI — 7 invoice-isolation checks added to `tenancy.mjs` (read scoping, no client insert/update/delete, token invisible).
+- [ ] Credit-note UX exists (cancel button); soft-delete for invoiced tickets still to confirm.
+- [ ] Mobile issuance (web-first shipped; mobile follows).
+- [ ] `PaymentResult` seam, `TerminalPayment` implementation.
+- [ ] **Gate:** accountant signs off on real issued documents in staging (needs an עוסק מורשה/חברה account connected to רשות המסים to see the real מספר הקצאה — the trial returns none).
+
+> **iCount specifics (verified 2026-07-27):** auth is a `Bearer` token header **plus**
+> `cid` in the POST body. Doctypes: `invrec` = חשבונית מס-קבלה, `refund` = חשבונית זיכוי.
+> `doc/create` returns only `docnum` + `doc_url`; `doc/info` gives `doc_id` and the
+> allocation number (`invoice_reference_number`, empty until connected to רשות המסים).
+> An invrec **requires a payment block that balances the total** (`cash:{sum}` etc.).
+> A credit note **links** to the original (`based_on`) but does **not** flip the
+> original's `is_cancelled` — the offset is the record; we mirror this by moving our
+> row's `status` issued→cancelled with `cancelled_by`.
+> **The token is pasted in plaintext during setup → rotate it after go-live.**
 
 ### Phase 5 — Operate
 - [ ] Garage onboarding + per-garage settings

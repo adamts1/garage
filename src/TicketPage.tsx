@@ -1,9 +1,13 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
 import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
 import { COLUMNS, TEAM, type Ticket } from '@garage/shared';
 import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
+import {
+  listInvoices, subscribeToInvoices, issueInvoice, cancelInvoice, type Invoice,
+} from '@garage/shared';
 import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
@@ -86,6 +90,13 @@ export default function TicketPage({
      is what makes a photo appear here seconds after the mechanic shoots it. */
   const [photos, setPhotos] = useState<TicketPhoto[]>([]);
   const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
+  /* The stored tax document for this ticket, if one was ever issued. This is the
+     real invoice — not the derived view the board used to show. A ticket can hold
+     more than one invoice-receipt over its life (issue, cancel, re-issue), so we
+     surface the live one if there is one, otherwise the most recent. */
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [confirmIssue, setConfirmIssue] = useState(false);
+  const [busy, setBusy] = useState(false);
   const works = ticket.works ?? [];
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
 
@@ -99,6 +110,57 @@ export default function TicketPage({
     const off = subscribeToTicketPhotos(load);
     return () => { alive = false; off(); };
   }, [ticket.k]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      listInvoices()
+        .then((all) => {
+          if (!alive) return;
+          const recs = all.filter((i) => i.ticketKey === ticket.k && i.docType === 'invoice_receipt');
+          setInvoice(recs.find((i) => i.status === 'issued') ?? recs[0] ?? null);
+        })
+        .catch(() => {});   // an absent invoice panel beats a broken page
+    load();
+    const off = subscribeToInvoices(load);
+    return () => { alive = false; off(); };
+  }, [ticket.k]);
+
+  const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 6000); };
+
+  /* Issuing a חשבונית מס-קבלה is a real, irreversible tax document. The confirm
+     dialog is the guard; issueInvoice itself is idempotent per ticket. */
+  const doIssue = async () => {
+    setBusy(true);
+    try {
+      const inv = await issueInvoice(ticket.k);
+      setInvoice(inv);
+      setConfirmIssue(false);
+      flashToast(`הופקה חשבונית מס-קבלה #${inv.docnum} · ${shekel(inv.total)}`);
+    } catch (e: any) {
+      flashToast(`שגיאה בהפקת חשבונית: ${e?.message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doCancel = async () => {
+    if (!invoice) return;
+    const reason = window.prompt('סיבת הביטול (תופק חשבונית זיכוי):', 'ביטול חשבונית');
+    if (reason === null) return;   // cancelled the cancel
+    setBusy(true);
+    try {
+      await cancelInvoice(invoice.id, reason || 'ביטול חשבונית');
+      const all = await listInvoices();
+      const recs = all.filter((i) => i.ticketKey === ticket.k && i.docType === 'invoice_receipt');
+      setInvoice(recs.find((i) => i.status === 'issued') ?? recs[0] ?? null);
+      flashToast('החשבונית בוטלה · הופקה חשבונית זיכוי');
+    } catch (e: any) {
+      flashToast(`שגיאה בביטול החשבונית: ${e?.message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const patch = (p: Partial<Ticket>) =>
     setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, ...p } : t)));
@@ -330,6 +392,40 @@ export default function TicketPage({
                   ? 'גבה תשלום'          // ready for pickup, still owes money
                   : 'סגור כרטיס וחייב לקוח'}
             </button>
+
+            {/* ---- invoicing: the real tax document, issued through iCount ----
+                 An issued invoice-receipt shows its legal number + PDF and can be
+                 cancelled by a credit note; a paid-but-not-yet-invoiced ticket
+                 offers the (irreversible) issue button behind a confirm. */}
+            {invoice ? (
+              <div className="bill-invoice">
+                <dl className="kv">
+                  <dt>חשבונית מס-קבלה</dt>
+                  <dd>
+                    <b>#{invoice.docnum}</b>
+                    {invoice.status === 'cancelled' && (
+                      <span className="inv-pill overdue" style={{ marginInlineStart: 8 }}>בוטלה</span>
+                    )}
+                  </dd>
+                  {invoice.allocationNumber && (<><dt>מספר הקצאה</dt><dd>{invoice.allocationNumber}</dd></>)}
+                </dl>
+                {invoice.pdfUrl && (
+                  <a className="btn ghost block" href={invoice.pdfUrl} target="_blank" rel="noreferrer">
+                    <IconDoc /> צפה בחשבונית (PDF)
+                  </a>
+                )}
+                {invoice.status === 'issued' && (
+                  <button className="btn ghost block" onClick={doCancel} disabled={busy}>
+                    בטל חשבונית (הפקת זיכוי)
+                  </button>
+                )}
+              </div>
+            ) : settled ? (
+              <button className="btn primary block" onClick={() => setConfirmIssue(true)} disabled={busy}>
+                <IconDoc /> הפק חשבונית מס-קבלה
+              </button>
+            ) : null}
+
             {closed && (
               wa ? (
                 <a
@@ -375,6 +471,32 @@ export default function TicketPage({
             setTimeout(() => setToast(null), 5000);
           }}
         />
+      )}
+
+      {confirmIssue && createPortal(
+        <div
+          className="close-scrim"
+          onClick={(e) => { if (e.target === e.currentTarget && !busy) setConfirmIssue(false); }}
+        >
+          <div className="card confirm-card" role="dialog" aria-modal="true">
+            <h3 className="card-title"><IconDoc /> הפקת חשבונית מס-קבלה</h3>
+            <p>
+              תופק חשבונית מס-קבלה על סך <b>{shekel(total)}</b> עבור {ticket.customer}.
+            </p>
+            <p className="cd-hint">
+              מסמך מס אינו ניתן למחיקה — לאחר ההפקה ניתן רק לבטלו באמצעות חשבונית זיכוי.
+            </p>
+            <div className="confirm-actions">
+              <button className="btn ghost" onClick={() => setConfirmIssue(false)} disabled={busy}>
+                ביטול
+              </button>
+              <button className="btn primary" onClick={doIssue} disabled={busy}>
+                {busy ? <><span className="spinner" /> מפיק…</> : 'הפק חשבונית'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {lightbox && (
