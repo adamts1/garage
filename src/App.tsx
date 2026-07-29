@@ -16,9 +16,10 @@ import {
 import InvoicesPage from './InvoicesPage';
 import SuppliersPage from './SuppliersPage';
 import ExpensesPage from './ExpensesPage';
-import { IconBoard, IconBox, IconCar, IconCard, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
+import ArchivePage from './ArchivePage';
+import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
 import {
-  COLUMNS, EPICS, TEAM, TYPES,
+  COLUMNS, EPICS, TEAM, TYPES, isArchived,
   type Priority, type Ticket,
 } from '@garage/shared';
 
@@ -27,7 +28,6 @@ interface TicketForm {
   customerName: string;
   customerPhone: string;
   idNumber: string;
-  customerType: string;
   address: string;
   email: string;
   city: string;
@@ -38,6 +38,7 @@ interface TicketForm {
   model: string;
   year: string;
   km: string;
+  details: string;
   keyReceived: boolean;
   technician: keyof typeof TEAM;
   targetDate: string;
@@ -52,7 +53,6 @@ const emptyForm: TicketForm = {
   customerName: '',
   customerPhone: '',
   idNumber: '',
-  customerType: 'פרטי',
   address: '',
   email: '',
   city: '',
@@ -63,6 +63,7 @@ const emptyForm: TicketForm = {
   model: '',
   year: '',
   km: '',
+  details: '',
   keyReceived: false,
   technician: 'dk',
   targetDate: '',
@@ -80,6 +81,7 @@ const navItems = [
   { name: 'לקוחות', Icon: IconCustomers },
   { name: 'פריטים', Icon: IconParts },
   { name: 'דוחות', Icon: IconReports },
+  { name: 'ארכיון', Icon: IconClock },
 ];
 const YEARS = Array.from({ length: 22 }, (_, i) => 2026 - i);
 
@@ -205,7 +207,6 @@ function App() {
       subtasks,
       due: form.targetDate ? form.targetDate.split('-').reverse().join('/') : '-',
       flags: [
-        ...(form.customerType === 'עסקי' ? ['עסקי'] : []),
         ...(form.keyReceived ? ['מפתח התקבל'] : []),
         'חדש',
       ],
@@ -221,6 +222,7 @@ function App() {
       manufacturer: form.manufacturer,
       model: form.model,
       vehicleCode: form.vehicleCode,
+      notes: form.details || undefined,   // "פרטים" from the create form → the ticket's notes
       createdAt: new Date().toLocaleDateString('he-IL'),
     };
 
@@ -272,7 +274,6 @@ function App() {
       email: c.email ?? '',
       address: c.address ?? '',
       city: c.city ?? '',
-      customerType: c.kind || 'פרטי',
     }));
     setShowMatches(false);
 
@@ -282,6 +283,11 @@ function App() {
   };
 
   const pickVehicle = (v: Vehicle) => { fillVehicle(v); setVehicleChoices([]); };
+
+  // Paid tickets that have aged past the cutoff leave the board for the archive.
+  // Derived, so it recomputes as time passes — no stored flag to keep in sync.
+  const activeTickets = tickets.filter((t) => !isArchived(t));
+  const archivedTickets = tickets.filter((t) => isArchived(t));
 
   return (
     <div className={`app-shell${expanded ? '' : ' rail'}`}>
@@ -325,14 +331,14 @@ function App() {
           {expanded ? (
             <>
               <div className="status-badge">פתוח</div>
-              <div className="footer-note">{tickets.length} כרטיסים פעילים</div>
+              <div className="footer-note">{activeTickets.length} כרטיסים פעילים</div>
               <button className="sign-out" onClick={() => void signOut()}>
                 התנתקות
               </button>
             </>
           ) : (
             <>
-              <div className="status-dot" title={`${tickets.length} כרטיסים פעילים`} />
+              <div className="status-dot" title={`${activeTickets.length} כרטיסים פעילים`} />
               <button className="sign-out icon-only" onClick={() => void signOut()} title="התנתקות">
                 ⏻
               </button>
@@ -454,21 +460,6 @@ function App() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <div className="radio-group">
-                    {['פרטי', 'עסקי'].map((t) => (
-                      <label className="radio-label" key={t}>
-                        <input
-                          type="radio"
-                          value={t}
-                          checked={form.customerType === t}
-                          onChange={(e) => set('customerType', e.target.value)}
-                        />
-                        {t}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div className="form-group">
                   <input type="text" placeholder="כתובת" value={form.address} onChange={(e) => set('address', e.target.value)} />
                 </div>
                 <div className="form-row">
@@ -509,11 +500,21 @@ function App() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <input type="text" inputMode="numeric" placeholder="קילומטר" value={form.km} onChange={(e) => set('km', e.target.value)} />
+                    {/* km is a number only — strip anything non-digit as it's typed */}
+                    <input type="text" inputMode="numeric" placeholder="קילומטר" value={form.km} onChange={(e) => set('km', e.target.value.replace(/\D/g, ''))} />
                   </div>
                   <div className="form-group">
                     <input type="text" placeholder="קוד" value={form.vehicleCode} onChange={(e) => set('vehicleCode', e.target.value)} />
                   </div>
+                </div>
+              </div>
+
+              <div className="form-section span-2">
+                <h3 className="section-title card-title">
+                  <IconDoc /> פרטים
+                </h3>
+                <div className="form-group">
+                  <textarea placeholder="פרטים" value={form.details} onChange={(e) => set('details', e.target.value)} />
                 </div>
               </div>
 
@@ -572,7 +573,7 @@ function App() {
                 })()
                 : (
                   <Board
-                    tickets={tickets}
+                    tickets={activeTickets}
                     setTickets={setTickets}
                     onNewTicket={openForm}
                     onOpenTicket={setOpenTicket}
@@ -595,6 +596,13 @@ function App() {
               {active === 'פריטים' && <ItemsPage />}
 
               {active === 'דוחות' && <ReportsPage tickets={tickets} />}
+
+              {active === 'ארכיון' && (
+                <ArchivePage
+                  tickets={archivedTickets}
+                  onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
+                />
+              )}
 
             </>
           )}
