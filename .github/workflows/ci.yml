@@ -9,6 +9,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The Supabase CLI flushes PostHog telemetry on exit. When that network call
+  # times out on a CI runner the process exits 1 even though the command itself
+  # succeeded — e.g. `db diff` prints "No schema changes found" and then fails
+  # the step with "Timeout while shutting down PostHog". Opt out of telemetry so
+  # CLI steps exit on their real result. (DO_NOT_TRACK is the standard the
+  # Supabase CLI honours: https://consoledonottrack.com)
+  DO_NOT_TRACK: "1"
+
 jobs:
   web:
     name: web — typecheck + test + build

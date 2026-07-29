@@ -428,7 +428,7 @@ check(
 );
 
 /* ---------- and the anon key, which is public ---------- */
-for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 'vehicles', 'ticket_photos']) {
+for (const table of ['tickets', 'customers', 'items', 'works', 'work_items', 'vehicles', 'ticket_photos', 'suppliers', 'supplier_expenses']) {
   const res = await rest(`${table}?select=id&limit=1`, ANON);
   const body = res.status === 200 ? await res.json() : null;
   check(
@@ -557,6 +557,40 @@ check(
   secretPeek.status >= 400 || (Array.isArray(secretBody) && secretBody.length === 0),
   `got ${secretPeek.status}${secretBody ? ` with ${secretBody.length} rows` : ''}`,
 );
+
+/* ============================================================
+ *  Phase 4c — suppliers & expenses are tenant-scoped like everything else.
+ * ============================================================ */
+
+// A creates a supplier (garage_id fills from the column default) and an expense.
+const supRes = await rest('suppliers', a.token, {
+  method: 'POST', headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ name: `ספק ${stamp}`, tax_id: `T${stamp}` }),
+});
+const supplier = (await supRes.json())[0];
+check('A can create a supplier without naming a garage', supRes.status === 201 && Boolean(supplier?.id), `got ${supRes.status}`);
+check('the supplier landed in A\'s garage from the default', supplier?.garage_id === a.garage.id);
+
+const expRes = await rest('supplier_expenses', a.token, {
+  method: 'POST', headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ supplier_id: supplier?.id, subtotal: 100, vat_rate: 0.18, vat: 18, total: 118, reference: `E${stamp}` }),
+});
+const expense = (await expRes.json())[0];
+check('A can record an expense', expRes.status === 201 && Boolean(expense?.id), `got ${expRes.status}`);
+
+const bSeesSup = await (await rest(`suppliers?tax_id=eq.T${stamp}&select=id`, b.token)).json();
+check("B cannot see A's supplier", Array.isArray(bSeesSup) && bSeesSup.length === 0, `got ${JSON.stringify(bSeesSup)}`);
+
+const bSeesExp = await (await rest(`supplier_expenses?reference=eq.E${stamp}&select=id`, b.token)).json();
+check("B cannot see A's expense", Array.isArray(bSeesExp) && bSeesExp.length === 0, `got ${JSON.stringify(bSeesExp)}`);
+
+// B cannot plant an expense in A's garage: the tenant policy's WITH CHECK rejects
+// a forged garage_id.
+const forgeExp = await rest('supplier_expenses', b.token, {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, supplier_id: supplier?.id, subtotal: 1, vat_rate: 0, vat: 0, total: 1 }),
+});
+check('B cannot plant an expense in A\'s garage', forgeExp.status >= 400, `got ${forgeExp.status}`);
 
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);

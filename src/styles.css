@@ -2596,6 +2596,14 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
   background: #fafbfc;
 }
 
+/* expenses form: paid checkbox + live VAT preview */
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.chk input { width: auto; }
+.exp-preview { font-size: 12.5px; color: var(--muted, #667); font-weight: 600; }
+/* a status-pill can be a clickable toggle (paid state, sync retry) */
+button.status-pill, button.inv-pill { cursor: pointer; border: 0; font: inherit; }
+.status-pill.ok { background: var(--ok-soft, #e6f4ea); color: var(--ok, #1a7f37); }
+
 .crud-form.inline {
   flex: 1;
   margin: 0;
