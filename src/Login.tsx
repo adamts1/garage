@@ -138,7 +138,7 @@ export default function Login() {
           {notice && <p className="login2-notice">{notice}</p>}
 
           <button className="login2-submit" type="submit" disabled={busy || !email || !password}>
-            {busy ? 'מתחבר…' : <>כניסה {I.arrow}</>}
+            {busy ? 'מתחבר…' : <> כניסה </>}
           </button>
 
           <div className="login2-secure">{I.shield} גישה מאובטחת</div>

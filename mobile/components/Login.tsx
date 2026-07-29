@@ -159,13 +159,7 @@ export default function Login() {
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>כניסה</Text>}
           </Pressable>
 
-          <View style={{
-            marginTop: 22, paddingTop: 16, borderTopWidth: 1, borderTopColor: C.line,
-            flexDirection: 'row', gap: 7, justifyContent: 'center', alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: 12 }}>🛡️</Text>
-            <Text style={{ color: C.dim, fontSize: 12 }}>גישה מאובטחת</Text>
-          </View>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
