@@ -61,6 +61,31 @@ export interface Ticket {
   reference?: string;
 }
 
+/** Two days after a ticket is settled it drops off the board into the archive.
+ *  "Settled" means paid (status 'paid'); the clock runs from the due date, or
+ *  from the creation date when the ticket has no due date. This is derived, not
+ *  stored — recomputed on every render, so a paid ticket archives itself once it
+ *  ages out, and reappears on the board the moment it's dragged out of 'שולם'. */
+export const ARCHIVE_AFTER_DAYS = 2;
+
+// due is a 'DD/MM/YYYY' string (or '-' when unset); parse it to a Date at midnight.
+const parseDueDate = (s: string | undefined): Date | null => {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((s ?? '').trim());
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+export const isArchived = (t: Ticket, now: Date = new Date()): boolean => {
+  if (t.st !== 'paid') return false;
+  // due date first; fall back to the raw ISO creation timestamp when there's none
+  const base = parseDueDate(t.due) ?? (t.createdAtISO ? new Date(t.createdAtISO) : null);
+  if (!base || Number.isNaN(base.getTime())) return false;
+  const cutoff = new Date(base);
+  cutoff.setDate(cutoff.getDate() + ARCHIVE_AFTER_DAYS);
+  return now.getTime() >= cutoff.getTime();
+};
+
 export const COLUMNS: { id: Status; title: string; dot: string; wip?: number }[] = [
   { id: 'todo', title: 'ממתין לטיפול', dot: '#748cab' },
   { id: 'appr', title: 'ממתין לאישור', dot: '#1d2d44' },
