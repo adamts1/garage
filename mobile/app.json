@@ -35,8 +35,7 @@
           "cameraPermission": "כדי לצלם את הרכב ולצרף לכרטיס העבודה, יש לאשר גישה למצלמה.",
           "microphonePermission": false
         }
-      ],
-      "expo-font"
+      ]
     ],
     "scheme": "garage",
     "extra": {
