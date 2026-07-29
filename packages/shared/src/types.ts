@@ -40,6 +40,15 @@ export interface Ticket {
   idNumber?: string;
   km?: string;
   year?: string;
+
+  /** Vehicle details, in transit only — like idNumber, these are NOT columns on
+   *  tickets. They ride along so create_ticket can promote the car into the
+   *  vehicles table (keyed on customer + plate), where the next ticket's
+   *  auto-fill reads them. The ticket keeps its own denormalised `car` string;
+   *  reading a ticket back never repopulates these. See docs/PRODUCTION.md §3.10. */
+  manufacturer?: string;
+  model?: string;
+  vehicleCode?: string;
   createdAt?: string;
   /** raw ISO timestamp - createdAt is already localised, so it can't be sorted or aged */
   createdAtISO?: string;

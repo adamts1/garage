@@ -345,7 +345,16 @@ const worksPayload = (works: TicketWork[]) =>
    temporary key it painted: two advisors submitting at once each get a distinct
    real number, which need not match what either client guessed. */
 export const createTicket = async (t: Ticket): Promise<{ key: string; job: string }> => {
-  const payload = { ...ticketToRow(t), id_number: t.idNumber?.trim() || null };
+  // id_number + the vehicle fields ride along outside ticketToRow: they are not
+  // tickets columns the row maps, but create_ticket reads them to fill the
+  // customer (id_number) and to promote the car into the vehicles table.
+  const payload = {
+    ...ticketToRow(t),
+    id_number: t.idNumber?.trim() || null,
+    manufacturer: t.manufacturer?.trim() || null,
+    model: t.model?.trim() || null,
+    vehicle_code: t.vehicleCode?.trim() || null,
+  };
   const { data, error } = await getClient().rpc('create_ticket', {
     t: payload,
     works: worksPayload(t.works ?? []),

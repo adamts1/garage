@@ -216,6 +216,11 @@ function App() {
       address: [form.address, form.city].filter(Boolean).join(', '),
       km: form.km,
       year: form.year,
+      // in transit to the vehicles table, so the next ticket for this customer
+      // can auto-fill the car; the ticket itself keeps the combined `car` above
+      manufacturer: form.manufacturer,
+      model: form.model,
+      vehicleCode: form.vehicleCode,
       createdAt: new Date().toLocaleDateString('he-IL'),
     };
 
