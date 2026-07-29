@@ -54,6 +54,8 @@ export default function RootLayout() {
               options={{ title: 'עבודות', headerLeft: () => <MenuButton onPress={() => setMenuOpen(true)} /> }}
             />
             <Stack.Screen name="ticket/[key]" options={{ title: 'עריכת קריאה' }} />
+            {/* new.tsx renders its own header, so the native one is hidden there */}
+            <Stack.Screen name="new" options={{ headerShown: false }} />
           </Stack>
           <UserSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
         </TicketsProvider>

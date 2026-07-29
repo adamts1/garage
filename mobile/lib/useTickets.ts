@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isConfigured } from './supabase';
-import { deleteTicket, listTickets, subscribeToTickets, updateTicket } from '@garage/shared';
+import { createTicket, deleteTicket, listTickets, subscribeToTickets, updateTicket } from '@garage/shared';
 import type { Ticket } from '@garage/shared';
 
 export function useTickets() {
@@ -67,6 +67,26 @@ export function useTickets() {
     }
   }, [settleWrite]);
 
+  /* Create a ticket. Unlike saveTicket, the row is NOT painted first: the server
+     assigns the real GAR-/W- numbers (createTicket returns them), and a made-up
+     key painted in the meantime would either collide or flash and get replaced.
+     So we write, then resync to pull the row back with its true key. Returns the
+     assigned key so the caller can open the fresh ticket. */
+  const addTicket = useCallback(async (draft: Ticket): Promise<string> => {
+    setError(null);
+    writing.current++;
+    try {
+      const { key } = await createTicket(draft);
+      await refetch().catch(() => {});   // bring the server row (real key, job, works) into the list
+      return key;
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+      throw e;
+    } finally {
+      await settleWrite();
+    }
+  }, [refetch, settleWrite]);
+
   const removeTicket = useCallback(async (key: string) => {
     setError(null);
     setTickets((prev) => prev.filter((t) => t.k !== key));
@@ -82,5 +102,5 @@ export function useTickets() {
     }
   }, [settleWrite]);
 
-  return { tickets, loading, error, refetch, saveTicket, removeTicket };
+  return { tickets, loading, error, refetch, saveTicket, addTicket, removeTicket };
 }
