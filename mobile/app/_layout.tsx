@@ -9,11 +9,15 @@ import { UserSheet } from '../components/UserSheet';
 import { TicketsProvider } from '../lib/TicketsProvider';
 import { supabase } from '../lib/supabase';
 import { C } from '../lib/theme';
+import { applyHeebo, useHeebo } from '../lib/fonts';
 
 // @garage/shared holds no client of its own. The native build hands it this one,
 // which carries the AsyncStorage session config the browser build does not need.
 // Module scope, so it runs on import — before any screen renders or fetches.
 setSupabaseClient(supabase);
+
+// Route all Text/TextInput through Heebo, once, before anything renders.
+applyHeebo();
 
 /* The account menu opener — a hamburger on the header's left. Sign-out and the
    signed-in identity live in the sheet it opens, not in the header itself. */
@@ -30,7 +34,12 @@ function MenuButton({ onPress }: { onPress: () => void }) {
 }
 
 export default function RootLayout() {
+  const fontsLoaded = useHeebo();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Hold on the brand navy until Heebo is ready, so text doesn't flash in the
+  // system font and reflow. Bundled assets, so this is a blink after first launch.
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.ink }} />;
 
   return (
     <SafeAreaProvider>
