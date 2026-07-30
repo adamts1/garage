@@ -12,6 +12,7 @@ import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
 } from './icons';
+import { printInvoice, printTicket, warnIfBlocked } from './lib/print';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -416,6 +417,12 @@ export default function TicketPage({
                     <IconDoc /> צפה בחשבונית (PDF)
                   </a>
                 )}
+                {/* A readable copy from the stored row — reachable even when the
+                    provider PDF is missing, which is the case for every invoice
+                    issued before pdfUrl was captured. */}
+                <button className="btn ghost block" onClick={() => warnIfBlocked(printInvoice(invoice))}>
+                  <IconPrint /> הדפס עותק חשבונית
+                </button>
                 {invoice.status === 'issued' && (
                   <button className="btn ghost block" onClick={doCancel} disabled={busy}>
                     בטל חשבונית (הפקת זיכוי)
@@ -444,7 +451,16 @@ export default function TicketPage({
                 </button>
               )
             )}
-            <button className="btn ghost block" onClick={() => window.print()}>
+            {/* Not window.print(): that printed the whole screen — sidebar, tabs
+                and buttons included. This opens the ticket as a document. */}
+            <button
+              className="btn ghost block"
+              onClick={() => warnIfBlocked(printTicket(
+                ticket,
+                { labour, items, vat, total },
+                { workerName: workerChip(workerChips, ticket.who).n, photoCount: photos.length },
+              ))}
+            >
               <IconPrint /> הדפס כרטיס עבודה
             </button>
           </section>

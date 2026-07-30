@@ -4,6 +4,7 @@ import {
   subscribeToExpenses, syncExpense,
   type Supplier, type SupplierExpense, type ExpenseSyncStatus,
 } from '@garage/shared';
+import { esc, printDocument, row, warnIfBlocked } from './lib/print';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('he-IL');
@@ -13,41 +14,35 @@ const SYNC_LABEL: Record<ExpenseSyncStatus, string> = { pending: 'ממתין ל�
 
 /* Print a supplier-expense record from our own stored data. iCount issues no
    printable document for an expense (it is not a document it creates — the
-   printable original is the supplier's own invoice), so we format the record. */
-const printExpense = (e: SupplierExpense) => {
-  const w = window.open('', '_blank', 'width=720,height=900');
-  if (!w) return;
-  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
-  const row = (label: string, val: string) => `<tr><th>${label}</th><td>${esc(val)}</td></tr>`;
-  w.document.write(`<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>הוצאת ספק ${esc(e.reference ?? '')}</title>
-    <style>
-      body{font-family:Arial,Helvetica,sans-serif;padding:36px;color:#111}
-      h1{font-size:20px;margin:0 0 4px} .sub{color:#666;font-size:13px;margin-bottom:24px}
-      table{width:100%;border-collapse:collapse}
-      th,td{text-align:right;padding:9px 6px;border-bottom:1px solid #eee;font-size:14px}
-      th{width:190px;color:#555;font-weight:600}
-      .grand th,.grand td{font-size:18px;font-weight:800;border-top:2px solid #333}
-      button{margin-top:28px;padding:9px 18px;font-size:14px;cursor:pointer}
-      @media print{button{display:none}}
-    </style></head><body>
-    <h1>רישום הוצאת ספק</h1>
-    <div class="sub">הופק ${new Date().toLocaleDateString('he-IL')}</div>
-    <table>
-      ${row('ספק', e.supplierName ?? '-')}
+   printable original is the supplier's own invoice), so we format the record.
+
+   The window, stylesheet and print button come from lib/print, which grew out
+   of this function; what stays here is only which fields an expense shows. */
+const printExpense = (e: SupplierExpense) => warnIfBlocked(printDocument({
+  title: `הוצאת ספק ${e.reference ?? ''}`,
+  body: `
+    <div class="head">
+      <div>
+        <h1>רישום הוצאת ספק</h1>
+        <div class="sub">${esc(e.supplierName ?? '')}</div>
+      </div>
+      <div class="who"><b>מוסך אי-תן</b><br>הופק ${new Date().toLocaleDateString('he-IL')}</div>
+    </div>
+    <table class="kv">
+      ${row('ספק', e.supplierName)}
       ${row('תאריך', fmt(e.date))}
-      ${row('מספר מסמך הספק', e.reference ?? '-')}
-      ${row('קטגוריה', e.category ?? '-')}
-      ${row('תיאור', e.description ?? '-')}
-      ${row('סכום לפני מע״מ', shekel(e.subtotal))}
-      ${row('מע״מ', shekel(e.vat))}
-      <tr class="grand"><th>סה״כ</th><td>${esc(shekel(e.total))}</td></tr>
+      ${row('מספר מסמך הספק', e.reference)}
+      ${row('קטגוריה', e.category)}
+      ${row('תיאור', e.description)}
       ${row('תשלום', e.paid ? 'שולם' : 'טרם שולם')}
       ${e.providerExpenseId ? row('אסמכתא iCount', '#' + e.providerExpenseId) : ''}
     </table>
-    <button onclick="window.print()">הדפס</button>
-    </body></html>`);
-  w.document.close();
-};
+    <table class="totals">
+      ${row('סכום לפני מע״מ', shekel(e.subtotal))}
+      ${row('מע״מ', shekel(e.vat))}
+      <tr class="grand"><th>סה״כ</th><td>${esc(shekel(e.total))}</td></tr>
+    </table>`,
+}));
 
 type Draft = {
   supplierId: string; date: string; description: string; category: string;

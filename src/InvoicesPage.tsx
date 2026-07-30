@@ -3,6 +3,7 @@ import { listInvoices, subscribeToInvoices, type Invoice } from '@garage/shared'
 import {
   IconCar, IconCard, IconCheck, IconCustomers, IconDoc, IconPrint, IconWrench,
 } from './icons';
+import { printInvoice, warnIfBlocked } from './lib/print';
 
 const shekel = (n: number) =>
   '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -75,7 +76,7 @@ export default function InvoicesPage({ onOpenTicket }: Props) {
       <div className="panel-header">
         <div>
           <h2>חשבוניות</h2>
-          <p className="inv-sub">מסמכי מס שהופקו — חשבוניות מס-קבלה וזיכויים</p>
+          <p className="inv-sub">מסמכי מס שהופקו - חשבוניות מס - קבלה וזיכויים</p>
         </div>
       </div>
 
@@ -242,9 +243,15 @@ export default function InvoicesPage({ onOpenTicket }: Props) {
                 <IconWrench /> פתח כרטיס עבודה #{current.ticketKey.split('-')[1]}
               </button>
             )}
+            {/* The stored row, laid out as a document. Printing the page itself
+                gave you the sidebar, the KPI cards and the filter bar around a
+                table — and nothing at all when no provider PDF existed. */}
+            <button className="btn ghost" onClick={() => warnIfBlocked(printInvoice(current))}>
+              <IconPrint /> הדפס עותק
+            </button>
             {current.pdfUrl && (
               <a className="btn ghost" href={current.pdfUrl} target="_blank" rel="noreferrer">
-                <IconPrint /> צפה / הדפס (PDF)
+                <IconDoc /> המסמך הרשמי (PDF)
               </a>
             )}
           </div>

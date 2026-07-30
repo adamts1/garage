@@ -2632,6 +2632,17 @@ button.status-pill, button.inv-pill { cursor: pointer; border: 0; font: inherit;
   justify-content: flex-end;
 }
 
+/* items page: search bar above the table, one column per field */
+.items-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.items-filters .jb-search { flex: 1; }
+.items-table .row-actions { justify-content: flex-start; }
+
 .btn.sm {
   padding: 5px 12px;
   font-size: 12px;
