@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { setSupabaseClient } from './client';
-import { resolveAuth, SIGNED_OUT } from './auth';
+import { garageName, getCurrentGarage, resolveAuth, setCurrentGarage, SIGNED_OUT } from './auth';
 
 type RpcResult = { data: unknown; error: unknown };
 
@@ -98,5 +98,62 @@ describe('resolveAuth', () => {
     const auth = await resolveAuth(session);
     expect(auth.status).toBe('no-garage');
     expect(auth.error).toBeNull();
+  });
+});
+
+/* The name reaches a customer — on the WhatsApp quote, the printed work order,
+   the invoice copy. Showing the wrong one is showing a different business's
+   name on a document about someone's car, so what is pinned here is that it
+   only ever comes from the resolved session. */
+describe('the current garage name', () => {
+  beforeEach(() => {
+    stubClient({ data: [], error: null });
+    setCurrentGarage(null);
+  });
+
+  it('is the garage of the signed-in session', async () => {
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+
+    await resolveAuth(session);
+    expect(getCurrentGarage()).toEqual({ id: 'g1', name: 'מוסך הרצל' });
+    expect(garageName()).toBe('מוסך הרצל');
+  });
+
+  it('is cleared on sign-out, so the next user never sees the previous garage', async () => {
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+    await resolveAuth(session);
+
+    await resolveAuth(null);
+    expect(getCurrentGarage()).toBeNull();
+  });
+
+  it('is cleared when membership cannot be read', async () => {
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+    await resolveAuth(session);
+
+    stubClient({ data: null, error: { message: 'network unreachable' } });
+    await resolveAuth(session);
+    expect(getCurrentGarage()).toBeNull();
+  });
+
+  it('falls back to the generic word rather than to another garage', () => {
+    setCurrentGarage(null);
+    expect(garageName()).toBe('מוסך');
+    // A row whose name was saved blank must not print as an empty header.
+    setCurrentGarage({ id: 'g1', name: '   ' });
+    expect(garageName()).toBe('מוסך');
+  });
+
+  it('takes the first membership when a user belongs to more than one', async () => {
+    stubClient({
+      data: [
+        { garage_id: 'g1', garage_name: 'מוסך א' },
+        { garage_id: 'g2', garage_name: 'מוסך ב' },
+      ],
+      error: null,
+    });
+
+    await resolveAuth(session);
+    expect(garageName()).toBe('מוסך א');
   });
 });

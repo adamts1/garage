@@ -20,7 +20,7 @@ import {
 } from '@garage/shared';
 import {
   COLUMNS, PRIORITIES, VAT,
-  assignableWorkers, listWorkers, workTotal, worksSummary,
+  assignableWorkers, garageName, listWorkers, workTotal, worksSummary,
 } from '@garage/shared';
 import type { Priority, Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { C, s } from '../lib/theme';
@@ -178,7 +178,7 @@ export default function TicketEditor({ ticketKey, onClose, embedded = false }: {
         draft.paid ? `שולם ${draft.payMethod ? `ב${draft.payMethod} ` : ''}- תודה!` : 'התשלום יתבצע בעת האיסוף.',
         ...photoLines(),
         '',
-        'מוסך אי-תן · נשמח לראותך',
+        `${garageName()} · נשמח לראותך`,
       ].join('\n');
     }
     return [
@@ -195,7 +195,7 @@ export default function TicketEditor({ ticketKey, onClose, embedded = false }: {
       ...photoLines(),
       '',
       'נא אשרו לביצוע. תודה,',
-      'מוסך אי-תן',
+      garageName(),
     ].join('\n');
   };
 

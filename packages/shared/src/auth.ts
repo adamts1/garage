@@ -33,6 +33,36 @@ export interface AuthState {
 
 export const currentUser = (s: Session | null): User | null => s?.user ?? null;
 
+/* ---------- the signed-in garage's own name ----------
+
+   Every garage on the system is its own tenant with its own name, given once at
+   onboarding:
+
+     npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
+
+   That name is what the apps must show and what a customer must see — on the
+   sidebar, on the WhatsApp quote, on the printed work order, on the invoice
+   copy. Those all used to read 'מוסך אי-תן', a constant compiled into the
+   bundle, which meant every garage on the system introduced itself as the first
+   one we onboarded.
+
+   A module-level value rather than React context, because the printed documents
+   are built in plain modules and not in components. Same shape as
+   setSupabaseClient in client.ts: set once at the edge, read anywhere.
+
+   resolveAuth below is the only writer, so this cannot drift from the session —
+   it is populated before any screen that could show it renders, and cleared on
+   sign-out so the next user never sees the previous garage's name. */
+let currentGarage: Garage | null = null;
+
+export const setCurrentGarage = (g: Garage | null): void => { currentGarage = g; };
+
+export const getCurrentGarage = (): Garage | null => currentGarage;
+
+/** The garage's display name. Falls back to the generic word rather than to
+ *  some other garage's name — wrong is worse than plain on a customer's quote. */
+export const garageName = (): string => currentGarage?.name?.trim() || 'מוסך';
+
 export const signIn = async (email: string, password: string): Promise<Session> => {
   const { data, error } = await getClient().auth.signInWithPassword({
     email: email.trim(),
@@ -138,9 +168,17 @@ export const SIGNED_OUT: ResolvedAuth = {
    problem that retrying will never fix, and telling a user to try again when
    the answer will not change wastes their afternoon. */
 export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth> => {
-  if (!session) return SIGNED_OUT;
+  if (!session) {
+    setCurrentGarage(null);
+    return SIGNED_OUT;
+  }
   try {
     const garages = await listMyGarages();
+    /* The first membership is the garage the apps present as "this garage".
+       Belonging to two is possible in the schema and no screen offers a
+       switcher yet, so picking [0] is a decision to revisit the day one does —
+       not an assumption that the array is always length 1. */
+    setCurrentGarage(garages[0] ?? null);
     return {
       status: garages.length ? 'in' : 'no-garage',
       session,
@@ -148,6 +186,7 @@ export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth
       error: null,
     };
   } catch (e) {
+    setCurrentGarage(null);
     return {
       status: 'no-garage',
       session,

@@ -8,7 +8,7 @@ import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
 import { isConfigured } from './lib/supabase';
-import { listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
+import { garageName, listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
 import { useTickets } from './lib/useTickets';
 import {
   createItem, createWorkDef, listItems, listWorkDefs, listWorkers, worksSummary,
@@ -136,6 +136,9 @@ function App() {
 
   const { tickets, setTickets, loading, error } = useTickets();   // Supabase-backed, live
   const [tab, setTab] = useState<1 | 2>(1);   // which half of the form is showing
+
+  // Name the browser tab after the garage — several are often open at once.
+  useEffect(() => { document.title = garageName(); }, []);
   const [form, setForm] = useState<TicketForm>(emptyForm);
   const [works, setWorks] = useState<TicketWork[]>([]);
   /* The catalog is this garage's own, loaded from the database. It used to be a
@@ -366,7 +369,9 @@ function App() {
           {expanded && (
             <>
               <div>
-                <div className="brand-name">מערכת מוסך</div>
+                {/* This garage's own name, from onboarding. App renders only
+                    once AuthGate has a membership, so it is always resolved. */}
+                <div className="brand-name">{garageName()}</div>
                 <div className="brand-subtitle">לוח ניהול</div>
               </div>
               <button

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
 import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
-import { COLUMNS, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { COLUMNS, garageName, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
 import {
   listInvoices, subscribeToInvoices, issueInvoice, cancelInvoice, type Invoice,
@@ -53,7 +53,7 @@ const waMessage = (t: Ticket, total: number, photos: TicketPhoto[] = []) => {
     t.paid ? `שולם ב${t.payMethod} - תודה!` : 'התשלום יתבצע בעת האיסוף.',
     ...photoLines(photos),
     '',
-    'מוסך אי-תן · נשמח לראותך',
+    `${garageName()} · נשמח לראותך`,
   ];
   return lines.filter((l) => l !== undefined).join('\n');
 };
