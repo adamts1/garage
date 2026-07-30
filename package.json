@@ -14,7 +14,8 @@
     "db:push": "supabase db push",
     "db:lint": "supabase db lint",
     "test": "vitest run",
-    "onboard": "node --env-file=.env.local scripts/onboard-garage.mjs"
+    "onboard": "node --env-file=.env.local scripts/onboard-garage.mjs",
+    "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs"
   },
   "dependencies": {
     "@garage/shared": "*",

@@ -173,13 +173,32 @@ from different places — the URL usually from `.env.local`, the key exported by
 hand — and the dangerous case is not a key that fails to authenticate but one
 that succeeds against a project you did not mean to write to.
 
-To target production, override the URL for that one command:
+To target production, use `onboard:prod`, which reads `.env.production.local`
+instead of `.env.local`:
+
+```bash
+npm run onboard:prod -- --garage "..." --email ...
+```
+
+Copy `.env.production.local.example` to `.env.production.local` once and fill in
+the production URL and `service_role` key. `.gitignore` matches `.env.*.local`,
+so that file cannot be committed.
+
+Nothing about the two commands differs except which env file they load —
+`onboard` and `onboard:prod` run the same script, so the `service_role` and
+project-match checks above apply to both. The one-off override still works when
+you want a target that has no env file:
 
 ```bash
 SUPABASE_URL=https://fdztfosbohiwskzfvwaj.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<production key> \
   node scripts/onboard-garage.mjs --garage "..." --email ...
 ```
+
+It keeps working because `--env-file` populates `process.env` before the script
+runs, and the script's own `loadEnvFile('.env.local')` does not overwrite names
+that are already set. That is also why `onboard:prod` cannot be silently
+redirected to staging by `.env.local`.
 
 **Why no self-signup.** A user and their membership are written by the same
 command, so "signed in but belongs to no garage" cannot arise. That state is not
