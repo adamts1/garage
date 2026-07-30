@@ -4,9 +4,12 @@
    copy here keeps the two forms visually identical and behaviourally in step. */
 
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import {
-  fromCatalog, listItems, listWorkDefs, VAT, workTotal, worksSummary,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform,
+  Pressable, ScrollView, Text, TextInput, View,
+} from 'react-native';
+import {
+  createItem, createWorkDef, fromCatalog, listItems, listWorkDefs, VAT, workTotal, worksSummary,
   type Item, type PartRow, type TicketWork, type WorkDef,
 } from '@garage/shared';
 import { C, rtl, s } from '../lib/theme';
@@ -138,6 +141,76 @@ export function Sheet({ visible, onClose, title, children }: {
         {children}
       </View>
     </Modal>
+  );
+}
+
+/* ---------------- inventing a work or a part mid-ticket ----------------
+
+   Both pickers can switch from "search the catalog" to "define a new one", the
+   way the web's WorkModal/ItemModal do. The pieces below are what the two create
+   forms share: a tick box, the seeding rule, and the buttons under the form. */
+
+function CheckRow({ value, onChange, label }: {
+  value: boolean; onChange: (v: boolean) => void; label: string;
+}) {
+  return (
+    <Pressable onPress={() => onChange(!value)} style={[s.row, { paddingVertical: 4, gap: 10 }]}>
+      <View style={{
+        width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+        borderColor: value ? C.ok : C.line,
+        backgroundColor: value ? C.ok : 'transparent',
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        {value ? <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text> : null}
+      </View>
+      <Text style={s.body}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/* What was typed into the search box seeds the form: 'EXH-01' is plainly a code,
+   'החלפת מצת' plainly a name. Same rule as the web modals, so a mechanic who
+   uses both doesn't have to relearn it. */
+const seedFromQuery = (q: string) => {
+  const typed = q.trim();
+  const looksLikeCode = /^[A-Za-z0-9\-_]+$/.test(typed);
+  return { code: looksLikeCode ? typed.toUpperCase() : '', name: looksLikeCode ? '' : typed };
+};
+
+function FormActions({ disabled, onBack, onSubmit, submitLabel }: {
+  disabled: boolean; onBack: () => void; onSubmit: () => void; submitLabel: string;
+}) {
+  return (
+    <View style={[s.row, { gap: 10, marginTop: 4 }]}>
+      <Pressable
+        onPress={onSubmit}
+        disabled={disabled}
+        style={{
+          flex: 1, paddingVertical: 15, borderRadius: 12, alignItems: 'center',
+          backgroundColor: C.ink, opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{submitLabel}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onBack}
+        style={{
+          paddingHorizontal: 20, paddingVertical: 15, borderRadius: 12, alignItems: 'center',
+          borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
+        }}
+      >
+        <Text style={{ color: C.ink, fontWeight: '700', fontSize: 15 }}>חזרה לחיפוש</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** The dashed row under a picker's list: nothing matched, so make one. */
+function CreateRow({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[s.card, { borderStyle: 'dashed', borderColor: C.mist }]}>
+      <Text style={[s.h2, { color: C.slate }]}>+ {label}</Text>
+    </Pressable>
   );
 }
 
@@ -284,36 +357,123 @@ export function WorkPicker({ visible, onClose, onPick }: {
   /* This garage's catalog, not a constant compiled into the app. Fetched when the
      sheet first opens, then kept. An empty catalog is a real state — a garage
      onboarded without a starter catalog has none — so it gets its own message;
-     the free-work button below is the way out either way. */
+     defining a work right here is the way out either way. */
   const [defs, setDefs] = useState<WorkDef[] | null>(null);
+  const [q, setQ] = useState('');
+  const [mode, setMode] = useState<'search' | 'create'>('search');
+
+  // the new-work form
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [keep, setKeep] = useState(true);   // also file it in the garage's catalog
 
   useEffect(() => {
     if (visible && !defs) listWorkDefs().then(setDefs).catch(() => setDefs([]));
   }, [visible, defs]);
 
+  // Reopening the sheet starts on the list again, not on a half-typed form.
+  useEffect(() => { if (!visible) { setMode('search'); setQ(''); } }, [visible]);
+
+  const query = q.trim();
+  const shown = (defs ?? []).filter(
+    (d) => !query || d.name.includes(query) || d.code.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  const startCreate = () => {
+    const seed = seedFromQuery(q);
+    setCode(seed.code);
+    setName(seed.name);
+    setPrice('');
+    setKeep(true);
+    setMode('create');
+  };
+
+  /* The work goes onto the ticket immediately and the catalog write follows.
+     Optimistic on purpose: the sheet closes onto the works list, and a work that
+     appeared only after a round trip reads as one that was lost. If the catalog
+     write fails the entry is rolled back out of the list — but the work stays on
+     the ticket, which is the copy the mechanic actually needs. Same bargain the
+     web makes in App.tsx's addToCatalog. */
+  const submitCreate = () => {
+    if (!name.trim()) return;
+    const def: WorkDef = {
+      id: `custom-${Date.now()}`,
+      code: (code.trim() || name.trim().slice(0, 6)).toUpperCase(),
+      name: name.trim(),
+      labor: Number(price) || 0,
+      hours: 0,
+      items: [],          // parts are added on the ticket, where the work now lives
+    };
+    onPick(fromCatalog(def, workUid()));
+    setMode('search');
+    if (!keep) return;
+
+    setDefs((prev) => [...(prev ?? []), def]);
+    createWorkDef({ code: def.code, name: def.name, labor: def.labor, hours: def.hours, items: [] })
+      .then((saved) => setDefs((prev) => (prev ?? []).map((d) => (d.id === def.id ? saved : d))))
+      .catch((e: any) => {
+        setDefs((prev) => (prev ?? []).filter((d) => d.id !== def.id));
+        Alert.alert('לא נשמר בקטלוג', `העבודה נוספה לכרטיס אך לא נשמרה בקטלוג המוסך: ${e?.message ?? e}`);
+      });
+  };
+
   return (
-    <Sheet visible={visible} onClose={onClose} title="בחר עבודה מהקטלוג">
-      {defs === null ? (
+    <Sheet visible={visible} onClose={onClose} title={mode === 'create' ? 'עבודה חדשה' : 'בחר עבודה מהקטלוג'}>
+      {mode === 'create' ? (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
+            <View style={[s.card, { gap: 10 }]}>
+              <Field label="שם העבודה *">
+                <TextInput style={s.input} value={name} onChangeText={setName} autoFocus placeholder="לדוגמה: החלפת רפידות" placeholderTextColor={C.dim} />
+              </Field>
+              <View style={s.row}>
+                <Field label="קוד" flex>
+                  <TextInput style={s.input} value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="EXH-01" placeholderTextColor={C.dim} />
+                </Field>
+                <Field label="מחיר עבודה" flex>
+                  <TextInput style={s.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={C.dim} />
+                </Field>
+              </View>
+              <CheckRow value={keep} onChange={setKeep} label="שמור בקטלוג המוסך" />
+              <Text style={[s.dim, { fontSize: 11 }]}>
+                {keep
+                  ? 'העבודה תופיע בקטלוג בפעם הבאה. פריטים מוסיפים לה בכרטיס.'
+                  : 'עבודה חד־פעמית לכרטיס הזה בלבד.'}
+              </Text>
+            </View>
+            <FormActions
+              disabled={!name.trim()}
+              onBack={() => setMode('search')}
+              onSubmit={submitCreate}
+              submitLabel="צור והוסף לכרטיס"
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      ) : defs === null ? (
         <View style={{ padding: 24, alignItems: 'center' }}>
           <ActivityIndicator color={C.ink} />
         </View>
       ) : (
+      <>
+      <View style={{ padding: 12 }}>
+        <TextInput style={s.input} value={q} onChangeText={setQ} placeholder="חיפוש עבודה או קוד" placeholderTextColor={C.dim} />
+      </View>
       <FlatList
-        data={defs}
+        data={shown}
         keyExtractor={(w) => w.id}
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
-          <Text style={[s.dim, { padding: 16, textAlign: 'center' }]}>
-            אין עבודות בקטלוג של המוסך.
+          <Text style={[s.dim, { paddingVertical: 16, textAlign: 'center' }]}>
+            {query ? `לא נמצאה עבודה בשם "${query}"` : 'אין עבודות בקטלוג של המוסך.'}
           </Text>
         }
-        contentContainerStyle={{ gap: 8, padding: 12 }}
+        contentContainerStyle={{ gap: 8, padding: 12, paddingTop: 0 }}
         ListFooterComponent={
-          <Pressable
-            onPress={() => onPick({ uid: workUid(), code: '', name: 'עבודה חופשית', labor: 0, items: [], custom: true })}
-            style={[s.card, { borderStyle: 'dashed' }]}
-          >
-            <Text style={[s.h2, { color: C.slate }]}>+ עבודה חופשית (ללא קטלוג)</Text>
-          </Pressable>
+          <CreateRow
+            label={query ? `צור עבודה חדשה: "${query}"` : 'עבודה חדשה'}
+            onPress={startCreate}
+          />
         }
         renderItem={({ item }) => (
           <Pressable style={s.card} onPress={() => onPick(fromCatalog(item, workUid()))}>
@@ -327,6 +487,7 @@ export function WorkPicker({ visible, onClose, onPick }: {
           </Pressable>
         )}
       />
+      </>
       )}
     </Sheet>
   );
@@ -337,15 +498,92 @@ export function PartPicker({ workUid: forWork, onClose, onPick }: {
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [q, setQ] = useState('');
+  const [mode, setMode] = useState<'search' | 'create'>('search');
+
+  // the new-part form
+  const [sku, setSku] = useState('');
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [keep, setKeep] = useState(true);   // also file it in the items table
 
   // The parts list comes from the items table, so prices and stock are the real ones.
   useEffect(() => {
     if (forWork && !items) listItems().then(setItems).catch(() => setItems([]));
   }, [forWork, items]);
 
+  useEffect(() => { if (!forWork) { setMode('search'); setQ(''); } }, [forWork]);
+
+  const query = q.trim();
   const shown = (items ?? []).filter(
-    (i) => !q.trim() || i.name.includes(q.trim()) || i.sku.toLowerCase().includes(q.trim().toLowerCase()),
+    (i) => !query || i.name.includes(query) || i.sku.toLowerCase().includes(query.toLowerCase()),
   );
+
+  const startCreate = () => {
+    const seed = seedFromQuery(q);
+    setSku(seed.code);
+    setName(seed.name);
+    setPrice('');
+    setKeep(true);
+    setMode('create');
+  };
+
+  /* Onto the work first, into the items table after — and rolled back out of the
+     list if that write fails, exactly as WorkPicker does with the work catalog.
+     Stock starts at 0: a part invented mid-ticket is one nobody has counted. */
+  const submitCreate = () => {
+    if (!name.trim()) return;
+    const part = {
+      sku: (sku.trim() || name.trim().slice(0, 6)).toUpperCase(),
+      name: name.trim(),
+      price: Number(price) || 0,
+    };
+    onPick({ ...part, qty: 1 });
+    setMode('search');
+    if (!keep) return;
+
+    const temp: Item = { id: `custom-${Date.now()}`, ...part, stock: 0 };
+    setItems((prev) => [...(prev ?? []), temp]);
+    createItem({ sku: part.sku, name: part.name, price: part.price, stock: 0 })
+      .then((saved) => setItems((prev) => (prev ?? []).map((i) => (i.id === temp.id ? saved : i))))
+      .catch((e: any) => {
+        setItems((prev) => (prev ?? []).filter((i) => i.id !== temp.id));
+        Alert.alert('לא נשמר בקטלוג', `הפריט נוסף לעבודה אך לא נשמר בקטלוג הפריטים: ${e?.message ?? e}`);
+      });
+  };
+
+  if (mode === 'create') {
+    return (
+      <Sheet visible={Boolean(forWork)} onClose={onClose} title="פריט חדש">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
+            <View style={[s.card, { gap: 10 }]}>
+              <Field label="שם הפריט *">
+                <TextInput style={s.input} value={name} onChangeText={setName} autoFocus placeholder="לדוגמה: פילטר שמן" placeholderTextColor={C.dim} />
+              </Field>
+              <View style={s.row}>
+                <Field label="מק״ט" flex>
+                  <TextInput style={s.input} value={sku} onChangeText={setSku} autoCapitalize="characters" placeholder="EXH-22" placeholderTextColor={C.dim} />
+                </Field>
+                <Field label="מחיר ליח׳" flex>
+                  <TextInput style={s.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={C.dim} />
+                </Field>
+              </View>
+              <CheckRow value={keep} onChange={setKeep} label="שמור בקטלוג הפריטים" />
+              <Text style={[s.dim, { fontSize: 11 }]}>
+                {keep ? 'הפריט ייכנס לקטלוג עם מלאי 0.' : 'פריט חד־פעמי לעבודה הזו בלבד.'}
+              </Text>
+            </View>
+            <FormActions
+              disabled={!name.trim()}
+              onBack={() => setMode('search')}
+              onSubmit={submitCreate}
+              submitLabel="צור והוסף לעבודה"
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet visible={Boolean(forWork)} onClose={onClose} title="הוסף חלק">
@@ -358,8 +596,19 @@ export function PartPicker({ workUid: forWork, onClose, onPick }: {
         <FlatList
           data={shown}
           keyExtractor={(i) => i.id}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: 8, padding: 12, paddingTop: 0 }}
-          ListEmptyComponent={<Text style={[s.dim, { textAlign: 'center' }]}>לא נמצאו חלקים</Text>}
+          ListEmptyComponent={
+            <Text style={[s.dim, { textAlign: 'center' }]}>
+              {query ? `לא נמצא חלק בשם "${query}"` : 'לא נמצאו חלקים'}
+            </Text>
+          }
+          ListFooterComponent={
+            <CreateRow
+              label={query ? `צור פריט חדש: "${query}"` : 'פריט חדש'}
+              onPress={startCreate}
+            />
+          }
           renderItem={({ item }) => (
             <Pressable
               style={s.card}

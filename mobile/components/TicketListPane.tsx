@@ -10,9 +10,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
-import { COLUMNS } from '@garage/shared';
+import { ARCHIVE_AFTER_DAYS, COLUMNS, isArchived } from '@garage/shared';
 import type { Status, Ticket } from '@garage/shared';
 import { C, rtl, s } from '../lib/theme';
+
+/** 'archive' is a view, not a status — the board's chips only cover live work. */
+type Filter = Status | 'all' | 'archive';
 
 export default function TicketListPane({ onSelect, onNew, selectedKey }: {
   onSelect: (key: string) => void;
@@ -24,18 +27,33 @@ export default function TicketListPane({ onSelect, onNew, selectedKey }: {
   const { tickets, error, refetch } = useTicketsStore();
 
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<Status | 'all'>('all');
+  const [status, setStatus] = useState<Filter>('all');
   const [refreshing, setRefreshing] = useState(false);
+
+  /* Paid tickets that have aged past the cutoff leave the list, the way they leave
+     the web board (App.tsx) — same isArchived, so the two products agree on what
+     is still open work. Derived on every render, not stored: a ticket archives
+     itself as it ages and comes straight back if it's moved out of 'שולם'.
+     The archive is not lost, only behind its own chip. */
+  const { active, archived } = useMemo(() => {
+    const now = new Date();
+    return {
+      active: tickets.filter((t) => !isArchived(t, now)),
+      archived: tickets.filter((t) => isArchived(t, now)),
+    };
+  }, [tickets]);
+
+  const pool = status === 'archive' ? archived : active;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return tickets.filter((t) => {
-      if (status !== 'all' && t.st !== status) return false;
+    return pool.filter((t) => {
+      if (status !== 'all' && status !== 'archive' && t.st !== status) return false;
       if (!q) return true;
       return [t.k, t.title, t.plate, t.car, t.customer]
         .some((f) => (f ?? '').toLowerCase().includes(q));
     });
-  }, [tickets, query, status]);
+  }, [pool, query, status]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -68,9 +86,9 @@ export default function TicketListPane({ onSelect, onNew, selectedKey }: {
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, flexDirection: 'row-reverse' }}>
-          <Chip label={`הכול (${tickets.length})`} active={status === 'all'} onPress={() => setStatus('all')} />
+          <Chip label={`הכול (${active.length})`} active={status === 'all'} onPress={() => setStatus('all')} />
           {COLUMNS.map((col) => {
-            const n = tickets.filter((t) => t.st === col.id).length;
+            const n = active.filter((t) => t.st === col.id).length;
             return (
               <Chip
                 key={col.id}
@@ -81,8 +99,20 @@ export default function TicketListPane({ onSelect, onNew, selectedKey }: {
               />
             );
           })}
+          <Chip
+            label={`ארכיון (${archived.length})`}
+            dot={C.mist}
+            active={status === 'archive'}
+            onPress={() => setStatus('archive')}
+          />
         </ScrollView>
       </View>
+
+      {status === 'archive' ? (
+        <Text style={[s.dim, { textAlign: 'center', paddingTop: 10, paddingHorizontal: 12 }]}>
+          כרטיסים ששולמו, {ARCHIVE_AFTER_DAYS} ימים לאחר תאריך היעד
+        </Text>
+      ) : null}
 
       {error ? (
         <View style={{ backgroundColor: '#fdeceb', padding: 10 }}>
@@ -97,7 +127,9 @@ export default function TicketListPane({ onSelect, onNew, selectedKey }: {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.ink} />}
         ListEmptyComponent={
           <Text style={[s.dim, { textAlign: 'center', marginTop: 40 }]}>
-            {tickets.length ? 'אין קריאות שתואמות את הסינון' : 'אין קריאות'}
+            {status === 'archive'
+              ? 'אין כרטיסים בארכיון'
+              : tickets.length ? 'אין קריאות שתואמות את הסינון' : 'אין קריאות'}
           </Text>
         }
         renderItem={({ item }) => (
