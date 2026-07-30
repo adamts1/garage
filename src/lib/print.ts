@@ -10,7 +10,7 @@
    version of this inline and now uses it too. */
 
 import {
-  COLUMNS, PRIORITIES, VAT, partsTotal,
+  COLUMNS, PRIORITIES, VAT, garageName, partsTotal,
   type Invoice, type Ticket,
 } from '@garage/shared';
 
@@ -143,7 +143,7 @@ export const printTicket = (
         <div class="sub">${esc(t.title || '')}</div>
       </div>
       <div class="who">
-        <b>מוסך אי-תן</b><br>
+        <b>${esc(garageName())}</b><br>
         ${esc(printedOn())}<br>
         מספר עבודה ${esc(val(t.job))}
       </div>
@@ -250,7 +250,7 @@ export const printInvoice = (inv: Invoice): boolean => {
         <div class="sub">עותק להדפסה${inv.status === 'cancelled' ? ' · המסמך בוטל' : ''}</div>
       </div>
       <div class="who">
-        <b>מוסך אי-תן</b><br>
+        <b>${esc(garageName())}</b><br>
         ${esc(printedOn())}
       </div>
     </div>

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { Invoice, Ticket } from '@garage/shared';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setCurrentGarage, type Invoice, type Ticket } from '@garage/shared';
 import { printInvoice, printTicket } from './print';
 
 /* These documents go to a customer, so what matters is that every figure the
@@ -19,6 +19,8 @@ beforeEach(() => {
     }),
   };
 });
+
+afterEach(() => setCurrentGarage(null));
 
 const doc = () => written.join('');
 
@@ -59,6 +61,13 @@ describe('printTicket', () => {
     const html = doc();
     expect(html).not.toContain('<img');
     expect(html).toContain('4 תמונות');
+  });
+
+  it('is headed by the signed-in garage, not a name compiled into the app', () => {
+    setCurrentGarage({ id: 'g1', name: 'מוסך הרצל' });
+    printTicket(ticket, totals);
+    expect(doc()).toContain('מוסך הרצל');
+    expect(doc()).not.toContain('מוסך אי-תן');
   });
 
   it('escapes anything the customer typed', () => {

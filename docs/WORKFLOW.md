@@ -159,6 +159,15 @@ one for handover — worth changing after the first login, since these accounts
 read customer PII. An existing email is left with its password untouched, so
 `--password` cannot be used to reset one; do that from the Supabase dashboard.
 
+> **`--garage` is the name the garage will see and the name its customers will
+> see.** It heads the sidebar after login, names the browser tab, signs the
+> WhatsApp quote and the ready-for-pickup notice, and heads the printed work
+> order and invoice copy. Type it as the business would write it on a sign —
+> there is no separate display-name field, and no screen to edit it later
+> (change it in the `garages` table). Until 2026-07-30 all of those read a
+> constant, so every garage on the system introduced itself as the first one we
+> onboarded.
+
 ### A new garage starts empty
 
 No works, no parts, no workers. It was the reverse until 2026-07-30: every new

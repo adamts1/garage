@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  createExpense, deleteExpense, listExpenses, listSuppliers, setExpensePaid,
+  createExpense, deleteExpense, garageName, listExpenses, listSuppliers, setExpensePaid,
   subscribeToExpenses, syncExpense,
   type Supplier, type SupplierExpense, type ExpenseSyncStatus,
 } from '@garage/shared';
@@ -26,7 +26,7 @@ const printExpense = (e: SupplierExpense) => warnIfBlocked(printDocument({
         <h1>רישום הוצאת ספק</h1>
         <div class="sub">${esc(e.supplierName ?? '')}</div>
       </div>
-      <div class="who"><b>מוסך אי-תן</b><br>הופק ${new Date().toLocaleDateString('he-IL')}</div>
+      <div class="who"><b>${esc(garageName())}</b><br>הופק ${new Date().toLocaleDateString('he-IL')}</div>
     </div>
     <table class="kv">
       ${row('ספק', e.supplierName)}
