@@ -1,0 +1,8 @@
+# Single-page app: every route is served by index.html and resolved by
+# react-router in the browser. Without this, refreshing /invoices or opening a
+# shared /tickets/GAR-12 link asks Netlify for a file that does not exist and
+# gets a 404 — the deep links would work in dev and break in production.
+#
+# Not forced (no !), so real files still win: /privacy.html and the built
+# assets are served as themselves.
+/*  /index.html  200

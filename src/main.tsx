@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import { setSupabaseClient } from '@garage/shared';
 import App from './App';
 import AuthGate from './AuthGate';
@@ -26,11 +27,17 @@ const Fallback = () => (
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary fallback={<Fallback />}>
-      {/* Outside App so no board component — and so no realtime subscription —
-          mounts before there is a session. */}
-      <AuthGate>
-        <App />
-      </AuthGate>
+      {/* The router wraps AuthGate, not just App: a deep link opened by someone
+          signed out must survive the login screen. The URL is untouched while
+          AuthGate holds them, so landing on /tickets/GAR-12 and signing in puts
+          them on that ticket. */}
+      <BrowserRouter>
+        {/* Outside App so no board component — and so no realtime subscription —
+            mounts before there is a session. */}
+        <AuthGate>
+          <App />
+        </AuthGate>
+      </BrowserRouter>
     </ErrorBoundary>
   </React.StrictMode>,
 );
