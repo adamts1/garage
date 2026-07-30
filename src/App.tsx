@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Board from './Board';
 import CustomersPage from './CustomersPage';
 import ItemsPage from './ItemsPage';
@@ -78,27 +79,63 @@ const emptyForm: TicketForm = {
   points: 3,
 };
 
+/* The sidebar and the routing table are the same list. A page that is not here
+   has no way in, which is the point — one place to add a screen. */
 const navItems = [
-  { name: 'לוח בקרה', Icon: IconBoard },
-  { name: 'חשבוניות', Icon: IconDoc },
-  { name: 'הוצאות', Icon: IconCard },
-  { name: 'ספקים', Icon: IconBox },
-  { name: 'לקוחות', Icon: IconCustomers },
-  { name: 'עובדים', Icon: IconWrench },
-  { name: 'פריטים', Icon: IconParts },
-  { name: 'דוחות', Icon: IconReports },
-  { name: 'ארכיון', Icon: IconClock },
+  { name: 'לוח בקרה', path: '/', Icon: IconBoard },
+  { name: 'חשבוניות', path: '/invoices', Icon: IconDoc },
+  { name: 'הוצאות', path: '/expenses', Icon: IconCard },
+  { name: 'ספקים', path: '/suppliers', Icon: IconBox },
+  { name: 'לקוחות', path: '/customers', Icon: IconCustomers },
+  { name: 'עובדים', path: '/workers', Icon: IconWrench },
+  { name: 'פריטים', path: '/items', Icon: IconParts },
+  { name: 'דוחות', path: '/reports', Icon: IconReports },
+  { name: 'ארכיון', path: '/archive', Icon: IconClock },
 ];
+
+/** A ticket lives under the board, so the board stays lit while one is open. */
+const isNavActive = (path: string, pathname: string) =>
+  path === '/' ? pathname === '/' || pathname.startsWith('/tickets') : pathname.startsWith(path);
+
+export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`;
+
 const YEARS = Array.from({ length: 22 }, (_, i) => 2026 - i);
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
+/* The ticket key comes from the URL now, not from state, so this needs its own
+   component to call useParams. Kept at module scope — declared inside App it
+   would be a new component type on every render, and the ticket page would
+   remount (losing its scroll and any half-typed edit) on every keystroke. */
+function TicketRoute({ tickets, ...rest }: {
+  tickets: Ticket[];
+} & Omit<React.ComponentProps<typeof TicketPage>, 'ticket'>) {
+  const { key } = useParams();
+  const ticket = tickets.find((t) => t.k === key);
+
+  /* A key that matches nothing is a real case now that the URL is typeable and
+     shareable — a deleted ticket, or a link from another garage. Say so rather
+     than rendering an empty panel. No loading branch: App renders the routes
+     only once the tickets have arrived. */
+  if (!ticket) {
+    return (
+      <div className="db-error">
+        הכרטיס {key} לא נמצא. <Link to="/">חזרה ללוח</Link>
+      </div>
+    );
+  }
+  return <TicketPage ticket={ticket} {...rest} />;
+}
+
 function App() {
-  const [active, setActive] = useState('לוח בקרה');
+  /* Which screen you are on is the URL, not state. That is what makes a ticket
+     linkable, the browser's Back button work, and a refresh keep your place —
+     all of which the old `active` string could not do. */
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
   const { tickets, setTickets, loading, error } = useTickets();   // Supabase-backed, live
-  const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState<1 | 2>(1);   // which half of the form is showing
-  const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [form, setForm] = useState<TicketForm>(emptyForm);
   const [works, setWorks] = useState<TicketWork[]>([]);
   /* The catalog is this garage's own, loaded from the database. It used to be a
@@ -202,10 +239,10 @@ function App() {
     setForm(emptyForm);
     setWorks([]);
     setVehicleChoices([]);
-    setShowForm(true);
+    navigate('/tickets/new');
   };
 
-  const closeForm = () => { setShowForm(false); setVehicleChoices([]); };
+  const closeForm = () => { setVehicleChoices([]); navigate('/'); };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,8 +295,7 @@ function App() {
     setTickets((prev) => [ticket, ...prev]);
     setWorks([]);
     setForm(emptyForm);
-    closeForm();
-    setActive('לוח בקרה'); // land on the board so you see the new ticket
+    closeForm();   // navigates to the board, so you land on the new ticket's card
   };
 
   const set = <K extends keyof TicketForm>(key: K, value: TicketForm[K]) =>
@@ -345,15 +381,17 @@ function App() {
         </div>
         <nav className="nav-list">
           {navItems.map((item) => (
-            <button
+            /* A real <a href>, not a button: middle-click and "open in new tab"
+               now work, and the browser shows where each item goes. */
+            <Link
               key={item.name}
-              className={item.name === active ? 'nav-item active' : 'nav-item'}
-              onClick={() => { setActive(item.name); setShowForm(false); setOpenTicket(null); }}
+              to={item.path}
+              className={isNavActive(item.path, pathname) ? 'nav-item active' : 'nav-item'}
               title={item.name}
             >
               <span className="nav-icon"><item.Icon /></span>
               {expanded && <span className="nav-label">{item.name}</span>}
-            </button>
+            </Link>
           ))}
         </nav>
         <div className="sidebar-footer">
@@ -376,7 +414,8 @@ function App() {
         </div>
       </aside>
 
-      <main className={`main-content${isConfigured && !loading && !showForm && active === 'לוח בקרה' && !openTicket ? ' board-full' : ''}`}>
+      {/* the board is the only screen that runs edge to edge */}
+      <main className={`main-content${isConfigured && !loading && pathname === '/' ? ' board-full' : ''}`}>
         <section className="panel">
           {error && <div className="db-error">שגיאת Supabase: {error}</div>}
           {/* Dismissible: unlike the ticket error this one is not fatal — the
@@ -392,7 +431,11 @@ function App() {
             <SetupNotice />
           ) : loading ? (
             <div className="db-loading">טוען נתונים מ‑Supabase…</div>
-          ) : showForm ? (
+          ) : (
+            <Routes>
+
+            {/* ---------- new ticket ---------- */}
+            <Route path="/tickets/new" element={
             <form
               className="intake-form"
               onSubmit={onSubmit}
@@ -583,63 +626,62 @@ function App() {
                 </button>
               </div>
             </form>
-          ) : (
-            <>
-              {active === 'לוח בקרה' && (openTicket
-                ? (() => {
-                  const t = tickets.find((x) => x.k === openTicket);
-                  return t ? (
-                    <TicketPage
-                      ticket={t}
-                      setTickets={setTickets}
-                      catalog={catalog}
-                      addToCatalog={addToCatalog}
-                      parts={partsCatalog}
-                      addToParts={addToParts}
-                      workerChips={workerChips}
-                      onBack={() => setOpenTicket(null)}
-                    />
-                  ) : null;
-                })()
-                : (
-                  <Board
-                    tickets={activeTickets}
-                    setTickets={setTickets}
-                    workers={workers}
-                    workerChips={workerChips}
-                    onNewTicket={openForm}
-                    onOpenTicket={setOpenTicket}
-                  />
-                )
-              )}
+            } />
 
-              {active === 'חשבוניות' && (
-                <InvoicesPage
-                  onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
-                />
-              )}
+            {/* ---------- the board, and one ticket ---------- */}
+            <Route path="/" element={
+              <Board
+                tickets={activeTickets}
+                setTickets={setTickets}
+                workers={workers}
+                workerChips={workerChips}
+                onNewTicket={openForm}
+                onOpenTicket={(k) => navigate(ticketPath(k))}
+              />
+            } />
 
-              {active === 'הוצאות' && <ExpensesPage />}
+            <Route path="/tickets/:key" element={
+              <TicketRoute
+                tickets={tickets}
+                setTickets={setTickets}
+                catalog={catalog}
+                addToCatalog={addToCatalog}
+                parts={partsCatalog}
+                addToParts={addToParts}
+                workerChips={workerChips}
+                onBack={() => navigate('/')}
+              />
+            } />
 
-              {active === 'ספקים' && <SuppliersPage />}
+            {/* ---------- the rest of the sidebar ---------- */}
+            <Route path="/invoices" element={
+              <InvoicesPage onOpenTicket={(k) => navigate(ticketPath(k))} />
+            } />
 
-              {active === 'לקוחות' && <CustomersPage />}
+            <Route path="/expenses" element={<ExpensesPage />} />
 
-              {active === 'עובדים' && <WorkersPage />}
+            <Route path="/suppliers" element={<SuppliersPage />} />
 
-              {active === 'פריטים' && <ItemsPage />}
+            <Route path="/customers" element={<CustomersPage />} />
 
-              {active === 'דוחות' && <ReportsPage tickets={tickets} />}
+            <Route path="/workers" element={<WorkersPage />} />
 
-              {active === 'ארכיון' && (
-                <ArchivePage
-                  tickets={archivedTickets}
-                  workerChips={workerChips}
-                  onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
-                />
-              )}
+            <Route path="/items" element={<ItemsPage />} />
 
-            </>
+            <Route path="/reports" element={<ReportsPage tickets={tickets} />} />
+
+            <Route path="/archive" element={
+              <ArchivePage
+                tickets={archivedTickets}
+                workerChips={workerChips}
+                onOpenTicket={(k) => navigate(ticketPath(k))}
+              />
+            } />
+
+            {/* A mistyped or stale URL lands on the board rather than a blank
+                panel. replace, so Back does not bounce off the bad path. */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           )}
         </section>
       </main>

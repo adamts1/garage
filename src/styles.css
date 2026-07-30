@@ -125,6 +125,8 @@ button {
   color: var(--steel);
   font-weight: 700;
   transition: all 0.2s ease;
+  /* the sidebar items are <a> now, for middle-click and open-in-new-tab */
+  text-decoration: none;
 }
 
 .nav-item:hover,
