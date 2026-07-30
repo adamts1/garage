@@ -139,7 +139,17 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
       epic: 'service',
       prio: 'med',
       pts: 3,
-      who: 'dk',
+      /* Nobody, not 'dk'. That code was one of four mechanics hardcoded in
+         shared/types.ts, and it survived here after the workers became each
+         garage's own — so every ticket this form made claimed a person the
+         garage may not employ, and in a garage with no workers yet it is a
+         code that does not exist at all: the (garage_id, assignee) foreign key
+         rejects the insert and the phone cannot open a ticket.
+
+         Unassigned is a real state, which is why assignee is nullable and the
+         key is MATCH SIMPLE. The web create form already sends null; the
+         "אחראי" picker on the ticket editor is where somebody is chosen. */
+      who: null,
       job: `W-${maxJob + 1}`,
       title: works.length ? works.map((w) => w.name).join(' + ') : 'כרטיס חדש',
       plate: form.licensePlate || '-',
