@@ -11,7 +11,14 @@ export interface Ticket {
   epic: keyof typeof EPICS;
   prio: Priority;
   pts: number;
-  who: keyof typeof TEAM;
+  /** A garage_workers.code, or null when nobody is assigned.
+   *
+   *  Was `keyof typeof TEAM` — one of four codes hardcoded in this file. Now a
+   *  free string, because the set of valid codes belongs to the garage and is
+   *  only knowable at runtime. Resolve it through the workers map from
+   *  fetchWorkers(); a code with no row means a worker was deleted, so render
+   *  it as unassigned rather than indexing blindly. */
+  who: string | null;
   job: string;
   title: string;
   plate: string;
@@ -120,9 +127,50 @@ export const TYPES = {
   test: { i: '📋', t: 'טסט' },
 } as const;
 
-export const TEAM = {
-  dk: { n: 'דני כהן', ini: 'דכ', bg: '#1d2d44' },
-  il: { n: 'עידו לוי', ini: 'על', bg: '#3e5c76' },
-  ns: { n: 'נועה שמש', ini: 'נש', bg: '#4f7a5b' },
-  am: { n: 'אבי מזרחי', ini: 'אמ', bg: '#748cab' },
-} as const;
+/* ---------- the team ----------
+
+   TEAM used to live here as four hardcoded people — דני כהן, עידו לוי,
+   נועה שמש, אבי מזרחי — which every garage saw and none employed. Workers are
+   now rows in garage_workers, per garage, so this file can only describe their
+   shape. See 20260730000000_workers_per_garage.sql.
+
+   The display keys stay short (n / ini / bg) because that is what the board,
+   the ticket page and the mobile editor already read. */
+export interface Worker {
+  id: string;
+  /** Stored on tickets.assignee. Unique within the garage, not globally. */
+  code: string;
+  name: string;
+  initials: string;
+  color: string;
+  position: number;
+  /** false means retired: hidden from pickers, still resolves on old tickets. */
+  active: boolean;
+}
+
+export interface WorkerChip {
+  n: string;
+  ini: string;
+  bg: string;
+}
+
+/** Code → chip, for rendering a ticket's assignee. Includes retired workers, so
+ *  a closed ticket keeps showing who did the job. */
+export type WorkerMap = Record<string, WorkerChip>;
+
+export const workerMap = (workers: Worker[]): WorkerMap =>
+  Object.fromEntries(
+    workers.map((w) => [w.code, { n: w.name, ini: w.initials, bg: w.color }]),
+  );
+
+/** What an assignment picker should offer: active workers only, in the garage's
+ *  own order. A retired worker must not be assignable to new work. */
+export const assignableWorkers = (workers: Worker[]): Worker[] =>
+  workers.filter((w) => w.active).sort((a, b) => a.position - b.position);
+
+/** Shown wherever a ticket has no assignee, or an assignee whose worker row is
+ *  gone. Both are genuinely "nobody", and saying so beats an empty chip. */
+export const UNASSIGNED: WorkerChip = { n: 'לא הוקצה', ini: '—', bg: '#8d99ae' };
+
+export const workerChip = (workers: WorkerMap, code: string | null): WorkerChip =>
+  (code ? workers[code] : undefined) ?? UNASSIGNED;

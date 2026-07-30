@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
-import { EPICS, TEAM, type Ticket } from '@garage/shared';
+import { EPICS, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { IconClock } from './icons';
 
 interface ArchivePageProps {
   /** already filtered to archived tickets (paid + aged past the cutoff) */
   tickets: Ticket[];
+  /** Code → chip. Retired workers included — the archive is entirely history,
+   *  so this is the view that most needs them to keep resolving. */
+  workerChips: WorkerMap;
   onOpenTicket: (k: string) => void;
 }
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
-export default function ArchivePage({ tickets, onOpenTicket }: ArchivePageProps) {
+export default function ArchivePage({ tickets, workerChips, onOpenTicket }: ArchivePageProps) {
   const [query, setQuery] = useState('');
 
   const rows = useMemo(() => {
@@ -59,7 +62,7 @@ export default function ArchivePage({ tickets, onOpenTicket }: ArchivePageProps)
             <tbody>
               {rows.map((t) => {
                 const e = EPICS[t.epic];
-                const m = TEAM[t.who];
+                const m = workerChip(workerChips, t.who);
                 return (
                   <tr key={t.k} onClick={() => onOpenTicket(t.k)}>
                     <td className="tbl-key">{t.k}</td>

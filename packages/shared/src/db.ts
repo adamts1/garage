@@ -3,7 +3,7 @@
    maps between that shape and the tickets / works / work_items rows. */
 
 import { getClient } from './client';
-import type { Ticket } from './types';
+import type { Ticket, Worker } from './types';
 import type { PartRow, TicketWork, WorkDef } from './catalog';
 
 /* ---------------- customers ---------------- */
@@ -131,6 +131,82 @@ const rowToWorkDef = (r: any): WorkDef => ({
     })),
 });
 
+/* ---------------- the team ----------------
+
+   Every worker the garage has, retired ones included, in its own display order.
+   Retired rows are deliberately not filtered out here: a ticket closed last year
+   must still resolve to the mechanic who closed it. Callers that offer an
+   assignment use assignableWorkers() to drop them; callers that render an
+   existing ticket use workerMap()/workerChip() and want the full set. */
+export const listWorkers = async (): Promise<Worker[]> => {
+  const { data, error } = await getClient()
+    .from('garage_workers')
+    .select('id, code, name, initials, color, position, active')
+    .order('position');
+  if (error) throw error;
+  return (data ?? []).map((r: any): Worker => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    initials: r.initials,
+    color: r.color,
+    position: r.position,
+    active: r.active,
+  }));
+};
+
+export const createWorker = async (w: Omit<Worker, 'id'>): Promise<Worker> => {
+  const { data, error } = await getClient()
+    .from('garage_workers')
+    // garage_id is left to its current_garage_id() default — the caller never
+    // names its own tenant. See the migration's note on work_defs.
+    .insert({
+      code: w.code,
+      name: w.name,
+      initials: w.initials,
+      color: w.color,
+      position: w.position,
+      active: w.active,
+    })
+    .select('id, code, name, initials, color, position, active')
+    .single();
+  if (error) throw error;
+  return data as Worker;
+};
+
+export const updateWorker = async (id: string, patch: Partial<Omit<Worker, 'id'>>): Promise<void> => {
+  const { error } = await getClient().from('garage_workers').update(patch).eq('id', id);
+  if (error) throw error;
+};
+
+/** Retire, rather than delete. Keeps the name on every ticket they ever had. */
+export const retireWorker = async (id: string): Promise<void> => updateWorker(id, { active: false });
+
+/* Really delete. The foreign key is `on delete set null (assignee)`, so this
+   also unassigns every ticket they ever had — the name stops appearing on work
+   they actually did. retireWorker is almost always what a garage wants; this
+   exists for a row entered by mistake. */
+export const deleteWorker = async (id: string): Promise<void> => {
+  const { error } = await getClient().from('garage_workers').delete().eq('id', id);
+  if (error) throw error;
+};
+
+/** How many tickets name this worker — what a delete would silently unassign. */
+export const countWorkerTickets = async (code: string): Promise<number> => {
+  const { count, error } = await getClient()
+    .from('tickets')
+    .select('key', { count: 'exact', head: true })
+    .eq('assignee', code);
+  if (error) throw error;
+  return count ?? 0;
+};
+
+/* First letters of the first two words: 'דני כהן' -> 'דכ'. Only a starting
+   point for the initials field, which stays editable — two mechanics called
+   דני would otherwise collide on the same chip. */
+export const suggestInitials = (name: string): string =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0] ?? '').join('');
+
 /** The garage's catalog, in its own display order. One round trip. */
 export const listWorkDefs = async (): Promise<WorkDef[]> => {
   const { data, error } = await getClient()
@@ -215,7 +291,8 @@ const rowToTicket = (r: any): Ticket => ({
   epic: r.epic,
   prio: r.priority,
   pts: r.points,
-  who: r.assignee,
+  // Nullable since 20260730000000: unassigned is NULL, not a phantom 'dk'.
+  who: r.assignee ?? null,
   job: r.job ?? '',
   title: r.title,
   plate: r.plate ?? '',
@@ -273,7 +350,9 @@ const ticketToRow = (t: Ticket) => ({
   epic: t.epic,
   priority: t.prio,
   points: t.pts,
-  assignee: t.who,
+  // '' would be a second way to say "nobody" and the foreign key rejects it as
+  // a code, so it collapses to NULL here rather than at the database.
+  assignee: t.who || null,
   title: t.title,
   plate: t.plate,
   car: t.car,
@@ -566,7 +645,10 @@ export const subscribeToTickets = (onChange: () => void) => {
 };
 
 /** Same, for the customers / items / vehicles tables. */
-export const subscribeToTable = (table: 'customers' | 'items' | 'vehicles', onChange: () => void) => {
+export const subscribeToTable = (
+  table: 'customers' | 'items' | 'vehicles' | 'garage_workers',
+  onChange: () => void,
+) => {
   const channel = getClient()
     .channel(`garage-${table}-${++channelSeq}`)
     .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)

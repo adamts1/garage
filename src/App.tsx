@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Board from './Board';
 import CustomersPage from './CustomersPage';
 import ItemsPage from './ItemsPage';
@@ -10,17 +10,18 @@ import { isConfigured } from './lib/supabase';
 import { listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
 import { useTickets } from './lib/useTickets';
 import {
-  createItem, createWorkDef, listItems, listWorkDefs, worksSummary,
+  createItem, createWorkDef, listItems, listWorkDefs, listWorkers, worksSummary,
   type PartDef, type TicketWork, type WorkDef,
 } from '@garage/shared';
 import InvoicesPage from './InvoicesPage';
 import SuppliersPage from './SuppliersPage';
 import ExpensesPage from './ExpensesPage';
 import ArchivePage from './ArchivePage';
-import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports } from './icons';
+import WorkersPage from './WorkersPage';
+import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports, IconWrench } from './icons';
 import {
-  COLUMNS, EPICS, TEAM, TYPES, isArchived,
-  type Priority, type Ticket,
+  COLUMNS, EPICS, TYPES, isArchived, workerMap,
+  type Priority, type Ticket, type Worker,
 } from '@garage/shared';
 
 interface TicketForm {
@@ -40,7 +41,9 @@ interface TicketForm {
   km: string;
   details: string;
   keyReceived: boolean;
-  technician: keyof typeof TEAM;
+  /** A garage_workers.code, or null for unassigned. Was one of four hardcoded
+   *  codes; the garage's own workers are only known at runtime. */
+  technician: string | null;
   targetDate: string;
   priority: Priority;
   epic: keyof typeof EPICS;
@@ -65,7 +68,9 @@ const emptyForm: TicketForm = {
   km: '',
   details: '',
   keyReceived: false,
-  technician: 'dk',
+  // Not 'dk'. A blank form must not pre-assign work to a person, least of all
+  // one this garage may not employ; the picker defaults to nobody.
+  technician: null,
   targetDate: '',
   priority: 'med',
   epic: 'service',
@@ -79,6 +84,7 @@ const navItems = [
   { name: 'הוצאות', Icon: IconCard },
   { name: 'ספקים', Icon: IconBox },
   { name: 'לקוחות', Icon: IconCustomers },
+  { name: 'עובדים', Icon: IconWrench },
   { name: 'פריטים', Icon: IconParts },
   { name: 'דוחות', Icon: IconReports },
   { name: 'ארכיון', Icon: IconClock },
@@ -102,19 +108,42 @@ function App() {
   const [partsCatalog, setPartsCatalog] = useState<PartDef[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
+  /* The garage's own staff, loaded with the catalog for the same reason: both
+     used to be hardcoded constants shared by every garage. Empty is a valid
+     state — a newly onboarded garage has entered nobody yet — so every consumer
+     resolves a code through workerChip() and falls back to "unassigned" rather
+     than indexing into this list. */
+  const [workers, setWorkers] = useState<Worker[]>([]);
+
+  // Retired workers stay in the map on purpose: a closed ticket must keep
+  // showing who did the job, even after they leave.
+  const workerChips = useMemo(() => workerMap(workers), [workers]);
+
   useEffect(() => {
     if (!isConfigured) return;
     let live = true;
-    Promise.all([listWorkDefs(), listItems()])
-      .then(([works, items]) => {
+    Promise.all([listWorkDefs(), listItems(), listWorkers()])
+      .then(([works, items, team]) => {
         if (!live) return;
         setCatalog(works);
         // The parts catalog is the items table — same sku/name/price shape.
         // There is no second list to keep in sync any more.
         setPartsCatalog(items.map((i) => ({ sku: i.sku, name: i.name, price: i.price })));
+        setWorkers(team);
       })
       .catch((e) => live && setCatalogError(e instanceof Error ? e.message : String(e)));
     return () => { live = false; };
+  }, []);
+
+  /* The board's avatars and the table's מכונאי column read from this list, so an
+     edit on the עובדים screen has to reach them. Subscribing rather than passing
+     a callback down also covers the other device: two people are often on the
+     board while a third fixes a name. */
+  useEffect(() => {
+    if (!isConfigured) return;
+    return subscribeToTable('garage_workers', () => {
+      listWorkers().then(setWorkers).catch(() => {});   // a stale chip beats a crash
+    });
   }, []);
 
   /* A work invented in the modal now survives a reload.
@@ -567,6 +596,7 @@ function App() {
                       addToCatalog={addToCatalog}
                       parts={partsCatalog}
                       addToParts={addToParts}
+                      workerChips={workerChips}
                       onBack={() => setOpenTicket(null)}
                     />
                   ) : null;
@@ -575,6 +605,8 @@ function App() {
                   <Board
                     tickets={activeTickets}
                     setTickets={setTickets}
+                    workers={workers}
+                    workerChips={workerChips}
                     onNewTicket={openForm}
                     onOpenTicket={setOpenTicket}
                   />
@@ -593,6 +625,8 @@ function App() {
 
               {active === 'לקוחות' && <CustomersPage />}
 
+              {active === 'עובדים' && <WorkersPage />}
+
               {active === 'פריטים' && <ItemsPage />}
 
               {active === 'דוחות' && <ReportsPage tickets={tickets} />}
@@ -600,6 +634,7 @@ function App() {
               {active === 'ארכיון' && (
                 <ArchivePage
                   tickets={archivedTickets}
+                  workerChips={workerChips}
                   onOpenTicket={(k) => { setOpenTicket(k); setActive('לוח בקרה'); }}
                 />
               )}

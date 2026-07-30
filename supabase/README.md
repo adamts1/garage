@@ -27,6 +27,20 @@ Rules:
 3. **Test on staging before production.** Always.
 4. **Seed data does not belong in a migration.** It goes in `seed.sql`.
 
+## Per-garage reference data
+
+`work_defs` / `work_def_items` (the works catalog), `items` (parts) and
+`garage_workers` (the team) are all per-garage: each row carries a `garage_id`,
+and a tenant policy scopes reads and writes to the caller's garage. They were
+each a hardcoded TypeScript constant once, identical for every garage, which
+meant a price change or a staff change needed a release.
+
+`garage_workers.code` is what `tickets.assignee` stores — unique within the
+garage, deliberately not globally, so two garages can both use `dk`. Retire a
+worker with `active = false` instead of deleting them, so old tickets keep
+resolving to a name. A new garage starts with none of this; see
+docs/WORKFLOW.md §5.
+
 ## Environments
 
 | | Purpose | Seeded |
