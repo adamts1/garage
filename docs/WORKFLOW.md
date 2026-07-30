@@ -154,7 +154,51 @@ npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
 ```
 
 It prints a generated password once and stores it nowhere. Pass `--garage-id` to
-add someone to a garage that already exists.
+add someone to a garage that already exists, or `--password` to set a memorable
+one for handover — worth changing after the first login, since these accounts
+read customer PII. An existing email is left with its password untouched, so
+`--password` cannot be used to reset one; do that from the Supabase dashboard.
+
+### A new garage starts empty
+
+No works, no parts, no workers. It was the reverse until 2026-07-30: every new
+garage was handed a copy of the standard ten works and twenty-four parts, which
+inverted the first day's work into deleting parts it does not stock and
+re-pricing works it does not offer — and a part left behind reads as real stock
+at a price nobody chose.
+
+Pass `--catalog` to seed the standard catalog anyway, which is what demos and
+smoke tests want:
+
+```bash
+npm run onboard -- --catalog --garage "מוסך הדגמה" --email demo@example.com
+```
+
+Workers are never seeded, because there is no plausible guess: the garage enters
+its own staff on the עובדים screen. Until it does, tickets are created
+unassigned, which the board shows as `לא הוקצה`. See §5.1.
+
+### 5.1 Workers are the garage's own
+
+A ticket's `assignee` holds a `garage_workers.code`, unique within the garage,
+and the column is nullable — unassigned is a real state, not a default person.
+
+Until 2026-07-30 the assignable mechanics were four invented people hardcoded in
+`packages/shared/src/types.ts` (`dk` דני כהן, `il` עידו לוי, `ns` נועה שמש,
+`am` אבי מזרחי), and the set was pinned in the database by
+`check (assignee in ('dk','il','ns','am')) default 'dk'`. Every garage saw the
+same four strangers, could not record who actually did the job, and the web
+create form — which never had a technician picker — silently attributed every
+ticket it made to דני כהן.
+
+A foreign key on `(garage_id, assignee)` now makes a worker who does not exist
+unrepresentable, rather than merely filtered out of a dropdown.
+
+Retire a worker with the השבת button (`active = false`) rather than deleting
+them: the picker drops them while every ticket they ever closed still resolves to
+their name. Deleting is allowed and unassigns their tickets
+(`on delete set null (assignee)`), which loses that history — so the confirmation
+says how many tickets it would affect.
 
 `SUPABASE_SERVICE_ROLE_KEY` goes in `.env.local`, which is gitignored. The npm
 script passes `--env-file=.env.local`, because **node does not read .env files

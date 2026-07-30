@@ -52,9 +52,27 @@ try {
   // as they do in CI. The checks below report what is actually missing.
 }
 
+/* Flags are `--name value`, or bare `--name` for a presence-only switch such as
+   --catalog. The earlier version stepped two tokens at a time, which meant a
+   bare flag swallowed the next flag's name as its value and every argument
+   after it was read one position out of phase — so `--catalog --email x@y.com`
+   silently lost the email. Stepping one token at a time and only consuming the
+   next one when it is not itself a flag keeps order irrelevant.
+
+   A value that begins with `--` is therefore not expressible. Nothing here
+   takes one: the fields are a garage name, an email, a UUID and a password, and
+   a password starting with `--` is worth rejecting rather than supporting. */
 const args = new Map();
-for (let i = 2; i < process.argv.length; i += 2) {
-  args.set(process.argv[i].replace(/^--/, ''), process.argv[i + 1]);
+for (let i = 2; i < process.argv.length; i++) {
+  const token = process.argv[i];
+  if (!token.startsWith('--')) continue;
+  const next = process.argv[i + 1];
+  if (next === undefined || next.startsWith('--')) {
+    args.set(token.slice(2), true);
+  } else {
+    args.set(token.slice(2), next);
+    i++;
+  }
 }
 
 // VITE_SUPABASE_URL is a fine fallback: the project URL is already public, it
@@ -62,17 +80,27 @@ for (let i = 2; i < process.argv.length; i += 2) {
 // VITE_ prefix.
 const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL)?.trim();
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-const garageName = args.get('garage');
-const email = args.get('email')?.trim().toLowerCase();
-// Supplying a password is for tests. Leave it out and one is generated, which
-// is what you want for a real garage — it is printed once and not stored.
-const password = args.get('password') ?? randomBytes(9).toString('base64url');
-const existingGarageId = args.get('garage-id');
 
 const die = (msg) => {
   console.error(`\x1b[31m✗\x1b[0m ${msg}`);
   process.exit(1);
 };
+
+/* Reads a flag that must carry a value. A bare `--email` parses as the boolean
+   true, and true would travel on to become a garage name or a password — so it
+   is refused here rather than written to the database. */
+const valued = (name) => {
+  const v = args.get(name);
+  if (v === true) die(`--${name} needs a value`);
+  return v;
+};
+
+const garageName = valued('garage');
+const email = valued('email')?.trim().toLowerCase();
+// Supplying a password is for tests. Leave it out and one is generated, which
+// is what you want for a real garage — it is printed once and not stored.
+const password = valued('password') ?? randomBytes(9).toString('base64url');
+const existingGarageId = valued('garage-id');
 
 if (!url || !serviceKey) die('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
 if (!email) die('Missing --email');
@@ -200,21 +228,25 @@ const { error: memberErr } = await db
 if (memberErr) die(`User and garage exist but could not be linked: ${memberErr.message}`);
 console.log(`\x1b[32m✓\x1b[0m membership linked\n`);
 
-/* ---------- 4. a starter catalog ----------
+/* ---------- 4. a starter catalog, only when asked ----------
 
-   A brand-new garage with no works and no parts cannot write a ticket at all —
-   the picker is empty and there is nothing to attach. So a new garage is handed
-   a copy of the standard catalog to edit, rename and re-price, rather than a
-   blank one to build from scratch on its first morning.
+   Off by default: a garage starts empty and builds its own catalog. The earlier
+   default was to hand every new garage a copy of the standard ten works and
+   twenty-four parts, on the reasoning that an empty picker cannot write a
+   ticket. In practice that inverted the work — a garage's first job became
+   deleting two dozen parts it does not stock and re-pricing works it does not
+   offer, and a part left behind reads as real stock at a price nobody chose.
+
+   Pass --catalog to seed it anyway, which is useful for demos and smoke tests.
 
    A copy, not a reference: from here on the two diverge, which is the entire
    point of making the catalog per-garage. Editing one garage's oil-change price
    must never touch another's.
 
-   Skipped when joining someone to a garage that already exists (--garage-id),
-   since that garage has its own catalog and duplicating it would be a mess of
-   conflicting SKUs. */
-if (!existingGarageId && !args.get('no-catalog')) {
+   Never seeded when joining someone to a garage that already exists
+   (--garage-id), since that garage has its own catalog and duplicating it would
+   be a mess of conflicting SKUs. */
+if (!existingGarageId && args.has('catalog')) {
   const starterPath = join(dirname(fileURLToPath(import.meta.url)), 'starter-catalog.json');
   let starter = null;
   try {
@@ -275,7 +307,7 @@ if (checkErr || !check?.length) die(`Verification failed: ${checkErr?.message ??
 
 console.log('\x1b[32mReady.\x1b[0m Sign in with:');
 console.log(`  email     ${email}`);
-if (!args.get('password')) {
+if (!valued('password')) {
   console.log(`  password  ${password}`);
   console.log('\n  Written down nowhere else. Hand it over, and have them change it.');
 }

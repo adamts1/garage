@@ -2,13 +2,17 @@ import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAct
 import { workTotal } from '@garage/shared';
 import { IconBoard, IconTickets } from './icons';
 import {
-  COLUMNS, EPICS, PRIORITIES, TEAM, TYPES,
-  type Status, type Ticket,
+  COLUMNS, EPICS, PRIORITIES, TYPES, assignableWorkers, workerChip,
+  type Status, type Ticket, type Worker, type WorkerMap,
 } from '@garage/shared';
 
 interface BoardProps {
   tickets: Ticket[];
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** The garage's staff. Only active ones are offered as a filter. */
+  workers: Worker[];
+  /** Code → chip for rendering, retired workers included. */
+  workerChips: WorkerMap;
   onNewTicket: () => void;
   onOpenTicket: (k: string) => void;   // clicking a card opens the full ticket page
 }
@@ -31,7 +35,9 @@ const TABLE_COLS: { key: SortKey; label: string }[] = [
   { key: 'who', label: 'מכונאי' },
   { key: 'amount', label: 'סכום' },
 ];
-export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }: BoardProps) {
+export default function Board({
+  tickets, setTickets, workers, workerChips, onNewTicket, onOpenTicket,
+}: BoardProps) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'board' | 'table'>('board');
   const [sort, setSort] = useState<{ by: SortKey; dir: 1 | -1 }>({ by: 'k', dir: 1 });
@@ -153,7 +159,7 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
     const val = (t: Ticket, key: SortKey) => {
       if (key === 'st') return COLUMNS.findIndex((c) => c.id === t.st);
       if (key === 'prio') return PRIO_RANK[t.prio];
-      if (key === 'who') return TEAM[t.who].n;
+      if (key === 'who') return workerChip(workerChips, t.who).n;
       if (key === 'amount') return t.amount;
       return String(t[key] ?? '');
     };
@@ -215,14 +221,16 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
       <div className="jb-bar">
         <div className="avatar-stack">
           <button className={`avatar-sm all${!who ? ' on' : ''}`} onClick={() => setWho(null)} title="הכל">👥</button>
-          {Object.entries(TEAM).map(([id, m]) => (
+          {/* Active workers only. A retired mechanic still shows on their old
+              tickets, but filtering by one is noise in a live board. */}
+          {assignableWorkers(workers).map((w) => (
             <button
-              key={id}
-              className={`avatar-sm${who === id ? ' on' : ''}`}
-              style={{ background: m.bg }}
-              title={m.n}
-              onClick={() => setWho(who === id ? null : id)}
-            >{m.ini}</button>
+              key={w.code}
+              className={`avatar-sm${who === w.code ? ' on' : ''}`}
+              style={{ background: w.color }}
+              title={w.name}
+              onClick={() => setWho(who === w.code ? null : w.code)}
+            >{w.initials}</button>
           ))}
         </div>
 
@@ -275,7 +283,7 @@ export default function Board({ tickets, setTickets, onNewTicket, onOpenTicket }
             <tbody>
               {rows.map((t) => {
                 const col = COLUMNS.find((c) => c.id === t.st);
-                const m = TEAM[t.who];
+                const m = workerChip(workerChips, t.who);
                 const e = EPICS[t.epic];
                 return (
                   <tr key={t.k} onClick={() => onOpenTicket(t.k)}>

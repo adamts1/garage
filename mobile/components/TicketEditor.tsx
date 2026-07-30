@@ -19,10 +19,10 @@ import {
   type TicketPhoto,
 } from '@garage/shared';
 import {
-  COLUMNS, PRIORITIES, TEAM, VAT,
-  workTotal, worksSummary,
+  COLUMNS, PRIORITIES, VAT,
+  assignableWorkers, listWorkers, workTotal, worksSummary,
 } from '@garage/shared';
-import type { Priority, Status, Ticket, TicketWork } from '@garage/shared';
+import type { Priority, Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { C, s } from '../lib/theme';
 import { Chips, Field, money, SectionHead, waNumber, WorksSection } from './ticketUi';
 
@@ -49,6 +49,19 @@ export default function TicketEditor({ ticketKey, onClose, embedded = false }: {
   const [photosLoading, setPhotosLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [viewer, setViewer] = useState<TicketPhoto | null>(null);   // full-screen photo
+
+  /* The garage's staff, for the "אחראי" picker. Loaded here rather than passed in,
+     matching how ticketUi.tsx pulls the works catalog and the parts list. An empty
+     list is valid — a garage that has entered no workers yet — and leaves only the
+     "unassigned" chip, which is honest rather than broken. */
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listWorkers()
+      .then((w) => { if (alive) setWorkers(w); })
+      .catch(() => { if (alive) setWorkers([]); });   // an empty picker beats a broken tab
+    return () => { alive = false; };
+  }, []);
 
   /* The draft is keyed to the ticket: switching which ticket the pane shows (tablet)
      must drop the previous draft, or the new ticket would open showing the old one's
@@ -364,10 +377,16 @@ export default function TicketEditor({ ticketKey, onClose, embedded = false }: {
                 />
               </Field>
               <Field label="אחראי">
+                {/* Active workers only, plus an explicit way to say nobody.
+                    Without that option an assignment could never be undone —
+                    Chips has no deselect — and unassigned is a real state now. */}
                 <Chips
-                  options={(Object.keys(TEAM) as (keyof typeof TEAM)[]).map((w) => ({ id: w, label: TEAM[w].n, color: TEAM[w].bg }))}
-                  value={draft.who}
-                  onChange={(v) => set('who', v as keyof typeof TEAM)}
+                  options={[
+                    { id: '', label: 'לא הוקצה', color: '#8d99ae' },
+                    ...assignableWorkers(workers).map((w) => ({ id: w.code, label: w.name, color: w.color })),
+                  ]}
+                  value={draft.who ?? ''}
+                  onChange={(v) => set('who', v || null)}
                 />
               </Field>
             </View>

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import WorksStep from './WorksStep';
 import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
-import { COLUMNS, TEAM, type Ticket } from '@garage/shared';
+import { COLUMNS, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
 import {
   listInvoices, subscribeToInvoices, issueInvoice, cancelInvoice, type Invoice,
@@ -64,6 +64,8 @@ interface Props {
   addToCatalog: (def: WorkDef) => void;
   parts: PartDef[];
   addToParts: (part: PartDef) => void;
+  /** Code → chip, retired workers included: this page shows history. */
+  workerChips: WorkerMap;
   onBack: () => void;
 }
 
@@ -80,7 +82,7 @@ const Val = ({ children }: { children?: string | number | null }) =>
     : <>{children}</>;
 
 export default function TicketPage({
-  ticket, setTickets, catalog, addToCatalog, parts, addToParts, onBack,
+  ticket, setTickets, catalog, addToCatalog, parts, addToParts, workerChips, onBack,
 }: Props) {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
@@ -205,7 +207,7 @@ export default function TicketPage({
               <span className="tp-sep">·</span>
               <span>יעד: <Val>{ticket.due}</Val></span>
               <span className="tp-sep">·</span>
-              <span>עובד: {TEAM[ticket.who].n}</span>
+              <span>עובד: {workerChip(workerChips, ticket.who).n}</span>
             </div>
           </div>
 
@@ -317,13 +319,13 @@ export default function TicketPage({
               <div className="log">
                 <div className="log-row">
                   <div className="log-when">{ticket.createdAt ?? '-'}</div>
-                  <div className="log-who">{TEAM[ticket.who].n}</div>
+                  <div className="log-who">{workerChip(workerChips, ticket.who).n}</div>
                   <div className="log-what">כרטיס נפתח</div>
                 </div>
                 {works.length > 0 && (
                   <div className="log-row">
                     <div className="log-when">-</div>
-                    <div className="log-who">{TEAM[ticket.who].n}</div>
+                    <div className="log-who">{workerChip(workerChips, ticket.who).n}</div>
                     <div className="log-what">{works.length} עבודות נוספו לכרטיס</div>
                   </div>
                 )}
