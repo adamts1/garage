@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } fr
 import Board from './Board';
 import { CustomersPage } from './pages/Customers';
 import { ItemsPage } from './pages/Items';
-import ReportsPage from './ReportsPage';
+import { ReportsPage } from './pages/Reports';
 import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
 import WorksStep from './WorksStep';
@@ -17,7 +17,7 @@ import {
 import InvoicesPage from './InvoicesPage';
 import { SuppliersPage } from './pages/Suppliers';
 import ExpensesPage from './ExpensesPage';
-import ArchivePage from './ArchivePage';
+import { ArchivePage } from './pages/Archive';
 import { WorkersPage } from './pages/Workers';
 import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports, IconWrench } from './icons';
 import {

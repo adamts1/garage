@@ -25,6 +25,14 @@ export interface TableProps<Row> {
   /** A whole extra row under the body: totals, "12 of 340". */
   footer?: ReactNode;
   className?: string;
+
+  /* ---- controlled sorting ----
+     Passing `onToggleSort` hands the sort to the caller: `rows` is then taken
+     as already sorted and `sort` only drives the header arrows. Paginated
+     tables need this — sorting has to happen across the whole set before it is
+     sliced, or each page sorts only itself. */
+  sort?: SortState | null;
+  onToggleSort?: (key: string) => void;
 }
 
 export default function Table<Row>({
@@ -38,9 +46,16 @@ export default function Table<Row>({
   defaultSort = null,
   footer,
   className,
+  sort: sortProp,
+  onToggleSort,
 }: TableProps<Row>) {
   const { t } = useTranslation();
-  const { sorted, sort, toggleSort } = useTable({ rows, columns, defaultSort });
+  const internal = useTable({ rows, columns, defaultSort });
+
+  const controlled = onToggleSort !== undefined;
+  const sorted = controlled ? rows : internal.sorted;
+  const sort = controlled ? (sortProp ?? null) : internal.sort;
+  const toggleSort = controlled ? onToggleSort : internal.toggleSort;
 
   return (
     <div className={[styles.wrap, className].filter(Boolean).join(' ')}>
