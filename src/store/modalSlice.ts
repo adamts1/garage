@@ -3,8 +3,20 @@ import { createSlice, nanoid, type PayloadAction } from '@reduxjs/toolkit';
 /** Props are held in the store, so they must survive being serialised — no
  *  callbacks, no class instances, no React elements. A modal that needs to hand
  *  an answer back does it the way `useConfirm` does: an id in the props and a
- *  resolver held outside the store. */
-export type ModalProps = Record<string, string | number | boolean | null | undefined>;
+ *  resolver held outside the store.
+ *
+ *  One level of nesting is allowed, for i18n interpolation values. Still plain
+ *  JSON, so Redux's serialisability check is satisfied and the devtools can
+ *  show it. */
+export type ModalPropValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Record<string, string | number>;
+
+export type ModalProps = Record<string, ModalPropValue>;
 
 export interface OpenModal {
   id: string;

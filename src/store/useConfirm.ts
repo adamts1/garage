@@ -6,11 +6,14 @@ import { modalOpened } from './modalSlice';
 export interface ConfirmRequest {
   /** i18n key for the heading. */
   titleKey?: string;
-  /** i18n key for the body. */
+  /** i18n key for the body. Pick the key that fits the case rather than
+   *  assembling a sentence from fragments — "delete X" and "delete X, and 34
+   *  tickets lose their owner" are different questions, and a translator needs
+   *  to see each one whole. */
   bodyKey: string;
-  /** Interpolated into the body — a name, a count. */
-  name?: string;
-  /** Colours the primary button as destructive. */
+  /** Interpolated into the body: a name, a count. */
+  values?: Record<string, string | number>;
+  /** Colours the confirming button as destructive, and starts focus on Cancel. */
   danger?: boolean;
 }
 
@@ -52,7 +55,7 @@ export function useConfirm() {
               confirmId,
               titleKey: request.titleKey ?? 'confirm.title',
               bodyKey: request.bodyKey,
-              name: request.name ?? null,
+              values: request.values ?? {},
               danger: request.danger ?? false,
             },
           }),

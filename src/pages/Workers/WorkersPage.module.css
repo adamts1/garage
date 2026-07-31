@@ -1,0 +1,44 @@
+.person {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* The same chip the board draws, so the choice made here is recognisable
+   there. */
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.code {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.active {
+  font-weight: 700;
+}
+
+.retired {
+  color: #a5544b;
+  font-weight: 700;
+}

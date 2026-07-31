@@ -2,8 +2,10 @@ import type { Supplier } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
+import { CrudForm } from '../../components/CrudForm';
 import { TextField } from '../../components/Field';
-import { Table, type Column } from '../../components/Table';
+import { PageHeader } from '../../components/PageHeader';
+import { CellInput, RowActions, Table, type Column } from '../../components/Table';
 import styles from './SuppliersPage.module.css';
 import { blankSupplier, toDraft, useSuppliers, type SupplierDraft } from './useSuppliers';
 
@@ -16,11 +18,11 @@ export default function SuppliersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<SupplierDraft>(blankSupplier);
 
-  const setDraftField = (key: keyof SupplierDraft) => (e: { target: { value: string } }) =>
-    setDraft((prev) => ({ ...prev, [key]: e.target.value }));
-
-  const setEditField = (key: keyof SupplierDraft) => (e: { target: { value: string } }) =>
-    setEdit((prev) => ({ ...prev, [key]: e.target.value }));
+  const draftField = (key: keyof SupplierDraft) => ({
+    value: draft[key],
+    onChange: (e: { target: { value: string } }) =>
+      setDraft((prev) => ({ ...prev, [key]: e.target.value })),
+  });
 
   const submitNew = async () => {
     if (await create(draft)) {
@@ -33,25 +35,21 @@ export default function SuppliersPage() {
     if (await update(id, edit)) setEditingId(null);
   };
 
-  /* An editable cell and a read-only one, chosen per row. Written once here
-     rather than as two near-identical <tr> branches, which is what the old page
-     did and why the two drifted apart by two columns. */
-  const cell = (
-    field: keyof SupplierDraft,
-    render: (s: Supplier) => React.ReactNode,
-    inputMode?: 'numeric',
-  ) =>
+  /* One definition per column covering both states. The old page wrote the
+     editing row and the reading row as two sibling <tr> branches, which is how
+     they drifted: the edit row had lost a column. */
+  const cell =
+    (field: keyof SupplierDraft, read: (s: Supplier) => React.ReactNode, inputMode?: 'numeric') =>
     (s: Supplier) =>
       editingId === s.id ? (
-        <input
-          className={styles.cellInput}
+        <CellInput
           value={edit[field]}
           inputMode={inputMode}
-          onChange={setEditField(field)}
           aria-label={t(`suppliers.fields.${field}`)}
+          onChange={(e) => setEdit((prev) => ({ ...prev, [field]: e.target.value }))}
         />
       ) : (
-        render(s)
+        read(s)
       );
 
   const columns: Column<Supplier>[] = [
@@ -86,7 +84,7 @@ export default function SuppliersPage() {
       key: 'actions',
       width: 170,
       render: (s) => (
-        <div className={styles.rowActions}>
+        <RowActions>
           {editingId === s.id ? (
             <>
               <Button variant="primary" size="sm" onClick={() => void submitEdit(s.id)}>
@@ -98,13 +96,7 @@ export default function SuppliersPage() {
             </>
           ) : (
             <>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingId(s.id);
-                  setEdit(toDraft(s));
-                }}
-              >
+              <Button size="sm" onClick={() => { setEditingId(s.id); setEdit(toDraft(s)); }}>
                 {t('common.edit')}
               </Button>
               <Button variant="ghostDanger" size="sm" onClick={() => void remove(s)}>
@@ -112,69 +104,41 @@ export default function SuppliersPage() {
               </Button>
             </>
           )}
-        </div>
+        </RowActions>
       ),
     },
   ];
 
   return (
     <>
-      <div className={styles.header}>
-        <h2>
-          {t('suppliers.title')}
-          <span className={styles.count}>{rows.length}</span>
-        </h2>
-        <Button variant="primary" onClick={() => setAdding((v) => !v)}>
-          {adding ? t('common.cancel') : t('suppliers.add')}
-        </Button>
-      </div>
+      <PageHeader
+        title="suppliers.title"
+        count={rows.length}
+        actions={
+          <Button variant="primary" onClick={() => setAdding((v) => !v)}>
+            {adding ? t('common.cancel') : t('suppliers.add')}
+          </Button>
+        }
+      />
 
       {adding && (
-        <div className={styles.addForm}>
-          <TextField
-            label="suppliers.fields.name"
-            required
-            autoFocus
-            value={draft.name}
-            onChange={setDraftField('name')}
-          />
-          <TextField
-            label="suppliers.fields.taxId"
-            inputMode="numeric"
-            value={draft.taxId}
-            onChange={setDraftField('taxId')}
-          />
-          <TextField
-            label="suppliers.fields.phone"
-            type="tel"
-            value={draft.phone}
-            onChange={setDraftField('phone')}
-          />
-          <TextField
-            label="suppliers.fields.email"
-            type="email"
-            value={draft.email}
-            onChange={setDraftField('email')}
-          />
-          <TextField
-            label="suppliers.fields.address"
-            value={draft.address}
-            onChange={setDraftField('address')}
-          />
-          <div className={styles.addActions}>
-            <Button variant="primary" onClick={() => void submitNew()} disabled={!draft.name.trim()}>
+        <CrudForm
+          onSubmit={() => void submitNew()}
+          actions={
+            <Button variant="primary" type="submit" disabled={!draft.name.trim()}>
               {t('common.save')}
             </Button>
-          </div>
-        </div>
+          }
+        >
+          <TextField label="suppliers.fields.name" required autoFocus {...draftField('name')} />
+          <TextField label="suppliers.fields.taxId" inputMode="numeric" {...draftField('taxId')} />
+          <TextField label="suppliers.fields.phone" type="tel" {...draftField('phone')} />
+          <TextField label="suppliers.fields.email" type="email" {...draftField('email')} />
+          <TextField label="suppliers.fields.address" {...draftField('address')} />
+        </CrudForm>
       )}
 
-      <Table
-        columns={columns}
-        rows={rows}
-        rowKey={(s) => s.id}
-        emptyKey="suppliers.empty"
-      />
+      <Table columns={columns} rows={rows} rowKey={(s) => s.id} emptyKey="suppliers.empty" />
     </>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Board from './Board';
-import CustomersPage from './CustomersPage';
-import ItemsPage from './ItemsPage';
+import { CustomersPage } from './pages/Customers';
+import { ItemsPage } from './pages/Items';
 import ReportsPage from './ReportsPage';
 import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
@@ -18,7 +18,7 @@ import InvoicesPage from './InvoicesPage';
 import { SuppliersPage } from './pages/Suppliers';
 import ExpensesPage from './ExpensesPage';
 import ArchivePage from './ArchivePage';
-import WorkersPage from './WorkersPage';
+import { WorkersPage } from './pages/Workers';
 import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports, IconWrench } from './icons';
 import {
   COLUMNS, EPICS, TYPES, isArchived, workerMap,

@@ -90,7 +90,7 @@ export function useSuppliers() {
     async (supplier: Supplier) => {
       const ok = await confirm({
         bodyKey: 'suppliers.confirmDelete',
-        name: supplier.name,
+        values: { name: supplier.name },
         danger: true,
       });
       if (!ok) return;
