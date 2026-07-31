@@ -1,0 +1,93 @@
+/* The stack sits bottom-centre, where the old single toast was. It is a column
+   so a second message pushes the first up instead of landing on top of it. */
+.stack {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  align-items: center;
+  /* The strip must not swallow clicks on the page behind it. */
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--sand);
+  box-shadow: 0 16px 40px rgba(13, 19, 33, 0.35);
+  font-size: 13.5px;
+  font-weight: 600;
+  max-width: min(560px, calc(100vw - 40px));
+  animation: toast-in 0.28s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Someone who sets "reduce motion" gets the toast without the slide. It still
+   appears — the animation was never what carried the message. */
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+.icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.success .icon {
+  background: var(--ok);
+}
+.error .icon {
+  background: var(--danger);
+}
+.info .icon {
+  background: var(--steel);
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  /* A Postgres error runs long and must not become one unbroken line. */
+  overflow-wrap: anywhere;
+}
+
+.close {
+  color: var(--steel);
+  font-size: 13px;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  flex: none;
+}
+.close:hover {
+  color: var(--sand);
+}

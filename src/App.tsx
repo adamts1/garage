@@ -15,7 +15,7 @@ import {
   type PartDef, type TicketWork, type WorkDef,
 } from '@garage/shared';
 import InvoicesPage from './InvoicesPage';
-import SuppliersPage from './SuppliersPage';
+import { SuppliersPage } from './pages/Suppliers';
 import ExpensesPage from './ExpensesPage';
 import ArchivePage from './ArchivePage';
 import WorkersPage from './WorkersPage';
