@@ -1,0 +1,39 @@
+.tableCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-top: 16px;
+}
+
+.tableTitle {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.name {
+  font-weight: 700;
+  color: var(--slate);
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.amount {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* An outstanding balance is the number this report exists to surface. */
+.open {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.clear {
+  color: var(--ok);
+  font-weight: 700;
+}

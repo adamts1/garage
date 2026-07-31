@@ -1,0 +1,72 @@
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  flex-wrap: wrap;
+}
+
+.perPage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.perPage select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.pager {
+  display: flex;
+  gap: 5px;
+}
+
+.pager button {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted-d);
+  cursor: pointer;
+}
+.pager button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.pager button.on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gap {
+  min-width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.count {
+  font-size: 12.5px;
+  color: var(--muted);
+}
