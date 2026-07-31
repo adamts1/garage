@@ -132,7 +132,7 @@ export const TYPES = {
    TEAM used to live here as four hardcoded people — דני כהן, עידו לוי,
    נועה שמש, אבי מזרחי — which every garage saw and none employed. Workers are
    now rows in garage_workers, per garage, so this file can only describe their
-   shape. See 20260730000000_workers_per_garage.sql.
+   shape. See 20260730000000_baseline.sql.
 
    The display keys stay short (n / ini / bg) because that is what the board,
    the ticket page and the mobile editor already read. */

@@ -9,6 +9,35 @@ seed.sql        demo data. Local and staging ONLY — never production.
 legacy/         the pre-migration hand-run files. Archive. Do not run. See legacy/README.md.
 ```
 
+## The baseline
+
+`20260730000000_baseline.sql` is the whole schema in one file. The 22
+migrations that built it up to 2026-07-30 were squashed into it once every
+environment had applied all of them — the version number is deliberately the
+last of the 22, so production and staging already carry it as applied and the
+squash changed no database.
+
+Their filenames are still the handles used by comments across the codebase and
+by the checklist in docs/PRODUCTION.md. Those files live in git history: read
+one with `git show e5e2faa:supabase/migrations/20260727000000_invoices.sql`.
+
+Two things a `pg_dump`-based squash silently loses, both restored by hand at
+the foot of the baseline and both worth knowing before squashing again:
+
+- **Rows.** The `ticket-photos` bucket is a row in `storage.buckets`, so a
+  schema dump omits it — leaving three storage policies pointing at a bucket
+  that does not exist.
+- **Revoked inherited grants.** The dump records ACL deltas against the
+  platform default, so `revoke ... from anon` on a privilege anon held by
+  default reads as "no delta" and disappears. That handed anon `TRUNCATE` on
+  every tenant table. RLS does not gate `TRUNCATE`.
+
+The squash was verified by diffing a catalogue fingerprint — columns,
+constraints, indexes, policies, RLS flags, functions, triggers, grants,
+sequences, enums, views, buckets, extensions, publications, replica identity —
+of a database built from the 22 migrations against one built from the
+baseline. Do that again, not an eyeball pass, if you ever squash again.
+
 ## Working on the schema
 
 ```bash
