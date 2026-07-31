@@ -30,6 +30,68 @@
     "saved": "נשמר",
     "deleted": "נמחק"
   },
+  "customers": {
+    "title": "רשימת לקוחות",
+    "add": "הוסף לקוח",
+    "empty": "לא נמצאו לקוחות",
+    "created": "הלקוח נוסף",
+    "updated": "הלקוח עודכן",
+    "deleted": "הלקוח נמחק",
+    "confirmDelete": "למחוק את {{name}}?",
+    "fields": {
+      "name": "שם",
+      "phone": "טלפון",
+      "email": "דוא״ל",
+      "id_number": "ת״ז / ח.פ",
+      "city": "עיר",
+      "address": "כתובת",
+      "kind": "סוג"
+    }
+  },
+  "items": {
+    "title": "פריטי מלאי",
+    "add": "הוסף פריט",
+    "empty": "אין פריטים",
+    "noMatch": "לא נמצא פריט התואם ל\"{{query}}\"",
+    "showing": "{{shown}} מתוך {{total}} פריטים",
+    "searchPlaceholder": "חיפוש לפי מק״ט או שם פריט",
+    "created": "הפריט נוסף",
+    "updated": "הפריט עודכן",
+    "deleted": "הפריט נמחק",
+    "confirmDelete": "למחוק את {{name}}?",
+    "fields": {
+      "sku": "מק״ט",
+      "name": "שם הפריט",
+      "price": "מחיר",
+      "stock": "מלאי"
+    }
+  },
+  "workers": {
+    "title": "עובדי המוסך",
+    "add": "הוסף עובד",
+    "empty": "אין עדיין עובדים. כרטיסים ייווצרו ללא אחראי עד שיתווסף עובד ראשון.",
+    "created": "העובד נוסף",
+    "updated": "העובד עודכן",
+    "deleted": "העובד נמחק",
+    "retired": "העובד הושבת",
+    "reactivated": "העובד הופעל",
+    "retire": "השבת",
+    "reactivate": "הפעל",
+    "active": "פעיל",
+    "inactive": "לא פעיל",
+    "codeHint": "למשל dk",
+    "codeTaken": "הקוד {{code}} כבר בשימוש במוסך",
+    "confirmDelete": "למחוק את {{name}}?",
+    "confirmDeleteWithTickets": "למחוק את {{name}}? {{count}} כרטיסים משויכים אליו ויישארו ללא אחראי. כדי לשמור את השיוך, השתמשו ב\"השבת\" במקום.",
+    "confirmDeleteUnknownCount": "למחוק את {{name}}? לא ניתן לבדוק כמה כרטיסים משויכים אליו — כרטיסים משויכים יישארו ללא אחראי.",
+    "fields": {
+      "code": "קוד",
+      "name": "שם מלא",
+      "initials": "ראשי תיבות",
+      "color": "צבע",
+      "status": "סטטוס"
+    }
+  },
   "suppliers": {
     "title": "ספקים",
     "add": "הוסף ספק",

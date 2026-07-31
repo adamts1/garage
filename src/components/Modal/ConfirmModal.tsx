@@ -13,8 +13,11 @@ export default function ConfirmModal({ props, isTop, stacked, onClose }: ModalCo
   const confirmId = String(props.confirmId ?? '');
   const titleKey = String(props.titleKey ?? 'confirm.title');
   const bodyKey = String(props.bodyKey ?? '');
-  const name = props.name == null ? undefined : String(props.name);
   const danger = props.danger === true;
+  const values =
+    props.values && typeof props.values === 'object'
+      ? (props.values as Record<string, string | number>)
+      : undefined;
 
   /* Whatever route the dialog leaves by — the button, Escape, the scrim, a
      navigation that unmounts the host — the caller is awaiting a promise, and
@@ -61,7 +64,7 @@ export default function ConfirmModal({ props, isTop, stacked, onClose }: ModalCo
         </>
       }
     >
-      {t(bodyKey, { name })}
+      {t(bodyKey, values)}
     </Modal>
   );
 }

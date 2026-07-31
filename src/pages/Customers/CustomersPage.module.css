@@ -1,0 +1,16 @@
+.name {
+  font-weight: 700;
+}
+
+/* The פרטי / עסקי pill. */
+.kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}

@@ -1,0 +1,28 @@
+/* A grid, not the wrapping flex row the pages used to share. With labels above
+   the controls, wrapped flex items no longer sit on a common baseline and the
+   row came out ragged; a grid keeps the columns aligned however many fields a
+   screen has. */
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+  /* Top, not bottom. Bottom-aligning looked right until a field carried a hint
+     or an error: the extra line below its input pushed that input up out of
+     line with every other one on the row. Aligning to the top puts all the
+     labels on one line and lets fields grow downward, which is what a label
+     above a control wants anyway. */
+  align-items: start;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  /* Drops the buttons past the label line so they sit level with the controls
+     rather than the labels: one 12px label plus its 4px gap. */
+  margin-top: 19px;
+}

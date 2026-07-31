@@ -1,0 +1,22 @@
+.actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.cell {
+  width: 100%;
+  min-width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+}
+
+.cell:focus {
+  outline: none;
+  border-color: var(--primary);
+}

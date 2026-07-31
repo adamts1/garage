@@ -1,0 +1,32 @@
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.search {
+  flex: 1;
+  max-width: 380px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: right;
+}
+.search:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* Out of stock, and the reason to look at this screen at all. */
+.out {
+  color: #a5544b;
+  font-weight: 700;
+}
