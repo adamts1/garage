@@ -1,0 +1,96 @@
+/* The label goes above the control, always.
+
+   Every input in this app used to be labelled by its placeholder alone. That
+   reads fine on an empty form and disappears the moment anyone types: a filled
+   screen of forty values with nothing saying which is the מיקוד and which the
+   ת״ז. It also fails a screen reader outright — a placeholder is not a label —
+   and browser autofill has nothing to match on. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  font-size: 12px;
+}
+
+.required::after {
+  content: ' *';
+  color: var(--danger);
+}
+
+.control {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  background: white;
+  text-align: right;
+  direction: rtl;
+  font-family: inherit;
+}
+
+.control:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.control:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.control.invalid {
+  border-color: var(--danger);
+}
+.control.invalid:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+textarea.control {
+  resize: vertical;
+  min-height: 70px;
+}
+
+/* The intake form fits two panels and a works table on one screen, so its
+   fields run tighter than the CRUD pages'. Same component, one flag. */
+.dense {
+  margin-bottom: 10px;
+}
+.dense .label {
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-d);
+}
+.dense .control {
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 13.5px;
+}
+.dense textarea.control {
+  min-height: 62px;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.error {
+  margin-top: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+}

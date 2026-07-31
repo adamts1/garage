@@ -1,0 +1,86 @@
+/* One table. The app had two — `.tbl` inside `.tbl-wrap` on the board, reports
+   and the CRUD pages, and `.works-table` on the ticket and in the modals — with
+   different header weights, row padding and border colours, chosen by whichever
+   page was written that week. These are `.tbl`'s values, the more widely used
+   of the two. */
+
+.wrap {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  padding: 12px 14px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Only a column that sorts gets the pointer. The old rule put `cursor: pointer`
+   on every th, so the actions column advertised a sort that did nothing. */
+.sortable {
+  cursor: pointer;
+}
+.sortable:hover {
+  color: var(--text);
+}
+.sortable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.sorted {
+  color: var(--navy);
+}
+
+.sortArrow {
+  font-size: 9px;
+  margin-inline-start: 5px;
+  color: var(--steel);
+}
+
+.table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.clickable {
+  cursor: pointer;
+}
+.clickable:hover {
+  background: var(--surface-2);
+}
+
+.selected {
+  background: var(--primary-soft);
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 28px 14px;
+}
+
+.footer {
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--surface-2);
+}

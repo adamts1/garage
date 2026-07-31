@@ -1,0 +1,85 @@
+/* Ported from the effective cascade in styles.css, not from the first rule that
+   matched. The old file declared .btn twice — a rounded gradient set at the top
+   and a flat set 1100 lines later under "THEME" — and only the second one ever
+   rendered. What follows is what the app actually looked like. */
+
+.btn {
+  /* Shorthand first — it resets size and weight, so the two below have to
+     follow it to survive. */
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- variants ---------- */
+
+.primary {
+  background: var(--navy);
+  color: var(--sand);
+}
+.primary:hover:not(:disabled) {
+  background: var(--slate);
+}
+.primary:disabled {
+  background: var(--border);
+  color: var(--steel);
+  cursor: not-allowed;
+}
+
+.ghost {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.danger {
+  border: 1px solid #e6cdc9;
+  background: var(--surface);
+  color: var(--danger);
+}
+.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.ghostDanger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: #a5544b;
+}
+.ghostDanger:hover:not(:disabled) {
+  background: #f7ecea;
+}
+
+/* ---------- sizes ---------- */
+
+.sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+/* Spelled out rather than left as an empty rule: a minifier that drops empty
+   rulesets would leave styles.md undefined and the default size unstyled. */
+.md {
+  padding: 10px 16px;
+  font-size: 13.5px;
+}
+
+.lg {
+  padding: 13px 22px;
+  font-size: 14px;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+}

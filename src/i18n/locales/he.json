@@ -1,0 +1,52 @@
+{
+  "common": {
+    "save": "שמור",
+    "cancel": "ביטול",
+    "edit": "ערוך",
+    "delete": "מחק",
+    "add": "הוסף",
+    "close": "סגירה",
+    "reset": "איפוס",
+    "search": "חיפוש",
+    "confirm": "אישור",
+    "none": "-",
+    "loading": "טוען…",
+    "count": "{{count}}"
+  },
+  "table": {
+    "empty": "אין נתונים להצגה",
+    "sortAsc": "מיון עולה",
+    "sortDesc": "מיון יורד"
+  },
+  "confirm": {
+    "title": "אישור פעולה",
+    "yes": "אישור",
+    "no": "ביטול",
+    "deleteTitle": "מחיקה",
+    "deleteBody": "למחוק את {{name}}? הפעולה אינה הפיכה."
+  },
+  "toast": {
+    "dismiss": "סגירת ההודעה",
+    "saved": "נשמר",
+    "deleted": "נמחק"
+  },
+  "suppliers": {
+    "title": "ספקים",
+    "add": "הוסף ספק",
+    "empty": "לא נמצאו ספקים",
+    "created": "הספק נוסף",
+    "updated": "הספק עודכן",
+    "deleted": "הספק נמחק",
+    "confirmDelete": "למחוק את הספק {{name}}?",
+    "deleteBlocked": "לא ניתן למחוק ספק עם הוצאות קיימות",
+    "fields": {
+      "name": "שם הספק",
+      "taxId": "ח.פ / עוסק מורשה",
+      "taxIdShort": "ח.פ / ע.מ",
+      "phone": "טלפון",
+      "email": "דוא״ל",
+      "address": "כתובת",
+      "notes": "הערות"
+    }
+  }
+}
