@@ -1,7 +1,7 @@
 # Legacy SQL — archive, do not run
 
 These are the hand-pasted files used before migrations existed. They are kept
-for history only. `migrations/20260720000000_baseline.sql` supersedes all of
+for history only. `migrations/20260730000000_baseline.sql` supersedes all of
 them.
 
 **Do not run these against any database.** `schema.sql` and `demo-tickets.sql`
