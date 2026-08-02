@@ -40,14 +40,17 @@
     "build:sim:android": "eas build --platform android --profile simulator",
     "run:sim:android": "eas build:run --platform android --profile simulator",
 
-    "build:staging:ios": "eas build --platform ios --profile staging",
-    "build:staging:android": "eas build --platform android --profile staging",
+    "testflight:staging": "bash scripts/release.sh ios --profile staging --submit",
+    "build:staging:ios": "bash scripts/release.sh ios --profile staging",
+    "build:staging:android": "bash scripts/release.sh android --profile staging",
+    "build:staging:play": "bash scripts/release.sh android --profile staging-play",
     "device": "eas device:create",
 
     "testflight": "bash scripts/release.sh ios --submit",
     "build:prod:ios": "bash scripts/release.sh ios",
     "build:prod:android": "bash scripts/release.sh android",
     "submit:ios": "eas submit --platform ios --profile production",
+    "submit:staging:ios": "eas submit --platform ios --profile staging",
 
     "builds:ios": "eas build:list --platform ios --limit 5",
     "builds:android": "eas build:list --platform android --limit 5"

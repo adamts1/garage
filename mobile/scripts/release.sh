@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Build a PRODUCTION store artifact on EAS — the only path that points at the
-# real garages' database.
+# Build a distributable artifact on EAS.
 #
-#   bash scripts/release.sh ios --submit    # build + push to TestFlight
-#   bash scripts/release.sh ios             # build only
-#   bash scripts/release.sh android         # build an AAB for Play (upload by hand)
+#   bash scripts/release.sh ios --submit                     # production -> TestFlight
+#   bash scripts/release.sh ios                              # production, build only
+#   bash scripts/release.sh android                          # production .aab for Play
+#   bash scripts/release.sh ios --profile staging --submit   # staging -> TestFlight
 #
 # Use the npm scripts rather than calling this directly:
-#   npm run testflight | npm run build:prod:ios | npm run build:prod:android
+#   npm run testflight | npm run testflight:staging | npm run build:prod:android
 #
 # EAS builds from a git archive, so ANYTHING NOT COMMITTED IS NOT IN THE BUILD.
-# That is the mistake this script exists to catch — and it applies to Android
-# just as much as iOS, which is why the script takes a platform instead of
-# being iOS-only the way scripts/testflight.sh was.
+# That is the mistake this script exists to catch. It applies to every platform
+# and every profile, which is why this takes both as arguments instead of being
+# the iOS-and-production-only scripts/testflight.sh it started as: a guarded
+# release path and an unguarded one is how the unguarded one gets used.
 
 set -euo pipefail
 
@@ -28,17 +29,31 @@ die()  { printf '%sxx%s  %s\n' "$RED" "$OFF" "$1" >&2; exit 1; }
 PLATFORM="${1:-}"
 case "$PLATFORM" in
   ios|android) shift ;;
-  *) die "Usage: release.sh <ios|android> [--submit]" ;;
+  *) die "Usage: release.sh <ios|android> [--profile <name>] [--submit]" ;;
 esac
 
+PROFILE="production"
 SUBMIT=0
-[[ "${1:-}" == "--submit" ]] && SUBMIT=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile) PROFILE="${2:-}"; [[ -z "$PROFILE" ]] && die "--profile needs a name."; shift 2 ;;
+    --submit)  SUBMIT=1; shift ;;
+    *)         die "Unknown argument: $1" ;;
+  esac
+done
 
-# Only iOS has submit credentials configured (submit.production.ios in
-# eas.json). Android needs a Google Play service account first; until then the
-# AAB is uploaded to Play Console by hand.
+# eas.json is the single source of truth for where a submission lands. Reading
+# the id back from it means this script cannot drift into printing a link to one
+# app while EAS uploads to another.
+ASC_APP_ID="$(node -p "require('./eas.json').submit?.['$PROFILE']?.ios?.ascAppId ?? ''" 2>/dev/null || true)"
+
+# Only iOS has submit credentials configured. Android needs a Google Play
+# service account first; until then the AAB is uploaded to Play Console by hand.
 if [[ "$SUBMIT" == "1" && "$PLATFORM" == "android" ]]; then
   die "No Play submit configured yet — build the AAB and upload it in Play Console."
+fi
+if [[ "$SUBMIT" == "1" && -z "$ASC_APP_ID" ]]; then
+  die "No submit target for profile '$PROFILE' — add submit.$PROFILE.ios.ascAppId to eas.json."
 fi
 
 # ---------- 1. logged in? ----------
@@ -82,24 +97,31 @@ BRANCH="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD)"
 COMMIT="$(cd "$REPO_ROOT" && git log --oneline -1)"
 say "Building from"
 printf '    platform %s%s%s\n' "$GREEN" "$PLATFORM" "$OFF"
+printf '    profile  %s%s%s\n' "$GREEN" "$PROFILE" "$OFF"
 printf '    branch   %s%s%s\n' "$GREEN" "$BRANCH" "$OFF"
 printf '    commit   %s\n' "$COMMIT"
-printf '    database %sPRODUCTION%s (EAS environment: production)\n' "$RED" "$OFF"
+if [[ "$PROFILE" == "production" ]]; then
+  printf '    database %sPRODUCTION%s — real garages\n' "$RED" "$OFF"
+else
+  printf '    database %sstaging%s\n' "$YELLOW" "$OFF"
+fi
 
 # ---------- 5. build (+ submit) ----------
 if [[ "$SUBMIT" == "1" ]]; then
   say "Building on EAS and auto-submitting to TestFlight"
-  npx --yes eas-cli@latest build --platform "$PLATFORM" --profile production --auto-submit
+  npx --yes eas-cli@latest build --platform "$PLATFORM" --profile "$PROFILE" --auto-submit
   echo
   printf '%sDone.%s Apple processes the build for ~5-15 min, then it appears in TestFlight:\n' "$GREEN" "$OFF"
-  echo "  https://appstoreconnect.apple.com/apps/6790709441/testflight/ios"
+  echo "  https://appstoreconnect.apple.com/apps/$ASC_APP_ID/testflight/ios"
 else
   say "Building on EAS (no submit)"
-  npx --yes eas-cli@latest build --platform "$PLATFORM" --profile production
+  npx --yes eas-cli@latest build --platform "$PLATFORM" --profile "$PROFILE"
   echo
-  if [[ "$PLATFORM" == "ios" ]]; then
-    printf '%sBuild done.%s Submit later with: npm run submit:ios\n' "$GREEN" "$OFF"
+  if [[ "$PLATFORM" == "android" ]]; then
+    printf '%sBuild done.%s Install from the link above, or upload the artifact in Play Console.\n' "$GREEN" "$OFF"
+  elif [[ -n "$ASC_APP_ID" ]]; then
+    printf '%sBuild done.%s Submit later with: eas submit --platform ios --profile %s\n' "$GREEN" "$OFF" "$PROFILE"
   else
-    printf '%sBuild done.%s Download the .aab and upload it in Play Console.\n' "$GREEN" "$OFF"
+    printf '%sBuild done.%s\n' "$GREEN" "$OFF"
   fi
 fi

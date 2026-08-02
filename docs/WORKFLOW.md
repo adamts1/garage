@@ -336,55 +336,95 @@ Netlify builds `main` on every merge. PRs get a deploy preview. Nothing to run.
 **Environment variables are baked in at build time.** Changing one in the Netlify
 dashboard does nothing until the next deploy.
 
-### Mobile — the stores are production, everything else is staging
+### Mobile — the store *listing* is production, everything else is staging
 
-**The rule: an artefact that can reach App Store Connect or Play Console is
-built against production. Nothing else is.** Simulators, emulators, `expo
-start` and direct-install device builds all read staging.
+**The rule: an artefact that can reach the production App Store or Play listing
+is built against production. Nothing else is.** Simulators, emulators, `expo
+start` and every staging build read staging.
 
-That used to rest on picking the right npm script. It now rests on the build
-itself: `APP_VARIANT` in `app.config.js` gives staging builds their own bundle
-id, package name, app name and URL scheme.
+Note what the rule is keyed on. It is not "TestFlight means production" — there
+are now two TestFlight apps, and the staging one is a separate App Store Connect
+record. What separates them is identity, not distribution channel: `APP_VARIANT`
+in `app.config.js` gives staging builds their own bundle id, package name, app
+name and URL scheme, so they cannot land in the production listing at all.
 
 | profile | EAS environment → database | variant | produces | for |
 |---|---|---|---|---|
 | `development` | development → **staging** | staging | dev client | working on native modules |
 | `simulator` | preview → **staging** | staging | simulator `.app` / emulator `.apk` | quick checks, no device |
-| `staging` | preview → **staging** | staging | ad-hoc `.ipa` / `.apk` | trying a change on a real phone |
+| `staging` | preview → **staging** | staging | staging TestFlight `.ipa` / `.apk` link | testers, including the garage's staff |
+| `staging-play` | preview → **staging** | staging | `.aab` for the staging Play listing | a tester who should not see a system warning |
 | `production` | production → **production** | production | TestFlight `.ipa` / Play `.aab` | releases |
 
 ```bash
 cd mobile
-npm run device                 # once per phone — registers it for direct install
-npm run build:staging:ios      # staging, installs via the link EAS prints
 npm run run:sim:ios            # staging, straight into the simulator
+npm run testflight:staging     # staging -> the staging TestFlight app
+npm run build:staging:android  # staging .apk -> send the link
+npm run build:staging:play     # staging .aab -> the staging Play listing
 npm run testflight             # production -> TestFlight
 npm run build:prod:android     # production .aab -> upload in Play Console
 ```
 
-Registering a device is a one-off: iOS ad-hoc distribution embeds the allowed
-device IDs in the provisioning profile, so a phone that was not registered when
-the build was made cannot install it.
+Four store records, two per platform:
 
-#### What changed, and the one thing it costs
+| | iOS | Android |
+|---|---|---|
+| production | the real app, `ascAppId 6790709441` | `com.tsityat.garageapp` |
+| staging | `garage-mobile-staging`, `ascAppId 6797201110` | `com.tsityat.garageapp.staging` |
 
-There used to be a `staging-play` profile: store packaging (`.aab`, needed
-because Play accepts nothing else) paired with the staging database, so that
-Google's new-developer closed-testing period could run without writing into real
-garage data. It shared `com.tsityat.garageapp` with production, which is what
-made it usable for that — and also meant one accidental promote in Play Console
-would have pointed every real garage at staging. Nothing prevented that promote.
+#### Why staging iOS is not ad-hoc
 
-It is gone. Staging Android builds are now `com.tsityat.garageapp.staging`, a
-different app as far as Play is concerned, so they **cannot** be uploaded into
-the production listing at all.
+It was, briefly, and it failed on the first phone it met. Ad-hoc distribution
+embeds the allowed device IDs in the provisioning profile, so a phone that was
+not registered *before* the build cannot install the result — it gets
+`לא ניתן לוודא את שלמותו` and stops there. Registering requires the device in
+hand, which rules out the garage's staff.
 
-The cost: a closed test that counts toward Play's production-access requirement
-has to run on the production listing, which now means a production build against
-the production database. Give the testers their own garage — RLS already scopes
-everything by `garage_id`, so a test garage in production is isolated from the
-real ten without needing a separate database. That is the trade this makes: real
-database, sandboxed tenant, instead of real listing, wrong database.
+The `staging` profile therefore distributes differently per platform:
+
+```json
+"staging": {
+  "ios":     { "distribution": "store" },
+  "android": { "distribution": "internal", "buildType": "apk" }
+}
+```
+
+Android needs no equivalent, because nothing there refuses to install an app the
+platform did not sign. The `.apk` link works on any phone; the only cost is the
+unknown-sources warning the tester has to accept. `staging-play` exists for when
+even that is too much — same database, same package, packaged for Play instead.
+
+`npm run device` still exists for the rare ad-hoc case, but nothing in the normal
+flow needs it any more.
+
+#### `staging-play`, and why the old one was dangerous
+
+A profile by this name existed before and was deleted. It built a store-packaged
+`.aab` against staging under the **production** package name, so that Google's
+new-developer closed-testing period could run without writing into real garage
+data. Sharing the package is what made it usable for that — and also meant one
+accidental promote in Play Console would have pointed every real garage at
+staging. Nothing prevented that promote; the two builds were distinguishable only
+by a version code you had to remember.
+
+The profile is back under the same name and is safe for exactly one reason: it
+now builds `com.tsityat.garageapp.staging`. Play treats that as a different app,
+with its own listing, and **will not accept it into the production listing at
+all**. The safety is structural rather than procedural.
+
+What that costs: a closed test on the staging listing does *not* count toward
+Play's production-access requirement, which is tied to the app being published.
+For the account holding the real listing — a **personal** account, so the
+requirement applies — that test has to run on the production listing with
+production builds. Give those testers their own garage: RLS already scopes every
+row by `garage_id`, so a test garage in production is isolated from the real ones
+exactly as well as they are isolated from each other.
+
+That test garage is needed regardless. Both stores' reviewers hit the login
+screen, and `scripts/onboard-garage.mjs` is the only way an account can exist —
+there is no self-signup — so a reviewer with no credentials cannot get past it.
+One test garage covers the closed test, Google's reviewer and Apple's.
 
 #### Telling them apart at a glance
 
