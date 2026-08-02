@@ -15,8 +15,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
 import {
-  isUsablePhone, listCustomers, listVehicles, modelsFor, phoneConflict, VEHICLE_MAKES,
-  worksSummary,
+  isUsablePhone, listCustomers, listVehicles, matchCustomers, modelsFor, phoneConflict,
+  subscribeToTable, VEHICLE_MAKES, worksSummary,
   type Customer, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
 import { C, s } from '../lib/theme';
@@ -50,46 +50,91 @@ const empty: Form = {
   due: '', details: '', keyReceived: false,
 };
 
-const digits = (s: string) => (s || '').replace(/\D/g, '');
+/* The phone's answer to the web form's <datalist>: a field that is a text input
+   and a dropdown at once. React Native has neither, so this is both — type to
+   filter, or tap ▾ to see the list; either way the value is whatever ends up in
+   the input, so a make the catalog has never heard of is typed straight in and
+   saved like any other. The list is an aid, never a gate.
 
-/* The phone's answer to the web form's <datalist>: a scrolling row of chips
-   under the field. React Native has no native combobox, and a modal picker
-   would be the wrong shape for something that is only an aid — the input stays
-   free text and a make the list has never heard of is typed straight into it.
+   The panel is rendered inline rather than absolutely positioned: inside a
+   ScrollView an absolute overlay is clipped by the card it sits in, and a
+   modal is far too much ceremony for picking "טויוטה". */
+const OPTION_LIMIT = 40;
 
-   Capped, because a row of forty chips is not a shortcut. Typing narrows it. */
-const SUGGESTION_LIMIT = 12;
+function ComboField({
+  label, value, options, onChange, placeholder,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
 
-const suggest = (all: readonly string[], typed: string): string[] => {
-  const q = typed.trim().toLowerCase();
-  // An exact hit means the field is already filled in; nothing left to offer.
-  if (q && all.some((v) => v.toLowerCase() === q)) return [];
-  const hits = q ? all.filter((v) => v.toLowerCase().includes(q)) : all;
-  return hits.slice(0, SUGGESTION_LIMIT);
-};
+  const q = value.trim().toLowerCase();
+  // Typing filters; an exact hit means the field is settled, so show the whole
+  // list again rather than the one option already chosen.
+  const exact = q.length > 0 && options.some((o) => o.toLowerCase() === q);
+  const shown = (q && !exact ? options.filter((o) => o.toLowerCase().includes(q)) : options)
+    .slice(0, OPTION_LIMIT);
 
-function Suggestions({ items, onPick }: { items: string[]; onPick: (v: string) => void }) {
-  if (!items.length) return null;
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
-    >
-      {items.map((v) => (
-        <Pressable
-          key={v}
-          onPress={() => onPick(v)}
-          style={{
-            paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999,
-            borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
-          }}
-        >
-          <Text style={{ fontSize: 12.5, fontWeight: '600', color: C.ink }}>{v}</Text>
-        </Pressable>
-      ))}
-    </ScrollView>
+    <View style={{ gap: 6 }}>
+      <Field label={label}>
+        <View style={{ position: 'relative', justifyContent: 'center' }}>
+          <TextInput
+            style={[s.input, { paddingLeft: 40 }]}
+            value={value}
+            placeholder={placeholder}
+            placeholderTextColor={C.dim}
+            autoCorrect={false}
+            onChangeText={(v) => { onChange(v); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+          />
+          {options.length > 0 && (
+            <Pressable
+              onPress={() => setOpen((v) => !v)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} — פתח רשימה`}
+              style={{ position: 'absolute', left: 10, padding: 4 }}
+            >
+              <Text style={{ fontSize: 13, color: C.dim }}>{open ? '▲' : '▼'}</Text>
+            </Pressable>
+          )}
+        </View>
+      </Field>
+
+      {open && shown.length > 0 && (
+        <View style={[s.card, { padding: 0, overflow: 'hidden', maxHeight: 220 }]}>
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {shown.map((o, i) => (
+              <Pressable
+                key={o}
+                onPress={() => { onChange(o); setOpen(false); }}
+                style={{
+                  paddingVertical: 11, paddingHorizontal: 12,
+                  borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.line,
+                }}
+              >
+                <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.ink, textAlign: 'right' }}>
+                  {o}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Said plainly, because a list that offers nothing looks broken until you
+          know the field takes anything. */}
+      {open && shown.length === 0 && value.trim().length > 0 && (
+        <Text style={[s.dim, { fontSize: 11.5, paddingHorizontal: 2 }]}>
+          לא ברשימה — ייווצר חדש בשם שהוקלד
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -115,9 +160,20 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
   const [showMatches, setShowMatches] = useState(false);
   const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
 
+  /* Subscribed, not loaded once. The customer list is no longer just autofill:
+     it is what the phone-taken check is judged against, so a stale copy means
+     the phone is silently free and the duplicate the check exists to prevent
+     gets created anyway. Somebody opening a customer at the counter while this
+     form is open on the phone is the ordinary case, not a corner one.
+     Matches the web form, which has subscribed since it gained the search. */
   useEffect(() => {
-    listCustomers().then(setCustomers).catch(() => {});
-    listVehicles().then(setVehicles).catch(() => {});   // no-op until the table exists
+    const loadCustomers = () => listCustomers().then(setCustomers).catch(() => {});
+    const loadVehicles = () => listVehicles().then(setVehicles).catch(() => {});
+    loadCustomers();
+    loadVehicles();
+    const offCustomers = subscribeToTable('customers', loadCustomers);
+    const offVehicles = subscribeToTable('vehicles', loadVehicles);
+    return () => { offCustomers(); offVehicles(); };
   }, []);
 
   /* Typing over name / phone / ת״ז drops the picked customer — the form no
@@ -129,19 +185,9 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
       ...(IDENTITY_FIELDS.has(key) ? { customerId: null } : null),
     }));
 
-  // customer search: match on name or phone (digits only), first six
+  // Customer search — the shared rule, not a second copy of it.
   const query = search.trim();
-  const qDigits = digits(query);
-  const matches = useMemo(() => {
-    if (query.length < 1) return [];
-    return customers
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(query.toLowerCase()) ||
-          (qDigits.length >= 3 && digits(c.phone ?? '').includes(qDigits)),
-      )
-      .slice(0, 6);
-  }, [customers, query, qDigits]);
+  const matches = useMemo(() => matchCustomers(customers, query), [customers, query]);
 
   const fillVehicle = (v: Vehicle) =>
     setForm((prev) => ({
@@ -187,18 +233,6 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
     !form.licensePlate.trim() && 'מספר רישוי',
   ].filter(Boolean) as string[];
   const canSave = missing.length === 0;
-
-  /* The car fields are free text with a shortcut attached, never a closed list.
-     The models offered follow whichever make was typed, and there are simply
-     none for a make the catalog does not carry — which is a normal state. */
-  const makeHints = useMemo(
-    () => suggest(VEHICLE_MAKES, form.manufacturer),
-    [form.manufacturer],
-  );
-  const modelHints = useMemo(
-    () => suggest(modelsFor(form.manufacturer), form.model),
-    [form.manufacturer, form.model],
-  );
 
   /* The number is the customer's identity, so one already on file means this
      ticket is about to be attached to whoever holds it. Same rule as the web
@@ -417,23 +451,30 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
             <Field label="מספר רישוי *" flex>
               <TextInput style={s.input} value={form.licensePlate} onChangeText={(v) => set('licensePlate', v)} />
             </Field>
-            <Field label="יצרן" flex>
-              <TextInput style={s.input} value={form.manufacturer} onChangeText={(v) => set('manufacturer', v)} />
-            </Field>
           </View>
-          <Suggestions items={makeHints} onPick={(v) => set('manufacturer', v)} />
+
+          {/* Pick from the list or type your own — the same bargain the web
+              form's <datalist> makes. The models follow the make above, and a
+              make the catalog does not carry simply offers none. */}
+          <ComboField
+            label="יצרן"
+            value={form.manufacturer}
+            options={VEHICLE_MAKES}
+            onChange={(v) => set('manufacturer', v)}
+            placeholder="בחר מהרשימה או הקלד"
+          />
+          <ComboField
+            label="דגם"
+            value={form.model}
+            options={modelsFor(form.manufacturer)}
+            onChange={(v) => set('model', v)}
+            placeholder={form.manufacturer ? 'בחר מהרשימה או הקלד' : 'הקלד דגם'}
+          />
 
           <View style={s.row}>
-            <Field label="דגם" flex>
-              <TextInput style={s.input} value={form.model} onChangeText={(v) => set('model', v)} />
-            </Field>
             <Field label="שנה" flex>
               <TextInput style={s.input} keyboardType="numeric" value={form.year} onChangeText={(v) => set('year', v)} />
             </Field>
-          </View>
-          <Suggestions items={modelHints} onPick={(v) => set('model', v)} />
-
-          <View style={s.row}>
             <Field label="קילומטר" flex>
               <TextInput style={s.input} keyboardType="numeric" value={form.km} onChangeText={(v) => set('km', v.replace(/\D/g, ''))} />
             </Field>

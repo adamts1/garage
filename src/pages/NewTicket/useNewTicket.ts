@@ -1,6 +1,6 @@
 import {
-  EPICS, TYPES, isUsablePhone, listCustomers, listVehicles, phoneConflict, subscribeToTable,
-  worksSummary,
+  EPICS, TYPES, isUsablePhone, listCustomers, listVehicles, matchCustomers, phoneConflict,
+  subscribeToTable, worksSummary,
   type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
@@ -59,22 +59,6 @@ export const YEARS = Array.from({ length: 22 }, (_, i) => 2026 - i);
 /** Editing one of these means the form no longer describes the customer that
  *  was picked out of the search box, so the picked id is dropped. */
 const IDENTITY_FIELDS = new Set<keyof TicketForm>(['customerName', 'customerPhone', 'idNumber']);
-
-const digits = (s: string) => (s || '').replace(/\D/g, '');
-
-/** Name, or phone once enough digits are typed to be a real search. */
-export function matchCustomers(customers: readonly Customer[], query: string): Customer[] {
-  const q = query.trim();
-  if (!q) return [];
-  const qDigits = digits(q);
-  return customers
-    .filter(
-      (c) =>
-        c.name.toLowerCase().includes(q.toLowerCase()) ||
-        (qDigits.length >= 3 && digits(c.phone ?? '').includes(qDigits)),
-    )
-    .slice(0, 6);
-}
 
 /** dd/mm/yyyy from the date input's yyyy-mm-dd. */
 export const toDueDate = (iso: string) => (iso ? iso.split('-').reverse().join('/') : '-');

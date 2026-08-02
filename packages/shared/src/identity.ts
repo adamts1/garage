@@ -78,6 +78,36 @@ export function phoneConflict<C extends CustomerIdentity>(
   return { customer: holder, differentName: looseName(holder.name) !== looseName(name) };
 }
 
+/** How many matches the search box offers before it stops being a shortcut. */
+export const CUSTOMER_MATCH_LIMIT = 6;
+
+/** Fewer digits than this is a fragment, not a number — every customer in the
+ *  garage has a 0 in their phone somewhere. */
+const PHONE_SEARCH_MIN_DIGITS = 3;
+
+/** The intake form's customer search: by name, or by phone once enough digits
+ *  are typed to mean something.
+ *
+ *  Shared because both intake forms have one, and they had drifted into two
+ *  copies of the same filter — the exact split §3.8 is about. The phone half
+ *  compares digits for the same reason resolution does: a number typed with
+ *  hyphens has to find the customer who was saved without them. */
+export function matchCustomers<C extends CustomerIdentity>(
+  customers: readonly C[],
+  query: string,
+): C[] {
+  const q = query.trim();
+  if (!q) return [];
+  const qDigits = phoneDigits(q);
+  return customers
+    .filter(
+      (c) =>
+        c.name.toLowerCase().includes(q.toLowerCase()) ||
+        (qDigits.length >= PHONE_SEARCH_MIN_DIGITS && phoneDigits(c.phone).includes(qDigits)),
+    )
+    .slice(0, CUSTOMER_MATCH_LIMIT);
+}
+
 /** The key a ticket rolls up under in the customer report.
  *
  *  The phone first, for the same reason the database resolves by it: it is what
