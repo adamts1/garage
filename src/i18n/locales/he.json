@@ -99,6 +99,34 @@
       "avg": "תשלום ממוצע"
     }
   },
+  "board": {
+    "newTicket": "הוסף כרטיס",
+    "searchPlaceholder": "חיפוש כרטיס / רכב / לקוח",
+    "shown": "{{shown}} מתוך {{total}}",
+    "empty": "לא נמצאו כרטיסים",
+    "allWorkers": "הכל",
+    "viewBoard": "לוח",
+    "viewTable": "טבלה",
+    "wipExceeded": "חריגת WIP",
+    "blocked": "חסום",
+    "priority": {
+      "urgent": "דחוף",
+      "high": "גבוהה",
+      "med": "רגילה",
+      "low": "נמוכה"
+    },
+    "fields": {
+      "key": "מספר",
+      "title": "תיאור",
+      "customer": "לקוח",
+      "plate": "מספר רישוי",
+      "car": "רכב",
+      "status": "סטטוס",
+      "worker": "מכונאי",
+      "priority": "עדיפות",
+      "amount": "סכום"
+    }
+  },
   "invoices": {
     "title": "חשבוניות",
     "subtitle": "מסמכי מס שהופקו — חשבוניות מס-קבלה וזיכויים",

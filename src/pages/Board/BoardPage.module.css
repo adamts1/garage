@@ -1,0 +1,339 @@
+/* Ported from the effective cascade: the board was declared once at the top of
+   styles.css and again 600 lines later under "THEME", and only the second set
+   rendered — flat surfaces, no shadows, no priority stripe on the card. */
+
+/* The board is the one screen that runs to the bottom of the window: the
+   horizontal scrollbar belongs at the very bottom and each column scrolls its
+   own cards. App puts `board-full` on the main element, and styles.css makes
+   the panel a flex column; this is the part that claims the space.
+
+   It used to be four `.board-full .jb…` rules in the global sheet. Those
+   selectors stopped matching the moment these classes were hashed by CSS
+   modules — the board would still render, just collapsed to content height —
+   so the behaviour lives here now, with the markup it belongs to. */
+.jb {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* ---------- worker filter ---------- */
+
+.avatarStack {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 8px;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  border: 2px solid var(--surface);
+  flex: none;
+  transition: transform 0.12s ease;
+}
+
+.avatarStack .avatar {
+  margin-inline-start: -8px;
+  cursor: pointer;
+}
+.avatarStack .avatar:hover {
+  transform: translateY(-2px);
+}
+.avatarStack .avatar.on {
+  box-shadow: 0 0 0 2px var(--primary);
+  z-index: 2;
+}
+
+.all {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/* ---------- view toggle ---------- */
+
+.viewToggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.viewToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: none;
+  background: none;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted-d);
+  cursor: pointer;
+}
+.viewToggle button svg {
+  width: 15px;
+  height: 15px;
+}
+.viewToggle button.on {
+  background: var(--surface);
+  color: var(--navy);
+}
+
+/* ---------- filters ---------- */
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search {
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  min-width: 240px;
+}
+.search:focus {
+  outline: none;
+  border-color: var(--slate);
+}
+
+.shown {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- columns ---------- */
+
+.board {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.col {
+  flex: 0 0 268px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wipOver {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.colHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-weight: 800;
+  font-size: 12.5px;
+  color: var(--muted-d);
+  border-bottom: 1px solid var(--border);
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.count {
+  margin-inline-start: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11.5px;
+  color: var(--muted-d);
+}
+
+.wip {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 72px;
+  flex: 1;
+}
+
+.isTarget {
+  background: var(--primary-soft);
+  border-radius: 0 0 13px 13px;
+}
+
+/* ---------- card ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: grab;
+  /* Without this the browser scrolls the column instead of starting a drag. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.card:hover {
+  border-color: var(--steel);
+}
+
+.hidden {
+  display: none;
+}
+
+.cardTitle {
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1.35;
+  margin: 7px 0;
+  color: var(--text);
+}
+
+.cardCar {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ---------- drag feedback ---------- */
+
+.ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  margin: 0;
+  cursor: grabbing;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.28);
+  transform: rotate(-1.5deg) scale(1.02);
+  opacity: 0.97;
+}
+
+.slot {
+  border: 2px dashed var(--primary);
+  background: var(--primary-soft);
+  border-radius: 12px;
+  flex: none;
+}
+
+/* ---------- shared bits ---------- */
+
+.plate {
+  display: inline-block;
+  background: var(--sand);
+  color: var(--navy);
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  direction: ltr;
+}
+
+.epic {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+/* ---------- table view ---------- */
+
+.tblKey {
+  font-weight: 800;
+  color: var(--muted-d);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tblTitle {
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.blocked {
+  margin-inline-start: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+
+.stPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.amount {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* The table view fills the same space the columns do, and scrolls inside. */
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
