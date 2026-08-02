@@ -1,0 +1,50 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 20px;
+  gap: 4px;
+}
+
+.icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--steel);
+  margin-bottom: 10px;
+}
+.icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.big {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+}
+.big svg {
+  width: 28px;
+  height: 28px;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 40ch;
+}
+
+.actions {
+  margin-top: 14px;
+}

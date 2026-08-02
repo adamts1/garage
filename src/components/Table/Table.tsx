@@ -12,8 +12,11 @@ const ariaSort = (sort: SortState | null): 'ascending' | 'descending' | 'none' =
 export interface TableProps<Row> {
   columns: readonly Column<Row>[];
   rows: readonly Row[];
-  /** Stable per row. Index is not a key here — these tables re-sort. */
-  rowKey: (row: Row) => string;
+  /** Stable per row. Prefer an id: these tables re-sort, and a positional key
+   *  then attaches the wrong DOM node to the wrong row. The index is passed for
+   *  the case where position genuinely is the identity — an invoice's line
+   *  items are a frozen JSON array with no ids and no sorting. */
+  rowKey: (row: Row, index: number) => string;
   /** i18n key shown in place of the body when there are no rows. */
   emptyKey?: string;
   /** Overrides emptyKey — for "nothing matched <query>" as against "none yet",
@@ -105,7 +108,7 @@ export default function Table<Row>({
         <tbody>
           {sorted.map((row, i) => (
             <tr
-              key={rowKey(row)}
+              key={rowKey(row, i)}
               className={[
                 onRowClick ? styles.clickable : null,
                 isRowSelected?.(row) ? styles.selected : null,

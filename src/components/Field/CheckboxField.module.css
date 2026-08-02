@@ -1,0 +1,32 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+/* The label wraps the box, so the text is part of the click target rather than
+   a 13px-wide square being the only way to tick it. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Lines up with the controls in a CrudForm row, whose labels sit above. */
+  min-height: 34px;
+}
+
+.box {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--navy);
+  cursor: pointer;
+}
+
+.hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}

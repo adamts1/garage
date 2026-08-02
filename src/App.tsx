@@ -14,9 +14,9 @@ import {
   createItem, createWorkDef, listItems, listWorkDefs, listWorkers, worksSummary,
   type PartDef, type TicketWork, type WorkDef,
 } from '@garage/shared';
-import InvoicesPage from './InvoicesPage';
+import { InvoicesPage } from './pages/Invoices';
 import { SuppliersPage } from './pages/Suppliers';
-import ExpensesPage from './ExpensesPage';
+import { ExpensesPage } from './pages/Expenses';
 import { ArchivePage } from './pages/Archive';
 import { WorkersPage } from './pages/Workers';
 import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports, IconWrench } from './icons';
