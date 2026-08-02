@@ -4,7 +4,7 @@ import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 import { setSupabaseClient } from '@garage/shared';
 import App from './App';
-import AuthGate from './AuthGate';
+import AuthGate from './app/AuthGate';
 import { ModalHost } from './components/Modal';
 import { ToastHost } from './components/Toast';
 import { CatalogProvider } from './features/catalog';

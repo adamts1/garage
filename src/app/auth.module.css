@@ -1,0 +1,182 @@
+/* Every authentication screen: the branded sign-in panel, the blank while a
+   stored session resolves, and the no-garage notice.
+
+   One module for all three on purpose. They are deliberately coordinated — the
+   app must not jump between two different full-screen layouts while auth
+   settles — and splitting them would put that coordination across two files
+   with nothing to say so.
+
+   Same rules as the global sheet had; the class names are local and the markup
+   was renamed to match. */
+/* ---------- login gate ---------- */
+/* Also used by the "no garage" and loading states, so the app never jumps
+   between two different full-screen layouts while auth resolves. */
+/* ---------- login (branded split panel) ---------- */
+.signIn {
+  min-height: 100vh;
+  display: flex;
+  direction: ltr;                 /* lay brand LEFT, form RIGHT regardless of RTL */
+  background: var(--bg, #f4f5f7);
+}
+.brand, .panel { direction: rtl; }   /* text back to RTL */
+
+.brand {
+  flex: 0 0 42%;
+  max-width: 560px;
+  background: linear-gradient(160deg, #22344e 0%, #16233a 100%);
+  color: #fff;
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 40px;
+}
+.brandHead { text-align: center; }
+.logo {
+  width: 124px; height: 124px;
+  border-radius: 28px;
+  display: block;
+  margin: 0 auto 18px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+}
+.logo.compact { display: none; }
+.title { margin: 0; font-size: 40px; font-weight: 800; }
+.tagline { margin: 6px 0 0; font-size: 15px; color: #b8c4d6; }
+
+.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.feature {
+  display: flex; gap: 14px; align-items: center;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 14px; padding: 14px 16px;
+}
+.featureIcon {
+  flex: 0 0 40px; height: 40px; border-radius: 10px;
+  background: rgba(255, 255, 255, .1); color: #cdd8e8;
+  display: grid; place-items: center;
+}
+.feature div { display: flex; flex-direction: column; gap: 2px; }
+.feature b { font-size: 14.5px; font-weight: 700; }
+.feature span { font-size: 12.5px; color: #aebace; }
+
+.brandFoot {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: #9fb0c8; font-size: 13px;
+}
+
+.panel { flex: 1; display: grid; place-items: center; padding: 40px 24px; }
+.form { width: 100%; max-width: 380px; display: flex; flex-direction: column; }
+.welcome { margin: 0; font-size: 26px; font-weight: 800; color: var(--text, #1d2d44); text-align: center; }
+.sub { margin: 6px 0 28px; font-size: 14px; color: var(--dim, #7a8699); text-align: center; }
+.form label { font-size: 13px; font-weight: 600; color: var(--text, #1d2d44); margin: 12px 0 6px; }
+
+.field { position: relative; display: flex; align-items: center; }
+.fieldIcon {
+  position: absolute; inset-inline-start: 13px;   /* right in RTL */
+  color: var(--mist, #94a3b8); display: grid; place-items: center; pointer-events: none;
+}
+.field input {
+  width: 100%;
+  padding: 12px 42px;
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 11px;
+  background: #fff; color: var(--text, #1d2d44);
+  font: inherit; font-size: 14px; text-align: right;
+}
+.field input:focus { outline: 2px solid #2a3d5a; outline-offset: 1px; border-color: transparent; }
+.eye {
+  position: absolute; inset-inline-end: 10px;     /* left in RTL */
+  background: none; border: 0; cursor: pointer; color: var(--mist, #94a3b8);
+  display: grid; place-items: center; padding: 4px;
+}
+
+.row { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; }
+.remember { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim, #667); }
+.remember input { width: auto; }
+.forgot { background: none; border: 0; padding: 0; cursor: pointer; color: #3e5c76; font: inherit; font-size: 13px; font-weight: 600; }
+.forgot:hover { text-decoration: underline; }
+.notice { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #eef2f7; color: #3e5c76; font-size: 13px; }
+
+.submit {
+  margin-top: 20px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: #1d2d44; color: #fff; border: 0; border-radius: 11px;
+  padding: 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.submit:hover:not(:disabled) { background: #22344e; }
+.submit:disabled { opacity: .55; cursor: default; }
+
+.secure {
+  margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border, #e3e6ea);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--dim, #8a94a6); font-size: 12.5px;
+}
+
+@media (max-width: 860px) {
+  .signIn { flex-direction: column; direction: rtl; }
+  .brand { flex-basis: auto; max-width: none; padding: 30px 24px 24px; gap: 0; }
+  .features, .brandFoot { display: none; }
+  .logo { width: 78px; height: 78px; border-radius: 18px; margin-bottom: 10px; }
+  .title { font-size: 28px; }
+  .tagline { font-size: 13px; }
+  .panel { padding: 26px 20px 40px; }
+}
+
+/* auxiliary auth states (loading blank, no-garage notice) — a simple centred
+   card, kept separate from the branded .signIn sign-in page. */
+.gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg, #f4f5f7);
+  padding: 24px;
+}
+.card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e3e6ea);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+.card h1 { margin: 0; font-size: 20px; }
+.muted { margin: 8px 0 14px; font-size: 13.5px; color: var(--dim, #7a8699); }
+.card .btn { margin-top: 10px; }
+
+.error {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: var(--danger-soft, #fdecec);
+  color: var(--danger, #b42318);
+  font-size: 13px;
+}
+
+/* Sign-out lives in the sidebar footer, the one chrome element present on every
+   page — there is no router, so there is no header to hang it off. */
+.sidebar-footer .sign-out {
+  margin-top: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted, #7a8699);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.sidebar-footer .sign-out:hover {
+  background: var(--surface-2, #eceef1);
+  color: var(--text);
+}
+.sidebar-footer .sign-out.icon-only {
+  width: auto;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
