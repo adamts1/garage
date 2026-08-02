@@ -2,17 +2,20 @@
   width: 100%;
 }
 
-/* Works on one side, that work's parts on the other, split by a divider. */
+/* Stacked, not side by side.
+
+   Side by side gave each six-column table about 400px and the job name was
+   down to "א…". Full width the name column gets ~530px, and the selected work
+   sits directly above the parts it owns, which is the relationship between the
+   two tables.
+
+   This was an override late in the old global sheet; porting the earlier rule
+   instead of the effective one put the columns back side by side and brought
+   the squeezed name column back with them. */
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 18px;
-}
-
-@media (max-width: 1100px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .col {
@@ -50,6 +53,15 @@
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  /* A work code is an LTR token. Left in the page's RTL it renders from the
+     wrong end and truncates to "…K-01". */
+  direction: ltr;
+  text-align: right;
+}
+
+/* The one column long enough to need it — a work name runs to a sentence. */
+.nameCell input {
+  text-overflow: ellipsis;
 }
 
 .nameCell {
@@ -95,4 +107,28 @@
 .addRow:hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+/* The rows are mostly read and only occasionally edited, so the cells read as
+   text and surface their input chrome on hover or focus. A grid of boxes makes
+   a list of works look like a form to be filled in rather than a summary. */
+.quietCells input {
+  background: transparent;
+  border-color: transparent;
+}
+.quietCells tr:hover input,
+.quietCells input:focus {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+/* Spinners steal width the numeric columns cannot spare. */
+.quietCells input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.quietCells input[type='number']::-webkit-outer-spin-button,
+.quietCells input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

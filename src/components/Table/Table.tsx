@@ -36,6 +36,11 @@ export interface TableProps<Row> {
      sliced, or each page sorts only itself. */
   sort?: SortState | null;
   onToggleSort?: (key: string) => void;
+
+  /** Makes the per-column widths binding instead of hints. Auto layout lets a
+   *  long value in one cell starve the numeric columns down to empty boxes;
+   *  with this the widths hold. Off by default — most tables want auto. */
+  fixedLayout?: boolean;
 }
 
 export default function Table<Row>({
@@ -51,6 +56,7 @@ export default function Table<Row>({
   className,
   sort: sortProp,
   onToggleSort,
+  fixedLayout = false,
 }: TableProps<Row>) {
   const { t } = useTranslation();
   const internal = useTable({ rows, columns, defaultSort });
@@ -62,7 +68,7 @@ export default function Table<Row>({
 
   return (
     <div className={[styles.wrap, className].filter(Boolean).join(' ')}>
-      <table className={styles.table}>
+      <table className={[styles.table, fixedLayout ? styles.fixed : null].filter(Boolean).join(' ')}>
         <thead>
           <tr>
             {columns.map((c) => {

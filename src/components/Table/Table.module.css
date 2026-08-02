@@ -16,6 +16,12 @@
   border-collapse: collapse;
 }
 
+/* Auto layout treats the column widths as hints, so one long value starves the
+   rest. Opt in where the widths have to hold. */
+.fixed {
+  table-layout: fixed;
+}
+
 .table th {
   background: var(--surface-2);
   color: var(--muted-d);
