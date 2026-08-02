@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import {
   assignableWorkers, garageName, listWorkers, workTotal, worksSummary,
 } from '@garage/shared';
 import type { Priority, Status, Ticket, TicketWork, Worker } from '@garage/shared';
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard';
 import { C, s } from '../lib/theme';
 import { Chips, Field, money, SectionHead, waNumber, WorksSection } from './ticketUi';
 
@@ -276,7 +277,7 @@ export default function TicketEditor({ ticketKey, onClose, embedded = false }: {
   ];
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.screen} behavior={KEYBOARD_BEHAVIOR}>
       {/* ---------- custom header ---------- */}
       <View style={{ backgroundColor: C.card, paddingTop: embedded ? 12 : insets.top + 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
         <View style={[s.row, { justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 10 }]}>

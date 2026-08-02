@@ -12,6 +12,7 @@ import {
   createItem, createWorkDef, fromCatalog, listItems, listWorkDefs, VAT, workTotal, worksSummary,
   type Item, type PartRow, type TicketWork, type WorkDef,
 } from '@garage/shared';
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard';
 import { C, rtl, s } from '../lib/theme';
 
 export const money = (n: number) =>
@@ -421,7 +422,7 @@ export function WorkPicker({ visible, onClose, onPick }: {
   return (
     <Sheet visible={visible} onClose={onClose} title={mode === 'create' ? 'עבודה חדשה' : 'בחר עבודה מהקטלוג'}>
       {mode === 'create' ? (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
           <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
             <View style={[s.card, { gap: 10 }]}>
               <Field label="שם העבודה *">
@@ -554,7 +555,7 @@ export function PartPicker({ workUid: forWork, onClose, onPick }: {
   if (mode === 'create') {
     return (
       <Sheet visible={Boolean(forWork)} onClose={onClose} title="פריט חדש">
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
           <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
             <View style={[s.card, { gap: 10 }]}>
               <Field label="שם הפריט *">

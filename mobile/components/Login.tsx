@@ -9,11 +9,12 @@
 
 import { useState } from 'react';
 import {
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable,
+  ActivityIndicator, Image, KeyboardAvoidingView, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signIn } from '@garage/shared';
+import { KEYBOARD_BEHAVIOR } from '../lib/keyboard';
 import { C } from '../lib/theme';
 
 const hebrewError = (message: string): string => {
@@ -51,7 +52,7 @@ export default function Login() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: C.ink }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
