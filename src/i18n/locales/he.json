@@ -304,6 +304,56 @@
       "document": "מסמך"
     }
   },
+  "app": {
+    "loading": "טוען נתונים מ‑Supabase…",
+    "supabaseError": "שגיאת Supabase: {{error}}",
+    "ticketNotFound": "הכרטיס {{key}} לא נמצא.",
+    "backToBoard": "חזרה ללוח"
+  },
+  "nav": {
+    "subtitle": "לוח ניהול",
+    "board": "לוח בקרה",
+    "invoices": "חשבוניות",
+    "expenses": "הוצאות",
+    "suppliers": "ספקים",
+    "customers": "לקוחות",
+    "workers": "עובדים",
+    "items": "פריטים",
+    "reports": "דוחות",
+    "archive": "ארכיון",
+    "open": "פתוח",
+    "activeTickets": "{{count}} כרטיסים פעילים",
+    "signOut": "התנתקות",
+    "pin": "נעץ את הסרגל פתוח",
+    "unpin": "בטל נעיצה - הסרגל יתכווץ"
+  },
+  "newTicket": {
+    "title": "כרטיס עבודה חדש",
+    "tabDetails": "פרטי לקוח ורכב",
+    "tabWorks": "עבודות ופריטים",
+    "backToBoard": "חזרה ללוח",
+    "searchCustomer": "חיפוש לקוח קיים לפי שם או טלפון",
+    "noCustomerMatch": "לא נמצא לקוח תואם",
+    "pickVehicle": "בחר רכב ללקוח:",
+    "kmValue": "{{km}} ק״מ",
+    "customerDetails": "פרטי לקוח",
+    "vehicleDetails": "פרטי רכב",
+    "details": "פרטים",
+    "pickYear": "שנת ייצור",
+    "totalWithVat": "סה״כ כולל מע״מ",
+    "save": "שמור כרטיס",
+    "needSomething": "הזן שם לקוח, מספר רישוי או עבודה אחת כדי לשמור",
+    "fields": {
+      "zip": "מיקוד",
+      "plate": "מספר רישוי",
+      "manufacturer": "יצרן",
+      "model": "דגם",
+      "year": "שנת ייצור",
+      "km": "קילומטר",
+      "vehicleCode": "קוד",
+      "details": "פרטים"
+    }
+  },
   "board": {
     "newTicket": "הוסף כרטיס",
     "searchPlaceholder": "חיפוש כרטיס / רכב / לקוח",
