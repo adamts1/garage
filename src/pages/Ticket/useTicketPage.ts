@@ -4,6 +4,7 @@ import {
   type Invoice, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCloseTicket, type CloseResult } from '../../features/ticket/CloseTicketModal';
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
 import {
   showError, showErrorKey, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
@@ -30,6 +31,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
   const confirm = useConfirm();
   const prompt = usePrompt();
   const openModal = useModalResult<boolean>();
+  const openCloseDrawer = useCloseTicket();
 
   const [photos, setPhotos] = useState<TicketPhoto[]>([]);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -134,8 +136,13 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     onBack();
   }, [confirm, dispatch, invoice, onBack, setTickets, ticket.k]);
 
-  const closed = useCallback(
-    (result: { paid: boolean; method: string; doc: string; reference?: string }) => {
+  /** Opens the close-and-charge drawer and applies whatever it comes back with.
+   *  A dismissed drawer resolves null and changes nothing. */
+  const close = useCallback(
+    async () => {
+      const result: CloseResult | null = await openCloseDrawer(ticket, totals.total);
+      if (!result) return;
+
       patch({
         // paid → "שולם"; closed with an open balance stays "מוכן לאיסוף"
         st: result.paid ? 'paid' : 'done',
@@ -153,8 +160,8 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
           : showErrorKey('ticket.closedWithBalance', { total: shekel(totals.total) }),
       );
     },
-    [dispatch, patch, ticket.subtasks.length, totals.total],
+    [dispatch, openCloseDrawer, patch, ticket, totals.total],
   );
 
-  return { photos, invoice, busy, totals, works, patch, setWorks, issue, cancel, remove, closed };
+  return { photos, invoice, busy, totals, works, patch, setWorks, issue, cancel, remove, close };
 }

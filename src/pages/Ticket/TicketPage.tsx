@@ -1,7 +1,6 @@
 import { COLUMNS, VAT, workerChip, type Ticket, type TicketPhoto, type WorkerMap } from '@garage/shared';
 import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
-import CloseTicketDrawer from '../../CloseTicketDrawer';
 import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
 import { WorksStep } from '../../features/works';
 import {
@@ -45,7 +44,6 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
   const { photos, invoice, busy, totals, works } = page;
 
   const [note, setNote] = useState('');
-  const [closing, setClosing] = useState(false);
   const [step, setStep] = useState('tp-details');
   const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
 
@@ -261,7 +259,7 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
               <dt>{t('ticket.fields.document')}</dt><dd>{ticket.doc ?? '-'}</dd>
             </dl>
 
-            <button className="btn primary block" onClick={() => setClosing(true)} disabled={settled}>
+            <button className="btn primary block" onClick={() => void page.close()} disabled={settled}>
               <IconCard /> {settled
                 ? t('ticket.alreadySettled')
                 : ticket.st === 'done'
@@ -347,15 +345,6 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
           </section>
         </aside>
       </div>
-
-      {closing && (
-        <CloseTicketDrawer
-          ticket={ticket}
-          total={totals.total}
-          onClose={() => setClosing(false)}
-          onConfirm={(r) => { page.closed(r); setClosing(false); }}
-        />
-      )}
 
       {lightbox && (
         <div
