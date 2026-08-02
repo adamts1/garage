@@ -2,14 +2,14 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import Modal from './Modal';
 import type { ModalComponentProps } from './types';
-import { settleConfirm } from '../../store/useConfirm';
+import { settleModal } from '../../store/useModalResult';
 
 /** Replaces `window.confirm`. Reached through `useConfirm()`, never rendered
  *  directly — the store opens it and the promise it settles is the answer. */
 export default function ConfirmModal({ props, isTop, stacked, onClose }: ModalComponentProps) {
   const { t } = useTranslation();
 
-  const confirmId = String(props.confirmId ?? '');
+  const resultId = String(props.resultId ?? '');
   const titleKey = String(props.titleKey ?? 'confirm.title');
   const bodyKey = String(props.bodyKey ?? '');
   const danger = props.danger === true;
@@ -23,7 +23,7 @@ export default function ConfirmModal({ props, isTop, stacked, onClose }: ModalCo
      component used to do it on unmount, and StrictMode's effect replay then
      answered "no" the instant the dialog appeared. See useConfirm. */
   const answer = (value: boolean) => {
-    settleConfirm(confirmId, value);
+    settleModal(resultId, value);
     onClose();
   };
 

@@ -99,6 +99,66 @@
       "avg": "תשלום ממוצע"
     }
   },
+  "works": {
+    "works": "עבודות ({{count}})",
+    "parts": "פריטים לעבודה ({{count}})",
+    "addWork": "הוסף עבודה",
+    "addPart": "הוסף פריט",
+    "removeWork": "הסר עבודה",
+    "removePart": "הסר פריט",
+    "worksAndParts": "סה״כ עבודה וחלקים",
+    "partsOfThisWork": "סה״כ פריטים בעבודה זו",
+    "emptyTitle": "טרם נוספו עבודות או פריטים",
+    "emptyBody": "הוסף עבודה כדי להתחיל",
+    "noWorksTitle": "אין עבודות בכרטיס",
+    "noWorksBody": "לחץ על \"הוסף עבודה\" כדי להוסיף עבודה חדשה",
+    "noPartsTitle": "אין פריטים לעבודה",
+    "noPartsBody": "בחר עבודה מהרשימה או הוסף עבודה חדשה כדי להוסיף פריטים",
+    "fields": {
+      "code": "קוד",
+      "name": "שם העבודה",
+      "labor": "מחיר",
+      "parts": "חלקים",
+      "total": "סה״כ",
+      "part": "פריט",
+      "unitPrice": "מחיר ליח׳"
+    }
+  },
+  "picker": {
+    "keys": "↑↓ ניווט · Enter בחירה · Esc סגירה",
+    "enterToCreate": "לחץ Enter כדי ליצור חדש",
+    "backToSearch": "חזרה לחיפוש",
+    "work": {
+      "title": "בחר עבודה",
+      "search": "הקלד קוד או שם עבודה…",
+      "empty": "לא נמצאה עבודה בשם \"{{query}}\"",
+      "create": "עבודה חדשה",
+      "newTitle": "עבודה חדשה",
+      "submit": "צור והוסף לכרטיס",
+      "new": "חדשה",
+      "partCount": "{{count}} חלקים",
+      "noParts": "ללא חלקים",
+      "noPartsYet": "לא נוספו חלקים — עבודה בלבד.",
+      "parts": "חלקים לעבודה",
+      "addPart": "הוסף חלק — הקלד מק״ט או שם…",
+      "code": "קוד",
+      "name": "שם העבודה",
+      "labor": "מחיר",
+      "qty": "כמות"
+    },
+    "part": {
+      "title": "הוסף חלק",
+      "search": "הקלד מק״ט או שם חלק…",
+      "empty": "לא נמצא חלק בשם \"{{query}}\"",
+      "create": "חלק חדש",
+      "newTitle": "חלק חדש",
+      "submit": "צור והוסף"
+    }
+  },
+  "catalog": {
+    "workNotSaved": "העבודה נוספה לכרטיס אך לא נשמרה בקטלוג: {{reason}}",
+    "partNotSaved": "הפריט נוסף לעבודה אך לא נשמר בקטלוג: {{reason}}"
+  },
   "board": {
     "newTicket": "הוסף כרטיס",
     "searchPlaceholder": "חיפוש כרטיס / רכב / לקוח",

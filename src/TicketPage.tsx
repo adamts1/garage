@@ -1,8 +1,8 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import CloseTicketDrawer from './CloseTicketDrawer';
-import WorksStep from './WorksStep';
-import { VAT, partsTotal, type PartDef, type TicketWork, type WorkDef } from '@garage/shared';
+import { WorksStep } from './features/works';
+import { VAT, partsTotal, type TicketWork } from '@garage/shared';
 import { COLUMNS, garageName, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
 import {
@@ -61,10 +61,6 @@ const waMessage = (t: Ticket, total: number, photos: TicketPhoto[] = []) => {
 interface Props {
   ticket: Ticket;
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
-  catalog: WorkDef[];
-  addToCatalog: (def: WorkDef) => void;
-  parts: PartDef[];
-  addToParts: (part: PartDef) => void;
   /** Code → chip, retired workers included: this page shows history. */
   workerChips: WorkerMap;
   onBack: () => void;
@@ -83,7 +79,7 @@ const Val = ({ children }: { children?: string | number | null }) =>
     : <>{children}</>;
 
 export default function TicketPage({
-  ticket, setTickets, catalog, addToCatalog, parts, addToParts, workerChips, onBack,
+  ticket, setTickets, workerChips, onBack,
 }: Props) {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
@@ -281,10 +277,6 @@ export default function TicketPage({
             <WorksStep
               works={works}
               setWorks={setWorks}
-              catalog={catalog}
-              addToCatalog={addToCatalog}
-              parts={parts}
-              addToParts={addToParts}
               combinedEmpty      /* one toolbox empty-state instead of two */
             />
           </section>

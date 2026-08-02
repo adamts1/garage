@@ -6,14 +6,11 @@ import { ItemsPage } from './pages/Items';
 import { ReportsPage } from './pages/Reports';
 import SetupNotice from './SetupNotice';
 import TicketPage from './TicketPage';
-import WorksStep from './WorksStep';
+import { WorksStep } from './features/works';
 import { isConfigured } from './lib/supabase';
 import { garageName, listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';
 import { useTickets } from './lib/useTickets';
-import {
-  createItem, createWorkDef, listItems, listWorkDefs, listWorkers, worksSummary,
-  type PartDef, type TicketWork, type WorkDef,
-} from '@garage/shared';
+import { listWorkers, worksSummary, type TicketWork } from '@garage/shared';
 import { InvoicesPage } from './pages/Invoices';
 import { SuppliersPage } from './pages/Suppliers';
 import { ExpensesPage } from './pages/Expenses';
@@ -21,7 +18,7 @@ import { ArchivePage } from './pages/Archive';
 import { WorkersPage } from './pages/Workers';
 import { IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts, IconPin, IconReports, IconWrench } from './icons';
 import {
-  COLUMNS, EPICS, TYPES, isArchived, workerMap,
+  EPICS, TYPES, isArchived, workerMap,
   type Priority, type Ticket, type Worker,
 } from '@garage/shared';
 
@@ -141,12 +138,6 @@ function App() {
   useEffect(() => { document.title = garageName(); }, []);
   const [form, setForm] = useState<TicketForm>(emptyForm);
   const [works, setWorks] = useState<TicketWork[]>([]);
-  /* The catalog is this garage's own, loaded from the database. It used to be a
-     constant compiled into the bundle, which meant every garage saw the same
-     work names and the same labour prices. */
-  const [catalog, setCatalog] = useState<WorkDef[]>([]);
-  const [partsCatalog, setPartsCatalog] = useState<PartDef[]>([]);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   /* The garage's own staff, loaded with the catalog for the same reason: both
      used to be hardcoded constants shared by every garage. Empty is a valid
@@ -162,16 +153,9 @@ function App() {
   useEffect(() => {
     if (!isConfigured) return;
     let live = true;
-    Promise.all([listWorkDefs(), listItems(), listWorkers()])
-      .then(([works, items, team]) => {
-        if (!live) return;
-        setCatalog(works);
-        // The parts catalog is the items table — same sku/name/price shape.
-        // There is no second list to keep in sync any more.
-        setPartsCatalog(items.map((i) => ({ sku: i.sku, name: i.name, price: i.price })));
-        setWorkers(team);
-      })
-      .catch((e) => live && setCatalogError(e instanceof Error ? e.message : String(e)));
+    listWorkers()
+      .then((team) => { if (live) setWorkers(team); })
+      .catch(() => {});   // an empty picker beats a crash
     return () => { live = false; };
   }, []);
 
@@ -186,36 +170,6 @@ function App() {
     });
   }, []);
 
-  /* A work invented in the modal now survives a reload.
-
-     Optimistic, because the modal closes onto the works table and an empty row
-     there reads as the work having been lost. If the write fails the entry is
-     rolled back out of the catalog — but the work stays on the ticket, which is
-     the copy the user actually cares about. */
-  const addToCatalog = async (def: WorkDef) => {
-    setCatalog((prev) => [...prev, def]);
-    try {
-      const saved = await createWorkDef(def);
-      setCatalog((prev) => prev.map((w) => (w.id === def.id ? saved : w)));
-    } catch (e) {
-      setCatalog((prev) => prev.filter((w) => w.id !== def.id));
-      setCatalogError(
-        `העבודה נוספה לכרטיס אך לא נשמרה בקטלוג: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  };
-
-  const addToParts = async (part: PartDef) => {
-    setPartsCatalog((prev) => [...prev, part]);
-    try {
-      await createItem({ sku: part.sku, name: part.name, price: part.price, stock: 0 });
-    } catch (e) {
-      setPartsCatalog((prev) => prev.filter((p) => p.sku !== part.sku));
-      setCatalogError(
-        `הפריט נוסף לעבודה אך לא נשמר בקטלוג: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  };
 
   // known customers + their vehicles, for the "search + autofill" box on a new ticket
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -423,14 +377,6 @@ function App() {
       <main className={`main-content${isConfigured && !loading && pathname === '/' ? ' board-full' : ''}`}>
         <section className="panel">
           {error && <div className="db-error">שגיאת Supabase: {error}</div>}
-          {/* Dismissible: unlike the ticket error this one is not fatal — the
-              board works, the catalog just did not save. Silently swallowing it
-              would let someone re-enter the same work every day. */}
-          {catalogError && (
-            <div className="db-error" role="alert" onClick={() => setCatalogError(null)}>
-              {catalogError}
-            </div>
-          )}
 
           {!isConfigured ? (
             <SetupNotice />
@@ -599,10 +545,6 @@ function App() {
                 <WorksStep
                   works={works}
                   setWorks={setWorks}
-                  catalog={catalog}
-                  addToCatalog={addToCatalog}
-                  parts={partsCatalog}
-                  addToParts={addToParts}
                 />
               </div>
 
@@ -649,10 +591,6 @@ function App() {
               <TicketRoute
                 tickets={tickets}
                 setTickets={setTickets}
-                catalog={catalog}
-                addToCatalog={addToCatalog}
-                parts={partsCatalog}
-                addToParts={addToParts}
                 workerChips={workerChips}
                 onBack={() => navigate('/')}
               />

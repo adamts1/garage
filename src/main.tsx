@@ -7,6 +7,7 @@ import App from './App';
 import AuthGate from './AuthGate';
 import { ModalHost } from './components/Modal';
 import { ToastHost } from './components/Toast';
+import { CatalogProvider } from './features/catalog';
 import './i18n';
 import { supabase } from './lib/supabase';
 import { ErrorBoundary, initSentry } from './lib/sentry';
@@ -43,16 +44,24 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           {/* Outside App so no board component — and so no realtime subscription —
               mounts before there is a session. */}
           <AuthGate>
-            <App />
+            {/* Inside the gate on purpose: the catalogue is tenant data behind
+                RLS, so loading it before there is a session buys a 401 and an
+                error toast on the login screen. */}
+            <CatalogProvider>
+              <App />
+
+              {/* A sibling of the app rather than a child of a page — that is
+                  what lets any component open a modal without the page it sits
+                  in owning one, and keeps a dialog up across a route change.
+                  Inside the provider because the work and part pickers read the
+                  catalogue for themselves. */}
+              <ModalHost />
+            </CatalogProvider>
           </AuthGate>
 
-          {/* Siblings of the whole app rather than children of a page. That is
-              what lets any component raise a toast or open a modal without the
-              page it sits in having to own one, and what keeps a dialog up
-              across a route change. Outside AuthGate too, so the login screen
-              reports failures the same way every other screen does. */}
+          {/* Outside the gate: the login screen reports failures the same way
+              every other screen does. */}
           <ToastHost />
-          <ModalHost />
         </BrowserRouter>
       </ErrorBoundary>
     </Provider>
