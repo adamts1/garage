@@ -1,0 +1,77 @@
+/* The row wraps rather than fixing a column count: reports shows six of these
+   and invoices three, and the old rule hardcoded `repeat(6, 1fr)` — which is
+   why the three-card rows rendered as three cards and three gaps. */
+.row {
+  display: grid;
+  /* 165px is chosen so all six of the reports cards fit one row at the panel's
+     usual width — at 190 the sixth wrapped onto a line of its own next to a
+     gap five cards wide. Three-card rows stretch to fill, which is why this is
+     auto-fit and not the `repeat(6, 1fr)` it replaced: that rule was written
+     for reports and left the invoices row three cards and three holes. */
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-d);
+  flex: 1;
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--slate);
+  flex: none;
+}
+.icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.value {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.sub {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ---------- tones ---------- */
+
+.ok .icon { background: var(--ok-soft); color: var(--ok); }
+.ok .value { color: var(--ok); }
+
+.warn .icon { background: var(--warn-soft); color: var(--warn); }
+.warn .value { color: var(--warn); }
+
+.danger .icon { background: var(--danger-soft); color: var(--danger); }
+.danger .value { color: var(--danger); }
+
+.slate .value { color: var(--navy); }
+
+.navy .icon { background: var(--surface-2); color: var(--navy); }
+.navy .value { color: var(--navy); }

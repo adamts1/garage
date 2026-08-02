@@ -1,6 +1,6 @@
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
@@ -9,6 +9,15 @@
 .title {
   margin: 0;
   font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .count {

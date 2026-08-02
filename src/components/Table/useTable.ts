@@ -38,6 +38,19 @@ export interface UseTableOptions<Row> {
 export function useTable<Row>({ rows, columns, defaultSort = null }: UseTableOptions<Row>) {
   const [sort, setSort] = useState<SortState | null>(defaultSort);
 
+  /* A defaultSort naming a column that does not exist, or one with no
+     sortValue, does nothing at all — the rows come out in query order and the
+     screen looks plausible. That is a hard mistake to see and an easy one to
+     make, so say so in development. */
+  if (import.meta.env.DEV && defaultSort) {
+    const column = columns.find((c) => c.key === defaultSort.key);
+    if (!column) {
+      console.warn(`Table: defaultSort "${defaultSort.key}" matches no column; rows are unsorted.`);
+    } else if (!column.sortValue) {
+      console.warn(`Table: column "${defaultSort.key}" has no sortValue; rows are unsorted.`);
+    }
+  }
+
   /* First click on a new column sorts ascending; clicking the sorted column
      flips it. There is no third state — an "unsorted" stop in the cycle means
      one stray click leaves the table in an order nobody asked for. */

@@ -1,0 +1,54 @@
+.bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 170px;
+}
+
+.filter > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-d);
+}
+
+.filter input,
+.filter select {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+}
+
+.filter input:focus,
+.filter select:focus {
+  outline: none;
+  border-color: var(--slate);
+}
+
+.clear {
+  color: var(--slate);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 10px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.clear:hover {
+  text-decoration: underline;
+}

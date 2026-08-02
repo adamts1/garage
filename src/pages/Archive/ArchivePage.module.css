@@ -1,0 +1,51 @@
+.table {
+  margin-top: 16px;
+}
+
+.key {
+  font-weight: 800;
+  color: var(--muted-d);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.title {
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.epic {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.plate {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.amount {
+  font-weight: 800;
+  white-space: nowrap;
+}
