@@ -16,6 +16,7 @@
     "test": "vitest run",
     "onboard": "node --env-file=.env.local scripts/onboard-garage.mjs",
     "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs",
+    "dupes": "node --env-file=.env.local scripts/duplicate-customers.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
     "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs"
   },

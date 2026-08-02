@@ -70,8 +70,9 @@ export function useBoardDrag({
       const rest = prev.filter((t) => t.k !== d.k);
 
       const next: Ticket = { ...moving, st: h.col };
-      // Leaving the blocked column clears the blocker.
-      if (h.col !== 'parts') delete next.blocked;
+      /* The blocker used to be cleared by dragging out of the "חסום - חלקים"
+         column. That column is gone and `blocked` is now just a note somebody
+         typed, so a drag leaves it alone rather than quietly erasing it. */
       // Ready or paid ticks everything off.
       if (h.col === 'done' || h.col === 'paid') next.done = next.subtasks.length;
       if (h.col === 'paid') next.paid = true;

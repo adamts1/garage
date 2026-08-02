@@ -1,4 +1,4 @@
-import type { Ticket } from '@garage/shared';
+import { modelsFor, VEHICLE_MAKES, type Ticket } from '@garage/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -9,6 +9,14 @@ import styles from './NewTicketPage.module.css';
 import { useNewTicket, YEARS } from './useNewTicket';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
+
+/** i18n keys for the fields a ticket cannot be saved without, so the footer can
+ *  name them in the same words the labels use. */
+const REQUIRED_LABELS = {
+  customerName: 'customers.fields.name',
+  customerPhone: 'customers.fields.phone',
+  licensePlate: 'newTicket.fields.plate',
+} as const;
 
 export interface NewTicketPageProps {
   tickets: Ticket[];
@@ -27,6 +35,8 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
     value: form.form[key],
     onChange: (e: { target: { value: string } }) => form.set(key, e.target.value),
   });
+
+  const models = modelsFor(form.form.manufacturer);
 
   const goTo = (n: 1 | 2, id: string) => {
     setTab(n);
@@ -128,10 +138,31 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
             <IconCustomers /> {t('newTicket.customerDetails')}
           </h3>
           <div className={styles.row3}>
-            <TextField dense label="customers.fields.name" {...field('customerName')} />
-            <TextField dense label="customers.fields.phone" type="tel" {...field('customerPhone')} />
+            <TextField dense required label="customers.fields.name" {...field('customerName')} />
+            <TextField dense required label="customers.fields.phone" type="tel" {...field('customerPhone')} />
             <TextField dense label="customers.fields.id_number" inputMode="numeric" {...field('idNumber')} />
           </div>
+
+          {/* The number is already on file. Said out loud rather than resolved
+              quietly: the ticket is about to be attached to whoever holds it,
+              and if that is not who the advisor has in front of them, they are
+              the only one who can tell. */}
+          {form.conflict && (
+            <div
+              className={`${styles.conflict}${form.conflict.differentName ? ` ${styles.conflictWarn}` : ''}`}
+              role="status"
+            >
+              <span>
+                {t(
+                  form.conflict.differentName
+                    ? 'newTicket.phoneTakenByOther'
+                    : 'newTicket.phoneKnown',
+                  { name: form.conflict.customer.name },
+                )}
+              </span>
+              <Button onClick={form.adoptConflict}>{t('newTicket.useThatCustomer')}</Button>
+            </div>
+          )}
           <TextField dense label="customers.fields.address" {...field('address')} />
           <div className={styles.row3}>
             <TextField dense label="customers.fields.email" type="email" {...field('email')} />
@@ -145,11 +176,36 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
             <IconCar /> {t('newTicket.vehicleDetails')}
           </h3>
           <div className={styles.row2}>
-            <TextField dense label="newTicket.fields.plate" {...field('licensePlate')} />
-            <TextField dense label="newTicket.fields.manufacturer" {...field('manufacturer')} />
+            <TextField dense required label="newTicket.fields.plate" {...field('licensePlate')} />
+            {/* A list, not a menu: `list` offers the known makes while the input
+                stays free text, so a grey import or a thirty-year-old model is
+                typed straight into the same field. See VEHICLE_CATALOG. */}
+            <TextField
+              dense
+              label="newTicket.fields.manufacturer"
+              list="vehicle-makes"
+              autoComplete="off"
+              hint="newTicket.pickOrType"
+              {...field('manufacturer')}
+            />
+            <datalist id="vehicle-makes">
+              {VEHICLE_MAKES.map((m) => <option key={m} value={m} />)}
+            </datalist>
           </div>
           <div className={styles.row2}>
-            <TextField dense label="newTicket.fields.model" {...field('model')} />
+            {/* The models of whichever make was typed above — nothing at all for
+                a make the list does not know, which is not an error. */}
+            <TextField
+              dense
+              label="newTicket.fields.model"
+              list="vehicle-models"
+              autoComplete="off"
+              hint={models.length ? 'newTicket.pickOrType' : undefined}
+              {...field('model')}
+            />
+            <datalist id="vehicle-models">
+              {models.map((m) => <option key={m} value={m} />)}
+            </datalist>
             <SelectField
               dense
               label="newTicket.fields.year"
@@ -191,6 +247,16 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
           <span>{t('newTicket.totalWithVat')}</span>
           <b>{shekel(form.totals.total)}</b>
         </div>
+        {/* Spelled out rather than left to the disabled button's tooltip: a
+            disabled button does not reliably show one, and "why can I not
+            save" is the question this has to answer. */}
+        {form.missing.length > 0 && (
+          <p className={styles.missing} role="status">
+            {t('newTicket.needRequired', {
+              fields: form.missing.map((k) => t(REQUIRED_LABELS[k])).join(', '),
+            })}
+          </p>
+        )}
         <div className="foot-spacer" />
         <Button onClick={onCancel}>{t('common.cancel')}</Button>
         <Button
@@ -198,7 +264,6 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
           variant="primary"
           size="lg"
           disabled={!form.canSave}
-          title={form.canSave ? undefined : t('newTicket.needSomething')}
         >
           {t('newTicket.save')} <span className="arrow">←</span>
         </Button>

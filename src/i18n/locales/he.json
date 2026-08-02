@@ -65,7 +65,7 @@
     "empty": "לא נמצאו נתונים לטווח שנבחר",
     "filters": {
       "customer": "חיפוש לקוח",
-      "customerPlaceholder": "שם לקוח",
+      "customerPlaceholder": "שם לקוח או טלפון",
       "status": "סטטוס כרטיס עבודה",
       "allStatuses": "כל הסטטוסים",
       "doc": "סוג מסמך",
@@ -90,7 +90,7 @@
     },
     "fields": {
       "customer": "לקוח",
-      "id": "מזהה",
+      "phone": "טלפון",
       "tickets": "כרטיסי עבודה",
       "net": "סה״כ לפני מע״מ",
       "vat": "מע״מ ({{percent}}%)",
@@ -376,7 +376,11 @@
     "pickYear": "שנת ייצור",
     "totalWithVat": "סה״כ כולל מע״מ",
     "save": "שמור כרטיס",
-    "needSomething": "הזן שם לקוח, מספר רישוי או עבודה אחת כדי לשמור",
+    "needRequired": "חסר כדי לשמור: {{fields}}",
+    "phoneTakenByOther": "מספר הטלפון הזה שמור אצל {{name}}. הכרטיס ייפתח על הלקוח הזה, לא על השם שהוקלד.",
+    "phoneKnown": "הטלפון הזה כבר רשום אצל {{name}} — הכרטיס ייפתח על הלקוח הקיים.",
+    "useThatCustomer": "פתח על הלקוח הזה",
+    "pickOrType": "בחר מהרשימה או הקלד חופשי",
     "fields": {
       "zip": "מיקוד",
       "plate": "מספר רישוי",
@@ -546,7 +550,8 @@
       "id_number": "ת״ז / ח.פ",
       "city": "עיר",
       "address": "כתובת",
-      "kind": "סוג"
+      "kind": "סוג",
+      "vehicles": "רכבים"
     }
   },
   "items": {

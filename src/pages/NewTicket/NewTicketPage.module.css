@@ -150,3 +150,37 @@
   font-size: 11.5px;
   color: var(--muted);
 }
+
+/* Sits next to the total in the sticky footer, where the eye already is when
+   the save button refuses to light up. */
+.missing {
+  margin: 0 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* The phone is already on file. Neutral when it is the same person under a
+   slightly different spelling, and a warning when the name does not match at
+   all — the case where a ticket is about to land on somebody else. */
+.conflict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.conflict span {
+  flex: 1;
+  min-width: 200px;
+}
+.conflictWarn {
+  border-color: var(--danger);
+  color: var(--danger);
+}

@@ -1,6 +1,14 @@
 import type { TicketWork } from './catalog';
 
-export type Status = 'todo' | 'appr' | 'prog' | 'parts' | 'done' | 'paid';
+/* Four columns, which is what a garage actually tracks: the car is here, the
+   customer has to approve, the car is ready, the money is in.
+
+   It was six — ממתין לטיפול / ממתין לאישור / בעבודה / חסום-חלקים / מוכן לאיסוף /
+   שולם. "בעבודה" and "חסום - חלקים" are gone: both mean the car is in the shop
+   and not ready, which is what כניסה says, and a board nobody drags cards
+   across is a board that lies. A blocker is still recordable — `blocked` is a
+   note on the ticket, no longer a column. */
+export type Status = 'todo' | 'appr' | 'done' | 'paid';
 export type Priority = 'urgent' | 'high' | 'med' | 'low';
 export type GroupBy = 'none' | 'who' | 'prio' | 'epic';
 
@@ -45,6 +53,20 @@ export interface Ticket {
    *  Reading a ticket back from the database never populates this field —
    *  read it from the customer. See docs/PRODUCTION.md §3.10. */
   idNumber?: string;
+
+  /** The customer this ticket was explicitly opened against, when the advisor
+   *  picked an existing one out of the search box rather than typing a name.
+   *
+   *  In transit only, like idNumber: `tickets.customer_id` is a real column,
+   *  but it is filled by create_ticket's own resolution, never mapped by
+   *  ticketToRow, and reading a ticket back never repopulates this field.
+   *
+   *  It exists because the search box knows something the ת״ז-then-phone
+   *  resolution cannot recover: *which* record the human meant. A customer
+   *  saved years ago with no phone would otherwise be duplicated the moment
+   *  somebody picked them and filled the phone in. The server still checks the
+   *  id belongs to the caller's garage before honouring it. */
+  customerId?: string | null;
   km?: string;
   year?: string;
 
@@ -93,12 +115,13 @@ export const isArchived = (t: Ticket, now: Date = new Date()): boolean => {
   return now.getTime() >= cutoff.getTime();
 };
 
+/* The board, left to right. `wip` caps a column and is optional — no column
+   sets one now that "בעבודה" is gone, but the board still honours it, so a
+   garage that wants a ceiling on open jobs has somewhere to put it. */
 export const COLUMNS: { id: Status; title: string; dot: string; wip?: number }[] = [
-  { id: 'todo', title: 'ממתין לטיפול', dot: '#748cab' },
+  { id: 'todo', title: 'כניסה', dot: '#748cab' },
   { id: 'appr', title: 'ממתין לאישור', dot: '#1d2d44' },
-  { id: 'prog', title: 'בעבודה', dot: '#b58a3c', wip: 4 },
-  { id: 'parts', title: 'חסום - חלקים', dot: '#a5544b' },
-  { id: 'done', title: 'מוכן לאיסוף', dot: '#4f7a5b' },   // מוכן, טרם שולם
+  { id: 'done', title: 'מוכן', dot: '#4f7a5b' },   // מוכן, טרם שולם
   { id: 'paid', title: 'שולם', dot: '#2f6b4a' },
 ];
 

@@ -14,3 +14,46 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* The cars belonging to one customer, in the panel under their row. A grid, not
+   a nested table: three fields do not need a header row, and a table inside a
+   table fights the outer one for column widths. */
+.vehicles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.vehicle {
+  display: grid;
+  grid-template-columns: 110px minmax(140px, 1fr) 2fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.plate {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.vehicleName {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.vehicleMeta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .vehicle {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

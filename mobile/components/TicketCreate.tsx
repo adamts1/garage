@@ -15,13 +15,17 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
 import {
-  listCustomers, listVehicles, worksSummary,
+  isUsablePhone, listCustomers, listVehicles, modelsFor, phoneConflict, VEHICLE_MAKES,
+  worksSummary,
   type Customer, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
 import { C, s } from '../lib/theme';
 import { Field, money, WorksSection } from './ticketUi';
 
 interface Form {
+  /** The record picked out of the search box, dropped the moment an identity
+   *  field is typed over. Same rule as the web form's TicketForm.customerId. */
+  customerId: string | null;
   customerName: string;
   customerPhone: string;
   idNumber: string;
@@ -40,12 +44,56 @@ interface Form {
 }
 
 const empty: Form = {
+  customerId: null,
   customerName: '', customerPhone: '', idNumber: '', address: '', email: '', city: '',
   licensePlate: '', vehicleCode: '', manufacturer: '', model: '', year: '', km: '',
   due: '', details: '', keyReceived: false,
 };
 
 const digits = (s: string) => (s || '').replace(/\D/g, '');
+
+/* The phone's answer to the web form's <datalist>: a scrolling row of chips
+   under the field. React Native has no native combobox, and a modal picker
+   would be the wrong shape for something that is only an aid — the input stays
+   free text and a make the list has never heard of is typed straight into it.
+
+   Capped, because a row of forty chips is not a shortcut. Typing narrows it. */
+const SUGGESTION_LIMIT = 12;
+
+const suggest = (all: readonly string[], typed: string): string[] => {
+  const q = typed.trim().toLowerCase();
+  // An exact hit means the field is already filled in; nothing left to offer.
+  if (q && all.some((v) => v.toLowerCase() === q)) return [];
+  const hits = q ? all.filter((v) => v.toLowerCase().includes(q)) : all;
+  return hits.slice(0, SUGGESTION_LIMIT);
+};
+
+function Suggestions({ items, onPick }: { items: string[]; onPick: (v: string) => void }) {
+  if (!items.length) return null;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+    >
+      {items.map((v) => (
+        <Pressable
+          key={v}
+          onPress={() => onPick(v)}
+          style={{
+            paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999,
+            borderWidth: 1, borderColor: C.line, backgroundColor: C.card,
+          }}
+        >
+          <Text style={{ fontSize: 12.5, fontWeight: '600', color: C.ink }}>{v}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
+const IDENTITY_FIELDS = new Set<keyof Form>(['customerName', 'customerPhone', 'idNumber']);
 
 export default function TicketCreate({ onClose, onCreated, embedded = false }: {
   onClose: () => void;
@@ -72,8 +120,14 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
     listVehicles().then(setVehicles).catch(() => {});   // no-op until the table exists
   }, []);
 
+  /* Typing over name / phone / ת״ז drops the picked customer — the form no
+     longer describes the record that was chosen. Address and the car do not. */
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [key]: value,
+      ...(IDENTITY_FIELDS.has(key) ? { customerId: null } : null),
+    }));
 
   // customer search: match on name or phone (digits only), first six
   const query = search.trim();
@@ -103,6 +157,7 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
   const pickCustomer = (c: Customer) => {
     setForm((prev) => ({
       ...prev,
+      customerId: c.id,
       customerName: c.name,
       customerPhone: c.phone ?? '',
       idNumber: c.id_number ?? '',
@@ -121,7 +176,41 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
   const pickVehicle = (v: Vehicle) => { fillVehicle(v); setVehicleChoices([]); };
 
   const total = worksSummary(works).total;
-  const canSave = Boolean(form.customerName.trim() || form.licensePlate.trim() || works.length);
+
+  /* Same rule as the web form (useNewTicket.missingRequired): name, phone and
+     plate are all required. The phone is what create_ticket resolves the
+     customer by, so a ticket saved without one opens a new customer record
+     every visit. */
+  const missing = [
+    !form.customerName.trim() && 'שם',
+    !isUsablePhone(form.customerPhone) && 'טלפון',
+    !form.licensePlate.trim() && 'מספר רישוי',
+  ].filter(Boolean) as string[];
+  const canSave = missing.length === 0;
+
+  /* The car fields are free text with a shortcut attached, never a closed list.
+     The models offered follow whichever make was typed, and there are simply
+     none for a make the catalog does not carry — which is a normal state. */
+  const makeHints = useMemo(
+    () => suggest(VEHICLE_MAKES, form.manufacturer),
+    [form.manufacturer],
+  );
+  const modelHints = useMemo(
+    () => suggest(modelsFor(form.manufacturer), form.model),
+    [form.manufacturer, form.model],
+  );
+
+  /* The number is the customer's identity, so one already on file means this
+     ticket is about to be attached to whoever holds it. Same rule as the web
+     form — see phoneConflict in @garage/shared. */
+  const conflict = useMemo(
+    () => phoneConflict(customers, {
+      phone: form.customerPhone,
+      name: form.customerName,
+      pickedId: form.customerId,
+    }),
+    [customers, form.customerPhone, form.customerName, form.customerId],
+  );
 
   const save = async () => {
     if (!canSave || saving) return;
@@ -162,7 +251,10 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
       flags: [...(form.keyReceived ? ['מפתח התקבל'] : []), 'חדש'],
       works,
       phone: form.customerPhone,
-      idNumber: form.idNumber,        // rides to the customer record, not a ticket column
+      // Both ride to the customer record, not to a ticket column: the id says
+      // which record, the ת״ז fills one that has none.
+      customerId: form.customerId,
+      idNumber: form.idNumber,
       email: form.email,
       address: [form.address, form.city].filter(Boolean).join(', '),
       km: form.km,
@@ -184,7 +276,11 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
   };
 
   const confirmLeave = () => {
-    const dirty = canSave || search.trim().length > 0 || form.details.trim().length > 0;
+    /* Anything typed at all, not canSave — that now means "valid", and a
+       half-filled form is exactly the one worth warning about. */
+    const dirty =
+      Boolean(form.customerName.trim() || form.customerPhone.trim() || form.licensePlate.trim()) ||
+      works.length > 0 || search.trim().length > 0 || form.details.trim().length > 0;
     if (!dirty) return onClose();
     Alert.alert('לצאת בלי לשמור?', 'הכרטיס החדש לא נשמר.', [
       { text: 'ביטול', style: 'cancel' },
@@ -263,10 +359,10 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
         <View style={[s.card, { gap: 10 }]}>
           <Text style={s.h2}>פרטי לקוח</Text>
           <View style={s.row}>
-            <Field label="שם" flex>
+            <Field label="שם *" flex>
               <TextInput style={s.input} value={form.customerName} onChangeText={(v) => set('customerName', v)} />
             </Field>
-            <Field label="טלפון" flex>
+            <Field label="טלפון *" flex>
               <TextInput style={s.input} keyboardType="phone-pad" value={form.customerPhone} onChangeText={(v) => set('customerPhone', v)} />
             </Field>
           </View>
@@ -284,19 +380,49 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
           <Field label="עיר">
             <TextInput style={s.input} value={form.city} onChangeText={(v) => set('city', v)} />
           </Field>
+
+          {/* The number is already on file. Said out loud rather than resolved
+              quietly: the ticket is about to be attached to whoever holds it. */}
+          {conflict && (
+            <View style={{
+              gap: 8, padding: 10, borderRadius: 10, borderWidth: 1,
+              borderColor: conflict.differentName ? C.danger : C.line,
+              backgroundColor: C.card,
+            }}>
+              <Text style={{
+                fontSize: 12.5, fontWeight: '700',
+                color: conflict.differentName ? C.danger : C.ink,
+              }}>
+                {conflict.differentName
+                  ? `מספר הטלפון הזה שמור אצל ${conflict.customer.name}. הכרטיס ייפתח על הלקוח הזה, לא על השם שהוקלד.`
+                  : `הטלפון הזה כבר רשום אצל ${conflict.customer.name} — הכרטיס ייפתח על הלקוח הקיים.`}
+              </Text>
+              <Pressable
+                onPress={() => pickCustomer(conflict.customer)}
+                style={{
+                  alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8,
+                  borderRadius: 9, borderWidth: 1, borderColor: C.line,
+                }}
+              >
+                <Text style={{ fontSize: 12.5, fontWeight: '800', color: C.ink }}>פתח על הלקוח הזה</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {/* ---------- vehicle details ---------- */}
         <View style={[s.card, { gap: 10 }]}>
           <Text style={s.h2}>פרטי רכב</Text>
           <View style={s.row}>
-            <Field label="מספר רישוי" flex>
+            <Field label="מספר רישוי *" flex>
               <TextInput style={s.input} value={form.licensePlate} onChangeText={(v) => set('licensePlate', v)} />
             </Field>
             <Field label="יצרן" flex>
               <TextInput style={s.input} value={form.manufacturer} onChangeText={(v) => set('manufacturer', v)} />
             </Field>
           </View>
+          <Suggestions items={makeHints} onPick={(v) => set('manufacturer', v)} />
+
           <View style={s.row}>
             <Field label="דגם" flex>
               <TextInput style={s.input} value={form.model} onChangeText={(v) => set('model', v)} />
@@ -305,6 +431,8 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
               <TextInput style={s.input} keyboardType="numeric" value={form.year} onChangeText={(v) => set('year', v)} />
             </Field>
           </View>
+          <Suggestions items={modelHints} onPick={(v) => set('model', v)} />
+
           <View style={s.row}>
             <Field label="קילומטר" flex>
               <TextInput style={s.input} keyboardType="numeric" value={form.km} onChangeText={(v) => set('km', v.replace(/\D/g, ''))} />
@@ -350,6 +478,12 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
         <View style={{ flex: 1 }}>
           <Text style={[s.dim, { fontSize: 11 }]}>סה״כ כולל מע״מ</Text>
           <Text style={{ fontSize: 18, fontWeight: '800', color: C.ink }}>{money(total)}</Text>
+          {/* Why the button is dimmed, next to the button. */}
+          {missing.length > 0 && (
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.danger }}>
+              חסר: {missing.join(', ')}
+            </Text>
+          )}
         </View>
         <Pressable
           onPress={save}

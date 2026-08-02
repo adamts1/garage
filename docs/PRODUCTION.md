@@ -388,10 +388,59 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] `saveWorks` → transactional `create_ticket` / `save_ticket_works` RPCs  (§3.5)
 - [x] Customer matching → by ת״ז then phone, never name; partial unique index on
       `(garage_id, id_number)`  (§3.6)
+- [x] The phone is matched on its **digits**, so one number typed with hyphens,
+      spaces or neither is one customer. A ticket with a name but neither
+      identifier creates **no** customer record at all — it used to create a
+      fresh unmatchable one on every visit, which is the same duplication §3.6
+      set out to kill. Both intake forms now require name + phone + מספר רישוי;
+      the server rule is the floor under a caller that skips them.
+      `20260802000000_customer_identity.sql`
+- [x] A customer **picked** from the intake form's search box is honoured by id,
+      ahead of any derivation. The search box knows which record the human
+      meant, and ת״ז-then-phone cannot recover that for a customer saved with
+      neither — picking one and filling in a phone used to open a second copy of
+      the person just selected. The id is garage-checked, not trusted:
+      `create_ticket` is `SECURITY DEFINER`, so RLS does not filter that lookup,
+      and an id from another garage is ignored rather than honoured. Dropped by
+      the form the moment name / phone / ת״ז is typed over.
+      `20260802010000_pick_customer.sql`
+- [x] **The phone is the customer identifier**, everywhere. ת״ז rides with it
+      and is optional. Two holes closed, both found by probing the RPC rather
+      than reading it: a ת״ז skipped the phone check entirely (`if id_number …
+      elsif phone …`), so an unknown ת״ז inserted a **second customer holding a
+      number the first already had** — after which `limit 1` picks between them
+      arbitrarily and the phone identifies nobody; and filling in a ת״ז already
+      held by another customer raised on the partial unique index and **rolled
+      back the whole ticket**, works and parts included. Order is now picked id
+      → phone digits → ת״ז, and the fill skips a number somebody else holds.
+      `20260802020000_phone_is_the_identity.sql`
+- [x] Both intake forms **say so when a number is already on file**, naming the
+      customer who holds it, with one button to open the ticket on that record.
+      Reported, not blocked: a number can legitimately be shared (a couple, a
+      business line), and only the person at the counter can tell a returning
+      customer from a mistyped digit. Before this the ticket was silently
+      attached to the existing customer while the card showed the newly typed
+      name, and no record was ever created for it — which is how a ticket got
+      "created without the customer".
+- [x] The **customer report groups by identity, not by the name string**
+      (`ticketCustomerKey`). It disagreed with the database in both directions:
+      one person whose name was typed two ways became two rows and looked like
+      two customers, and two people sharing a name became one row whose total
+      belonged to nobody. The row's sub-line is now the number it grouped by,
+      replacing a sequential `1001+i` that identified nothing and changed
+      whenever a filter did; report search matches a number as well as a name.
+- [x] The rule itself lives in one place — `packages/shared/src/identity.ts` —
+      because it has to be the same in four: the RPC, both intake forms and the
+      report. The SQL in `create_ticket` is its mirror; keep them in step.
+- [x] `scripts/duplicate-customers.mjs` reports the records the old rule already
+      wrote — grouped by phone digits, and by name where there is no phone and
+      no ת״ז — and merges only ids named explicitly on the command line. There
+      is deliberately no merge-all: two people who share a name and a garage are
+      not a duplicate, and only the garage can tell.
 - [x] Realtime → a change arriving mid-write is deferred and re-pulled once the
       write settles, not discarded  (§3.7)
 
-> Proven on every CI run by `supabase/tests/tenancy.mjs` (42 checks): ten
+> Proven on every CI run by `supabase/tests/tenancy.mjs` (73 checks): ten
 > concurrent creates get ten unique keys, a failed create leaves no orphan, a
 > forged garage_id is ignored, and two people with one name stay two customers.
 >
@@ -400,6 +449,34 @@ apps and both go dark. So schema first, then auth, then the flip.
 > caller's garage, but each client still receives (and discards) other garages'
 > events. That is efficiency, not correctness, and is deferred — noted here so it
 > is not mistaken for done.
+
+### Board and intake — the workflow the garage actually runs ✅
+- [x] **Four columns**: כניסה / ממתין לאישור / מוכן / שולם. It was six on screen
+      and **eight in the database** — `diag` and `qa` were allowed by the check
+      constraint and rendered by nothing, so a ticket that reached one dropped
+      off the board with no column to sit in. "בעבודה" and "חסום - חלקים" both
+      meant *in the shop, not ready*, which is what כניסה says. Existing tickets
+      are **mapped, not deleted** (`diag`/`prog`/`parts`/`qa` → `todo`); the
+      status ids are unchanged, so nothing downstream had to be rewritten.
+      `20260802030000_four_statuses.sql`
+- [x] A blocker is now a **note, not a column**. `blocked` still shows on the
+      card and in print; dragging no longer erases it, which it used to do on
+      the way out of "חסום - חלקים".
+- [x] The board columns are asserted from both sides: `COLUMNS` against the four
+      in `board.test.ts`, and the check constraint against the same four in
+      `tenancy.mjs`. Neither half can drift without a red test.
+- [x] **Car make and model are pick-or-type** on the intake form: `VEHICLE_MAKES`
+      offers the makes, `modelsFor()` narrows the models to whichever make was
+      entered. Both fields stay **free text** — a grey import or a thirty-year-old
+      model is typed straight in and saves like any other. Web uses `<datalist>`;
+      the phone gets a chip row, since React Native has no native combobox.
+      The list is a plain data file (`packages/shared/src/vehicleCatalog.ts`) —
+      adding a make is a one-line edit, no migration.
+- [x] **A customer's cars are visible from the customers page** — a count per row
+      that opens a panel with plate, make and model, year, km and code. The cars
+      come from `vehicles`, which `create_ticket` fills as tickets are opened, so
+      the list is a by-product of normal work rather than something to maintain.
+      `Table` grew an optional `renderExpanded` for this and stays reusable.
 
 ### Phase 4a — Invoicing 🔒 *(build complete; awaiting the accountant gate)*
 - [x] Immutable `invoices` table — frozen line items, per-invoice VAT rate, provider-owned numbering, cannot be edited or deleted (trigger). `20260727000000_invoices.sql`

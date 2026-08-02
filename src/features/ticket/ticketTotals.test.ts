@@ -87,7 +87,7 @@ describe('isClosed', () => {
   });
 
   it('is false while the work is still open', () => {
-    for (const st of ['todo', 'prog', 'parts'] as const) {
+    for (const st of ['todo', 'appr'] as const) {
       expect(isClosed(ticket({ st }))).toBe(false);
     }
   });
