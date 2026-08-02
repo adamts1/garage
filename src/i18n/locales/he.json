@@ -304,6 +304,40 @@
       "document": "מסמך"
     }
   },
+  "login": {
+    "brand": "מוסך",
+    "tagline": "מערכת ניהול מוסך חכמה",
+    "welcome": "ברוכים הבאים",
+    "subtitle": "התחברו כדי להמשיך למערכת",
+    "email": "אימייל",
+    "emailPlaceholder": "הכנס את האימייל שלך",
+    "password": "סיסמה",
+    "passwordPlaceholder": "הכנס את הסיסמה שלך",
+    "showPassword": "הצג סיסמה",
+    "hidePassword": "הסתר סיסמה",
+    "rememberMe": "זכור אותי",
+    "forgot": "שכחת סיסמה?",
+    "forgotNotice": "לאיפוס סיסמה פנו לתמיכה ונטפל בזה מיד.",
+    "signIn": "כניסה",
+    "signingIn": "מתחבר…",
+    "secureAccess": "גישה מאובטחת",
+    "secureData": "הנתונים שלך מאובטחים",
+    "errors": {
+      "badCredentials": "האימייל או הסיסמה שגויים.",
+      "notConfirmed": "החשבון עדיין לא אושר. פנו לתמיכה.",
+      "generic": "ההתחברות נכשלה. נסו שוב, ואם זה חוזר — פנו לתמיכה."
+    },
+    "features": {
+      "tickets": { "title": "ניהול כרטיסי עבודה", "text": "מעקב מלא אחר כל הטיפולים והלקוחות" },
+      "reports": { "title": "דוחות וסטטיסטיקות", "text": "כל הנתונים החשובים במקום אחד" },
+      "anywhere": { "title": "גישה מכל מקום", "text": "עובד במחשב, בטאבלט ובטלפון" }
+    }
+  },
+  "authGate": {
+    "noGarageTitle": "אין הרשאה למוסך",
+    "checkFailed": "לא הצלחנו לאמת את ההרשאות. נסו לרענן, ואם זה חוזר — פנו לתמיכה.",
+    "noMembership": "המשתמש קיים אך אינו משויך למוסך. פנו לתמיכה כדי להשלים את ההגדרה."
+  },
   "app": {
     "loading": "טוען נתונים מ‑Supabase…",
     "supabaseError": "שגיאת Supabase: {{error}}",

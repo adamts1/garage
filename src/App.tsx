@@ -16,7 +16,7 @@ import { ReportsPage } from './pages/Reports';
 import { SuppliersPage } from './pages/Suppliers';
 import { TicketPage } from './pages/Ticket';
 import { WorkersPage } from './pages/Workers';
-import SetupNotice from './SetupNotice';
+import SetupNotice from './app/SetupNotice';
 
 export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`;
 

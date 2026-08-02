@@ -1,0 +1,52 @@
+/* Shown when the Supabase connection is unconfigured. */
+
+.notice {
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 28px 32px;
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  background: #fafbfc;
+  line-height: 1.7;
+}
+
+.notice h2 {
+  margin: 0 0 12px;
+  color: #1d2d44;
+}
+
+.notice ol {
+  padding-inline-start: 20px;
+  margin: 16px 0;
+}
+
+.notice li { margin-bottom: 8px; }
+
+.notice code {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #eef1f5;
+  color: #3e5c76;
+  font-size: 13px;
+  direction: ltr;
+  display: inline-block;
+}
+
+.notice pre {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #1d2d44;
+  color: #dbe3ec;
+  font-size: 12.5px;
+  direction: ltr;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.notice a { color: #3e5c76; font-weight: 600; }
+
+/* Was the global .text-muted; local now, with the one screen that uses it. */
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
