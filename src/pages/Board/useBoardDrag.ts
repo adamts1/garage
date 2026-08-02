@@ -1,5 +1,5 @@
 import type { Status, Ticket } from '@garage/shared';
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 export interface DragState {
   k: string;
@@ -52,6 +52,12 @@ export function useBoardDrag({
     { k: string; dx: number; dy: number; w: number; h: number; x0: number; y0: number; started: boolean } | null
   >(null);
   const hoverRef = useRef<DropTarget | null>(null);
+
+  /* The exact handler references currently attached to window. The listeners
+     go on at pointer-down and come off at pointer-up, so they outlive any one
+     render, and `onUp` is rebuilt whenever `onOpenTicket` changes — removing
+     "the current onUp" would not necessarily remove the one that was attached. */
+  const attached = useRef<{ move: (e: PointerEvent) => void; up: () => void } | null>(null);
 
   const commit = useCallback(() => {
     const d = dragRef.current;
@@ -141,6 +147,7 @@ export function useBoardDrag({
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
+    attached.current = null;
     document.body.classList.remove('is-dragging');
 
     const d = dragRef.current;
@@ -167,11 +174,33 @@ export function useBoardDrag({
         y0: e.clientY,
         started: false,
       };
+      attached.current = { move: onMove, up: onUp };
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onUp);
     },
     [onMove, onUp],
+  );
+
+  /* Unmounting mid-drag — a route change, a realtime update that swaps the
+     board out — would otherwise leave the window listeners attached and, worse,
+     `is-dragging` on <body>. That class carries
+     `body.is-dragging * { cursor: grabbing !important }`, so every cursor in
+     the app stays a closed fist until the page is reloaded.
+
+     Mount-only, and it removes the references actually attached rather than
+     whatever the current render produced. */
+  useEffect(
+    () => () => {
+      const live = attached.current;
+      if (!live) return;
+      window.removeEventListener('pointermove', live.move);
+      window.removeEventListener('pointerup', live.up);
+      window.removeEventListener('pointercancel', live.up);
+      attached.current = null;
+      document.body.classList.remove('is-dragging');
+    },
+    [],
   );
 
   return { drag, hover, onPointerDown };
