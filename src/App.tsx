@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import Board from './Board';
+import { BoardPage } from './pages/Board';
 import { CustomersPage } from './pages/Customers';
 import { ItemsPage } from './pages/Items';
 import { ReportsPage } from './pages/Reports';
@@ -635,7 +635,7 @@ function App() {
 
             {/* ---------- the board, and one ticket ---------- */}
             <Route path="/" element={
-              <Board
+              <BoardPage
                 tickets={activeTickets}
                 setTickets={setTickets}
                 workers={workers}

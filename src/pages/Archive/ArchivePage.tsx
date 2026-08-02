@@ -1,10 +1,11 @@
-import { EPICS, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { PageHeader } from '../../components/PageHeader';
 import { Table, type Column } from '../../components/Table';
 import { IconClock } from '../../icons';
+import { epicChip } from '../../lib/epic';
 import styles from './ArchivePage.module.css';
 
 export interface ArchivePageProps {
@@ -18,13 +19,6 @@ export interface ArchivePageProps {
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
-/* `epic` is typed against EPICS but arrives from the database, so the type is a
-   promise the row cannot keep: a value added server-side, or an old row from
-   before a rename, indexes to undefined and taking .bg off it white-screens the
-   whole archive. Falling back shows the raw value, which is more use than a
-   blank page for working out what it is. */
-const epicChip = (epic: Ticket['epic']) =>
-  EPICS[epic] ?? { t: String(epic), bg: 'var(--surface-2)', c: 'var(--muted-d)' };
 
 export default function ArchivePage({ tickets, workerChips, onOpenTicket }: ArchivePageProps) {
   const { t } = useTranslation();
