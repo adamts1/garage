@@ -1,3 +1,5 @@
+export { CheckboxField } from './CheckboxField';
+export type { CheckboxFieldProps } from './CheckboxField';
 export { default as Field } from './Field';
 export type { FieldProps } from './Field';
 export { SelectField, TextAreaField, TextField } from './TextField';

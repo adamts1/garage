@@ -7,6 +7,9 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
+  /* See KpiCard.module.css — each block spaces itself now that the wrapper's
+     flex gap is gone. Collapses against a neighbouring margin-top. */
+  margin-bottom: 16px;
 }
 
 .filter {

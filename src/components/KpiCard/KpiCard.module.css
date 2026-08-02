@@ -10,6 +10,11 @@
      for reports and left the invoices row three cards and three holes. */
   grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: 12px;
+  /* The blocks on these screens used to be spaced by a flex `gap` on a wrapper
+     that no longer exists, so each one now carries its own bottom margin. It
+     collapses against the next block's margin-top rather than adding to it, so
+     the rhythm stays 16px whichever pair happens to be adjacent. */
+  margin-bottom: 16px;
 }
 
 .card {

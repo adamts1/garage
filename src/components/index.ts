@@ -2,11 +2,13 @@
    if a component needs that vocabulary it belongs in the page that uses it. */
 export * from './Button';
 export * from './CrudForm';
+export * from './EmptyState';
 export * from './Field';
 export * from './FilterBar';
 export * from './KpiCard';
 export * from './Modal';
 export * from './PageHeader';
+export * from './Pill';
 export * from './Pagination';
 export * from './Table';
 export * from './Toast';

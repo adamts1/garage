@@ -99,6 +99,121 @@
       "avg": "תשלום ממוצע"
     }
   },
+  "invoices": {
+    "title": "חשבוניות",
+    "subtitle": "מסמכי מס שהופקו — חשבוניות מס-קבלה וזיכויים",
+    "loading": "טוען חשבוניות…",
+    "emptyTitle": "אין עדיין חשבוניות",
+    "emptyBody": "חשבונית מופקת מתוך כרטיס עבודה, לאחר גביית התשלום",
+    "noMatchTitle": "לא נמצאו חשבוניות",
+    "noMatchBody": "אין חשבוניות שתואמות את הסינון",
+    "rowHint": "לחץ על שורה כדי לראות את פרטי החשבונית",
+    "net": "סה״כ נטו",
+    "netFiltered": "סה״כ נטו (מסונן)",
+    "showing": "{{shown}} מתוך {{total}}",
+    "openTicket": "פתח כרטיס עבודה #{{number}}",
+    "printCopy": "הדפס עותק",
+    "officialPdf": "המסמך הרשמי (PDF)",
+    "docType": {
+      "invoice_receipt": "חשבונית מס-קבלה",
+      "credit_note": "חשבונית זיכוי"
+    },
+    "status": {
+      "issued": "הופקה",
+      "cancelled": "בוטלה"
+    },
+    "kpi": {
+      "issued": "סה״כ הופק",
+      "issuedSub": "{{count}} חשבוניות פעילות",
+      "receipts": "חשבוניות מס-קבלה",
+      "receiptsSub": "סך המסמכים שהופקו",
+      "cancelled": "בוטלו",
+      "cancelledSub": "חשבוניות שבוטלו בזיכוי"
+    },
+    "filters": {
+      "search": "חיפוש",
+      "searchPlaceholder": "לקוח, מספר מסמך או כרטיס",
+      "docType": "סוג מסמך",
+      "allDocTypes": "כל סוגי המסמכים",
+      "status": "סטטוס",
+      "allStatuses": "כל הסטטוסים"
+    },
+    "fields": {
+      "docnum": "מספר",
+      "customer": "לקוח",
+      "issuedAt": "תאריך",
+      "docType": "סוג מסמך",
+      "total": "סכום כולל",
+      "status": "סטטוס",
+      "allocation": "מספר הקצאה"
+    },
+    "lines": {
+      "desc": "פירוט",
+      "qty": "כמות",
+      "unit": "מחיר",
+      "total": "סה״כ"
+    },
+    "detail": {
+      "customer": "לקוח",
+      "idNumber": "ת״ז / ח״פ",
+      "docType": "סוג מסמך",
+      "issuedAt": "תאריך הפקה",
+      "allocation": "מספר הקצאה",
+      "payMethod": "אמצעי תשלום",
+      "subtotal": "סכום לפני מע״מ",
+      "vat": "מע״מ ({{percent}}%)",
+      "total": "סה״כ"
+    }
+  },
+  "expenses": {
+    "title": "הוצאות ספקים",
+    "add": "הוסף הוצאה",
+    "empty": "לא נרשמו הוצאות",
+    "noSuppliersTitle": "אין ספקים",
+    "noSuppliersBody": "הוצאה נרשמת על שם ספק. יש להוסיף ספק אחד לפחות בעמוד ספקים.",
+    "saveAndSync": "שמור וסנכרן",
+    "saving": "שומר…",
+    "pickSupplier": "בחר ספק…",
+    "preview": "מע״מ {{vat}} · סה״כ {{total}}",
+    "vat18": "מע״מ 18%",
+    "vatNone": "ללא מע״מ",
+    "paid": "שולם",
+    "unpaid": "לתשלום",
+    "togglePaid": "החלף מצב תשלום",
+    "print": "הדפס",
+    "deleted": "ההוצאה נמחקה",
+    "savedAndSynced": "ההוצאה נשמרה וסונכרנה ל-iCount",
+    "savedNotSynced": "ההוצאה נשמרה, אך הסנכרון ל-iCount נכשל: {{reason}}",
+    "synced": "ההוצאה סונכרנה",
+    "syncFailed": "הסנכרון נכשל: {{reason}}",
+    "confirmDelete": "למחוק את ההוצאה?",
+    "confirmDeleteSynced": "למחוק את ההוצאה? הרישום ב-iCount לא יימחק — יש לבטל אותו שם בנפרד.",
+    "sync": {
+      "synced": "סונכרן",
+      "pending": "ממתין לסנכרון",
+      "pendingHint": "לחץ לסנכרון",
+      "errorRetry": "שגיאת סנכרון · נסה שוב",
+      "retryHint": "לחץ לניסיון חוזר"
+    },
+    "kpi": {
+      "total": "סה״כ הוצאות",
+      "unpaid": "טרם שולם",
+      "unsynced": "לא סונכרנו"
+    },
+    "fields": {
+      "date": "תאריך",
+      "supplier": "ספק",
+      "description": "תיאור",
+      "category": "קטגוריה",
+      "reference": "מספר מסמך הספק",
+      "subtotal": "לפני מע״מ",
+      "vat": "מע״מ",
+      "vatRate": "שיעור מע״מ",
+      "total": "סה״כ",
+      "paid": "שולם",
+      "sync": "סנכרון"
+    }
+  },
   "customers": {
     "title": "רשימת לקוחות",
     "add": "הוסף לקוח",
