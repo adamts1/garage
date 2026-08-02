@@ -1,7 +1,9 @@
 import type { ComponentType } from 'react';
+import IssueInvoiceModal from '../../features/ticket/IssueInvoiceModal';
 import ItemPickerModal from '../../features/works/ItemPickerModal';
 import WorkPickerModal from '../../features/works/WorkPickerModal';
 import ConfirmModal from './ConfirmModal';
+import PromptModal from '../PromptModal/PromptModal';
 import type { ModalComponentProps } from './types';
 
 /* Every modal the app can open, by name. `dispatch(modalOpened({ name }))` from
@@ -16,6 +18,8 @@ import type { ModalComponentProps } from './types';
    are. Only their names are known here. */
 export const MODAL_REGISTRY: Record<string, ComponentType<ModalComponentProps>> = {
   confirm: ConfirmModal,
+  prompt: PromptModal,
+  issueInvoice: IssueInvoiceModal,
   workPicker: WorkPickerModal,
   partPicker: ItemPickerModal,
 };

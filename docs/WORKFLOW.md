@@ -336,65 +336,93 @@ Netlify builds `main` on every merge. PRs get a deploy preview. Nothing to run.
 **Environment variables are baked in at build time.** Changing one in the Netlify
 dashboard does nothing until the next deploy.
 
-### Mobile — two tracks
+### Mobile — the stores are production, everything else is staging
 
-**TestFlight is for production builds only.** Never point it at staging: one app
-has one bundle ID and one baked-in database, so repointing TestFlight would mean
-your testers are suddenly writing to whichever database was current at build
-time — and you cannot tell by looking at the app which one that is.
+**The rule: an artefact that can reach App Store Connect or Play Console is
+built against production. Nothing else is.** Simulators, emulators, `expo
+start` and direct-install device builds all read staging.
 
-To test a build against staging, use the `staging` profile instead. It installs
-directly on registered devices, skipping TestFlight and Apple's processing wait
-entirely.
+That used to rest on picking the right npm script. It now rests on the build
+itself: `APP_VARIANT` in `app.config.js` gives staging builds their own bundle
+id, package name, app name and URL scheme.
 
-| profile | database | packaging | how it installs | for |
+| profile | EAS environment → database | variant | produces | for |
 |---|---|---|---|---|
-| `staging` | **staging** | apk | direct link / QR | trying a change on a real phone |
-| `staging-play` | **staging** | **aab** | Google Play, closed testing | the Play testing track |
-| `preview` | **staging** | apk | iOS Simulator on your Mac | quick checks, no device needed |
-| `production` | **production** | aab / ipa | Play production, TestFlight | releases |
-
-> **`staging-play` is the one profile that pairs store packaging with the
-> staging database, and that is deliberate.** Play only accepts an `.aab`, and
-> Google's new-developer rules can require a closed test running for a fixed
-> period before production access — a test that must not write into real garage
-> data. So the artefact is shaped for the store while the data is not.
->
-> It also means an `.aab` in hand is **not** necessarily a release candidate.
-> Check which profile produced it before promoting anything: a `staging-play`
-> bundle promoted to Play production would point ten real garages at the
-> staging database. `eas build:view <id>` prints the profile.
+| `development` | development → **staging** | staging | dev client | working on native modules |
+| `simulator` | preview → **staging** | staging | simulator `.app` / emulator `.apk` | quick checks, no device |
+| `staging` | preview → **staging** | staging | ad-hoc `.ipa` / `.apk` | trying a change on a real phone |
+| `production` | production → **production** | production | TestFlight `.ipa` / Play `.aab` | releases |
 
 ```bash
 cd mobile
-npm run device          # once per phone — registers it for direct install
-npm run build:staging   # build against staging, install via the link EAS prints
-npm run testflight      # production build -> TestFlight
+npm run device                 # once per phone — registers it for direct install
+npm run build:staging:ios      # staging, installs via the link EAS prints
+npm run run:sim:ios            # staging, straight into the simulator
+npm run testflight             # production -> TestFlight
+npm run build:prod:android     # production .aab -> upload in Play Console
 ```
-
-`staging` and `preview` both read EAS's **preview** environment, so that is the
-one that must hold staging's URL and anon key. `production` reads the
-**production** environment.
 
 Registering a device is a one-off: iOS ad-hoc distribution embeds the allowed
 device IDs in the provisioning profile, so a phone that was not registered when
 the build was made cannot install it.
 
-### Shipping to TestFlight
+#### What changed, and the one thing it costs
+
+There used to be a `staging-play` profile: store packaging (`.aab`, needed
+because Play accepts nothing else) paired with the staging database, so that
+Google's new-developer closed-testing period could run without writing into real
+garage data. It shared `com.tsityat.garageapp` with production, which is what
+made it usable for that — and also meant one accidental promote in Play Console
+would have pointed every real garage at staging. Nothing prevented that promote.
+
+It is gone. Staging Android builds are now `com.tsityat.garageapp.staging`, a
+different app as far as Play is concerned, so they **cannot** be uploaded into
+the production listing at all.
+
+The cost: a closed test that counts toward Play's production-access requirement
+has to run on the production listing, which now means a production build against
+the production database. Give the testers their own garage — RLS already scopes
+everything by `garage_id`, so a test garage in production is isolated from the
+real ten without needing a separate database. That is the trade this makes: real
+database, sandboxed tenant, instead of real listing, wrong database.
+
+#### Telling them apart at a glance
+
+A staging build installs **alongside** the production app rather than over it —
+different bundle id — and shows as `מוסך (Staging)`. Inside the app, a strip
+along the bottom names the Supabase project the client actually reached
+(`mobile/components/EnvBadge.tsx`): silent in production, yellow for staging,
+and **red** when the build's variant and its database disagree.
+
+That last case is the one the naming cannot catch. The variant comes from
+`eas.json`; the database comes from EAS environment variables edited in a
+dashboard. Nothing links them, so an env var pointed at the wrong project makes
+a "production" build that talks to staging — and the badge is what says so.
+`eas env:list --environment production` is the check before a release.
+
+### Shipping a release
 
 ```bash
 cd mobile
-npm run testflight
+npm run testflight           # iOS: build + submit
+npm run build:prod:android   # Android: .aab, then upload it in Play Console
 ```
 
-Builds on EAS, auto-increments the version, submits to TestFlight. Apple then
-processes it for 5–15 minutes.
+Both go through `scripts/release.sh`, which builds on EAS, auto-increments the
+version, and for iOS submits to TestFlight. Apple then processes it for 5–15
+minutes.
 
 - **EAS builds from git.** Uncommitted work is not in the build. The script
   checks `mobile/` *and* `packages/shared/` and refuses to continue quietly.
-- The script prints the branch and commit before building. Read it — builds are
-  often made from a feature branch, and "which code is in this build" should not
-  be a guess.
+  This applies to Android too — which is why the script takes a platform rather
+  than being the iOS-only `testflight.sh` it started as.
+- The script prints the branch, the commit, and that the target is the
+  production database before building. Read it — builds are often made from a
+  feature branch, and "which code is in this build" should not be a guess.
+- **Play submit is not automated.** `submit.production` in `eas.json` has only
+  `ios.ascAppId`; Android needs a Google Play service account key first. Until
+  then the `.aab` is uploaded by hand, and the script refuses `--submit` for
+  Android rather than pretending.
 - **A build succeeding is not the app working.** After a TestFlight build,
   install it and check: app opens, ticket list loads, a ticket opens with correct
   totals, a photo uploads.

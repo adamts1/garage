@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Invoice, Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { Provider } from 'react-redux';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,8 +37,10 @@ vi.mock('@garage/shared', async (importActual) => {
   };
 });
 
-const { default: TicketPage } = await import('../../TicketPage');
-const { CatalogProvider } = await import('../catalog');
+await import('../../i18n');
+const { default: TicketPage } = await import('./TicketPage');
+const { CatalogProvider } = await import('../../features/catalog');
+const { ModalHost } = await import('../../components/Modal');
 const { default: modal } = await import('../../store/modalSlice');
 const { default: toast } = await import('../../store/toastSlice');
 
@@ -67,6 +69,9 @@ const renderPage = async (t: Ticket = ticket()) => {
       <Provider store={store}>
         <CatalogProvider>
           <TicketPage ticket={t} setTickets={() => {}} workerChips={{} as never} onBack={() => {}} />
+          {/* The issue dialog and the cancel prompt now come from the registry,
+              so the host has to be mounted for either to appear at all. */}
+          <ModalHost />
         </CatalogProvider>
       </Provider>
     </StrictMode>,
@@ -129,27 +134,36 @@ describe('issuing an invoice', () => {
 describe('cancelling an invoice', () => {
   beforeEach(() => { listInvoices.mockResolvedValue([invoice()]); });
 
-  it('asks for a reason and does nothing if the prompt is dismissed', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue(null);
+  const openCancel = async () => {
     await renderPage();
     await act(async () => { screen.getByText(/בטל חשבונית/).click(); });
+    await act(async () => { await Promise.resolve(); });
+  };
 
-    // Dismissing the prompt must not issue a credit note.
+  /* fireEvent, not a raw assignment: React installs its own value setter on the
+     input prototype, so setting .value directly leaves its state untouched. */
+  const typeReason = (reason: string) =>
+    fireEvent.change(screen.getByLabelText(/סיבת הביטול/), { target: { value: reason } });
+
+  it('asks for a reason and does nothing if the dialog is dismissed', async () => {
+    await openCancel();
+    await act(async () => { screen.getByText('ביטול').click(); });
+
+    // Dismissing must not issue a credit note.
     expect(cancelInvoice).not.toHaveBeenCalled();
   });
 
   it('cancels with the reason given', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('טעות בסכום');
-    await renderPage();
-    await act(async () => { screen.getByText(/בטל חשבונית/).click(); });
+    await openCancel();
+    await act(async () => { typeReason('טעות בסכום'); });
+    await act(async () => { screen.getByText('אישור').click(); });
 
     expect(cancelInvoice).toHaveBeenCalledWith('inv1', 'טעות בסכום');
   });
 
-  it('falls back to a default reason when the prompt is left empty', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('');
-    await renderPage();
-    await act(async () => { screen.getByText(/בטל חשבונית/).click(); });
+  it('falls back to a default reason when the box is left empty', async () => {
+    await openCancel();
+    await act(async () => { screen.getByText('אישור').click(); });
 
     expect(cancelInvoice).toHaveBeenCalledWith('inv1', 'ביטול חשבונית');
   });

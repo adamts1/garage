@@ -3,40 +3,39 @@
     "version": ">= 18.5.0",
     "appVersionSource": "remote"
   },
+
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "environment": "development"
+      "environment": "development",
+      "env": { "APP_VARIANT": "staging" }
     },
 
-    "preview": {
+    "simulator": {
       "distribution": "internal",
       "environment": "preview",
-      "ios": {
-        "simulator": true
-      }
+      "env": { "APP_VARIANT": "staging" },
+      "ios": { "simulator": true },
+      "android": { "buildType": "apk" }
     },
 
     "staging": {
       "distribution": "internal",
-      "environment": "preview"
-    },
-
-    "staging-play": {
-      "distribution": "store",
       "environment": "preview",
-      "autoIncrement": true,
-      "android": {
-        "buildType": "app-bundle"
-      }
+      "env": { "APP_VARIANT": "staging" },
+      "android": { "buildType": "apk" }
     },
 
     "production": {
+      "distribution": "store",
       "autoIncrement": true,
-      "environment": "production"
+      "environment": "production",
+      "env": { "APP_VARIANT": "production" },
+      "android": { "buildType": "app-bundle" }
     }
   },
+
   "submit": {
     "production": {
       "ios": {

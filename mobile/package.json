@@ -28,25 +28,28 @@
   },
   "scripts": {
     "postinstall": "patch-package",
+
     "start": "expo start",
-    "android": "expo run:android",
     "ios": "expo run:ios",
+    "android": "expo run:android",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "testflight": "bash scripts/testflight.sh",
-    "build:ios": "bash scripts/testflight.sh --build-only",
-    "submit:ios": "eas submit --platform ios --profile production",
-    "builds": "eas build:list --platform ios --limit 5",
-    "build:staging": "eas build --platform ios --profile staging",
+
+    "build:sim:ios": "eas build --platform ios --profile simulator",
+    "run:sim:ios": "eas build:run --platform ios --profile simulator",
+    "build:sim:android": "eas build --platform android --profile simulator",
+    "run:sim:android": "eas build:run --platform android --profile simulator",
+
+    "build:staging:ios": "eas build --platform ios --profile staging",
+    "build:staging:android": "eas build --platform android --profile staging",
     "device": "eas device:create",
-    "build:preview": "eas build --platform ios --profile preview",
-    "run:preview": "eas build:run --platform ios --profile preview",
-    "build:staging:local": "eas build --platform ios --profile staging --local",
-    "build:prod:local": "eas build --platform ios --profile production --local",
-    "build:android": "eas build --platform android --profile staging",
-    "build:android:local": "eas build --platform android --profile staging --local",
-    "build:android:play": "eas build --platform android --profile staging-play",
-    "build:android:prod": "eas build --platform android --profile production",
+
+    "testflight": "bash scripts/release.sh ios --submit",
+    "build:prod:ios": "bash scripts/release.sh ios",
+    "build:prod:android": "bash scripts/release.sh android",
+    "submit:ios": "eas submit --platform ios --profile production",
+
+    "builds:ios": "eas build:list --platform ios --limit 5",
     "builds:android": "eas build:list --platform android --limit 5"
   },
   "private": true
