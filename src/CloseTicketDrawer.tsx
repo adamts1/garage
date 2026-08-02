@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconCard, IconCheck, IconDoc } from './icons';
 import type { Ticket } from '@garage/shared';
@@ -50,14 +50,31 @@ export default function CloseTicketDrawer({ ticket, total, onClose, onConfirm }:
   const method = METHODS.find((m) => m.id === methodId) ?? null;
   const doc = method?.paid ? 'חשבונית מס-קבלה' : 'חשבונית מס (חיוב פתוח)';
 
-  /* success → hand the result back to the page, which raises the toast */
+  /* success → hand the result back to the page, which raises the toast.
+
+     `onConfirm` is an inline arrow from TicketPage, so it is a new function on
+     every render of that page — and TicketPage re-renders whenever a realtime
+     photo or invoice event lands. Naming it as a dependency restarted this
+     timer each time, so a busy ticket could sit on the success screen
+     indefinitely without ever confirming. Held in a ref instead: the timer is
+     started by the state reaching 'done' and by nothing else. */
+  const confirmRef = useRef(onConfirm);
+  confirmRef.current = onConfirm;
+
   useEffect(() => {
     if (state !== 'done' || !method) return;
     const t = setTimeout(() => {
-      onConfirm({ paid: method.paid, method: method.label, doc, reference: reference || undefined });
+      confirmRef.current({
+        paid: method.paid,
+        method: method.label,
+        doc,
+        reference: reference || undefined,
+      });
     }, 1500);
     return () => clearTimeout(t);
-  }, [state, method, doc, reference, onConfirm]);
+    // reference and doc are settled by the time this screen shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, method]);
 
   const charge = () => {
     setState('charging');
