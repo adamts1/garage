@@ -28,7 +28,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'code',
       header: 'works.fields.code',
-      width: 96,
+      width: 116,
       render: (w) => (
         <CellInput
           className={styles.code}
@@ -198,6 +198,8 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           ) : (
             <>
               <Table
+                className={styles.quietCells}
+                fixedLayout
                 columns={workColumns}
                 rows={works}
                 rowKey={(w) => w.uid}
@@ -240,6 +242,8 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           ) : (
             <>
               <Table
+                className={styles.quietCells}
+                fixedLayout
                 columns={partColumns}
                 rows={current.items}
                 rowKey={(i) => i.sku}

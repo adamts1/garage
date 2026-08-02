@@ -6,8 +6,10 @@
 
 .cell {
   width: 100%;
-  min-width: 90px;
-  padding: 6px 8px;
+  /* Not a min-width: inputs carry a default intrinsic width of ~177px, which
+     blows out a fixed-layout table and crushes the name column. */
+  min-width: 0;
+  padding: 7px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
