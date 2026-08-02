@@ -2,7 +2,8 @@ import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAc
 import { createPortal } from 'react-dom';
 import CloseTicketDrawer from './CloseTicketDrawer';
 import { WorksStep } from './features/works';
-import { VAT, partsTotal, type TicketWork } from '@garage/shared';
+import { VAT, type TicketWork } from '@garage/shared';
+import { isClosed, isSettled, storedAmount, ticketTotals } from './features/ticket/ticketTotals';
 import { COLUMNS, garageName, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { listTicketPhotos, subscribeToTicketPhotos, type TicketPhoto } from '@garage/shared';
 import {
@@ -165,23 +166,14 @@ export default function TicketPage({
     setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, ...p } : t)));
 
   const setWorks = (next: TicketWork[]) => {
-    const labour = next.reduce((s, w) => s + w.labor, 0);
-    const items = next.reduce((s, w) => s + partsTotal(w), 0);
-    const total = Math.round((labour + items) * (1 + VAT));
-    patch({ works: next, amount: total, subtasks: next.map((w) => w.name) });
+    patch({ works: next, amount: storedAmount(next), subtasks: next.map((w) => w.name) });
   };
 
-  const labour = works.reduce((s, w) => s + w.labor, 0);
-  const items = works.reduce((s, w) => s + partsTotal(w), 0);
-  const vat = (labour + items) * VAT;
-  const total = labour + items + vat;
+  const { labour, items, vat, total } = ticketTotals(works);
 
   const column = COLUMNS.find((c) => c.id === ticket.st);
-  // work finished (ready for pickup OR paid) - enough to notify the customer
-  const closed = ticket.st === 'done' || ticket.st === 'paid';
-  // actually settled. Only a paid ticket blocks further charging; a ticket sitting
-  // in "מוכן לאיסוף" is finished but still owes money, so payment stays open.
-  const settled = ticket.paid === true || ticket.st === 'paid';
+  const closed = isClosed(ticket);
+  const settled = isSettled(ticket);
   const wa = waNumber(ticket.phone);
 
   return (
