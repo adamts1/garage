@@ -28,6 +28,14 @@
       "android": { "distribution": "internal", "buildType": "apk" }
     },
 
+    "staging-play": {
+      "distribution": "store",
+      "environment": "preview",
+      "env": { "APP_VARIANT": "staging" },
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    },
+
     "production": {
       "distribution": "store",
       "autoIncrement": true,

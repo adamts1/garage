@@ -43,6 +43,7 @@
     "testflight:staging": "bash scripts/release.sh ios --profile staging --submit",
     "build:staging:ios": "bash scripts/release.sh ios --profile staging",
     "build:staging:android": "bash scripts/release.sh android --profile staging",
+    "build:staging:play": "bash scripts/release.sh android --profile staging-play",
     "device": "eas device:create",
 
     "testflight": "bash scripts/release.sh ios --submit",

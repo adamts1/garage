@@ -58,6 +58,7 @@ npm run build:sim:android      # .apk for an emulator
 npm run run:sim:android
 npm run testflight:staging     # iOS: build + submit to the staging TestFlight app
 npm run build:staging:android  # .apk, installed from the link EAS prints
+npm run build:staging:play     # .aab for the staging Play listing, uploaded by hand
 ```
 
 Production — the stores, and the only builds that touch real garages' data:
@@ -74,39 +75,46 @@ silently excluded**. EAS builds from a git archive, so anything not committed un
 `mobile/` or `packages/shared/` is not in the build. It prompts before continuing, and
 prints the platform, profile, branch, commit and target database before it starts.
 
-### Why staging iOS goes through TestFlight and staging Android does not
+### Getting a staging build onto someone else's phone
 
-The `staging` profile distributes differently per platform, which looks inconsistent
-until you see what each store allows:
+Each store has its own answer, and Android has two.
 
-```json
-"staging": {
-  "ios":     { "distribution": "store" },
-  "android": { "distribution": "internal", "buildType": "apk" }
-}
-```
+**iOS — TestFlight, always.** Apple will not let an app onto a phone it has not signed
+for that specific device. Ad-hoc distribution means registering every tester's device
+UDID *before* the build, and a phone that was not registered at build time gets
+`לא ניתן לוודא את שלמותו` and nothing else. That does not work for a garage's staff,
+whose phones we never touch. So `staging` is `distribution: "store"` on iOS.
 
-Apple will not let an app onto a phone it has not signed for that specific device.
-Ad-hoc distribution means registering every tester's device UDID *before* the build,
-and a phone that was not registered at build time gets `לא ניתן לוודא את שלמותו` and
-nothing else. That does not work for a garage's staff, whose phones we never touch.
-TestFlight removes the requirement entirely.
+**Android — a link, or the store.** Nothing there refuses to install an app the
+platform did not sign, so both work and they are kept as separate profiles:
 
-Android has no such rule. EAS prints a link, the tester opens it, and the `.apk`
-installs — the only friction being the unknown-sources warning. A Play listing for
-the staging package would remove that warning, and is not worth its own app record
-until someone complains.
+| | profile | artifact | reaches the tester | cost |
+|---|---|---|---|---|
+| link | `staging` | `.apk` | immediately, from the URL EAS prints | an unknown-sources warning to talk them through |
+| store | `staging-play` | `.aab` | after upload + Play processing | a manual upload each time |
 
-The two TestFlight apps are separate App Store Connect records, which is only
-possible because the bundle ids differ:
+Use the link while iterating; use the store when handing the app to a customer who
+should not be walked through a system warning.
 
-| | App Store Connect record | ascAppId |
+### The four store records
+
+Two apps per store, which is only possible because the identities differ:
+
+| | iOS record | Android package |
 |---|---|---|
-| production | the real app | `6790709441` |
-| staging | `garage-mobile-staging` | `6797201110` |
+| production | the real app, `ascAppId 6790709441` | `com.tsityat.garageapp` |
+| staging | `garage-mobile-staging`, `ascAppId 6797201110` | `com.tsityat.garageapp.staging` |
 
-`release.sh` reads the id back out of `eas.json` rather than holding its own copy, so
-the link it prints cannot point at one app while EAS uploads to the other.
+`release.sh` reads the ascAppId back out of `eas.json` rather than holding its own
+copy, so the link it prints cannot point at one app while EAS uploads to the other.
+
+A `staging-play` profile existed once before and was removed — it built a
+store-packaged `.aab` against staging under the **production** package name, so the
+only thing standing between a staging build and ten real garages was remembering
+which version code was which in Play Console. The profile is back under the same
+name, and is safe now for one reason only: the package it builds ends in `.staging`,
+so Play treats it as a different app and will not accept it into the production
+listing at all.
 
 Append `-- --local` to any build script to run it on this machine instead of EAS.
 
@@ -121,13 +129,14 @@ pretending.
 |---|---|---|---|
 | `development` | development → staging | staging | dev client |
 | `simulator` | preview → staging | staging | simulator .app / emulator .apk |
-| `staging` | preview → staging | staging | staging TestFlight build / .apk |
-| `production` | production → **prod** | production | App Store build / Play .aab |
+| `staging` | preview → staging | staging | staging TestFlight build / `.apk` link |
+| `staging-play` | preview → staging | staging | `.aab` for the staging Play listing |
+| `production` | production → **prod** | production | App Store build / Play `.aab` |
 
-There is no profile that builds a store artifact against staging. There used to be
-(`staging-play`), which shipped a staging-pointed AAB into the production Play
-listing under the shared package name — one accidental promote away from real
-garages. It is gone.
+Every profile but `production` builds the `.staging` identity, and `production` is the
+only one that reads the production EAS environment. Those two facts are set in
+different files — `app.config.js` and `eas.json` — and `lib/env.ts` compares them at
+runtime precisely because nothing else does.
 
 ## What it does
 
