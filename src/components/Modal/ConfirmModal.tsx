@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import Modal from './Modal';
@@ -19,21 +18,11 @@ export default function ConfirmModal({ props, isTop, stacked, onClose }: ModalCo
       ? (props.values as Record<string, string | number>)
       : undefined;
 
-  /* Whatever route the dialog leaves by — the button, Escape, the scrim, a
-     navigation that unmounts the host — the caller is awaiting a promise, and
-     an unsettled one is a handler that never runs and a spinner that never
-     stops. Answering "no" on the way out is the safe default, and settling is
-     idempotent, so the explicit answers below still win. */
-  const settled = useRef(false);
-  useEffect(
-    () => () => {
-      if (!settled.current) settleConfirm(confirmId, false);
-    },
-    [confirmId],
-  );
-
+  /* Only the two buttons settle from here. Dismissal by Escape, the scrim or a
+     cleared stack is answered by useConfirm, which watches the store — this
+     component used to do it on unmount, and StrictMode's effect replay then
+     answered "no" the instant the dialog appeared. See useConfirm. */
   const answer = (value: boolean) => {
-    settled.current = true;
     settleConfirm(confirmId, value);
     onClose();
   };
