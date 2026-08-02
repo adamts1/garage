@@ -413,8 +413,9 @@ const worksPayload = (works: TicketWork[]) =>
 /* Customer resolution used to live here as findOrCreateCustomer, matching on
    name with .maybeSingle(). It is gone: matching by name merged two different
    people and threw outright on a duplicate. Resolution now happens inside
-   create_ticket — by ת״ז, then phone — in the ticket's own transaction. See
-   §3.6 and migration 20260725020000. */
+   create_ticket — by an explicitly picked id, then ת״ז, then the phone's
+   digits — in the ticket's own transaction. See §3.6, migration 20260725020000
+   and 20260802010000. */
 
 /* Create a ticket atomically. The server assigns the key and job number under a
    per-garage lock and resolves the customer, all in one transaction, so this no
@@ -429,6 +430,9 @@ export const createTicket = async (t: Ticket): Promise<{ key: string; job: strin
   // customer (id_number) and to promote the car into the vehicles table.
   const payload = {
     ...ticketToRow(t),
+    // The record the advisor picked, when they picked one. create_ticket
+    // prefers it over matching by ת״ז/phone, after checking it is ours.
+    customer_id: t.customerId ?? null,
     id_number: t.idNumber?.trim() || null,
     manufacturer: t.manufacturer?.trim() || null,
     model: t.model?.trim() || null,

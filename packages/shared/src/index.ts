@@ -12,6 +12,8 @@
    it to setSupabaseClient() at startup. */
 
 export * from './types';
+export * from './identity';
+export * from './vehicleCatalog';
 export * from './catalog';
 export * from './db';
 export * from './auth';

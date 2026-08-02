@@ -90,3 +90,14 @@
   font-size: 12px;
   background: var(--surface-2);
 }
+
+/* A detail panel belonging to the row above it — no hover, no zebra, and no
+   top border, so the two read as one row rather than two. */
+.expandedRow:hover > .expanded {
+  background: var(--surface-2);
+}
+.expanded {
+  padding: 0 14px 12px;
+  background: var(--surface-2);
+  border-top: 0;
+}

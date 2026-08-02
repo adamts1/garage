@@ -13,8 +13,11 @@ import {
 
 export default function CustomersPage() {
   const { t } = useTranslation();
-  const { rows, create, update, remove } = useCustomers();
+  const { rows, vehiclesByCustomer, create, update, remove } = useCustomers();
 
+  /* One open panel at a time. Several would turn the table into a list of
+     lists, and the reason to open one is to look at that customer's cars. */
+  const [openVehicles, setOpenVehicles] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<CustomerDraft>(blankCustomer);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -91,6 +94,29 @@ export default function CustomersPage() {
         ),
     },
     {
+      key: 'vehicles',
+      header: 'customers.fields.vehicles',
+      width: 110,
+      sortValue: (c) => vehiclesByCustomer.get(c.id)?.length ?? 0,
+      /* The count is the answer most of the time; the panel is for the rest.
+         Disabled at zero rather than hidden, so the column reads as "no cars on
+         file" instead of "this row is different". */
+      render: (c) => {
+        const cars = vehiclesByCustomer.get(c.id) ?? [];
+        const open = openVehicles === c.id;
+        return (
+          <Button
+            size="sm"
+            disabled={cars.length === 0}
+            aria-expanded={open}
+            onClick={() => setOpenVehicles(open ? null : c.id)}
+          >
+            {cars.length ? `${cars.length} ${open ? '▲' : '▼'}` : t('common.none')}
+          </Button>
+        );
+      },
+    },
+    {
       key: 'actions',
       width: 170,
       render: (c) => (
@@ -157,7 +183,33 @@ export default function CustomersPage() {
         </CrudForm>
       )}
 
-      <Table columns={columns} rows={rows} rowKey={(c) => c.id} emptyKey="customers.empty" />
+      <Table
+        columns={columns}
+        rows={rows}
+        rowKey={(c) => c.id}
+        emptyKey="customers.empty"
+        renderExpanded={(c) =>
+          openVehicles === c.id ? (
+            <div className={styles.vehicles}>
+              {(vehiclesByCustomer.get(c.id) ?? []).map((v) => (
+                <div key={v.id} className={styles.vehicle}>
+                  <b className={styles.plate}>{v.plate}</b>
+                  <span className={styles.vehicleName}>
+                    {[v.manufacturer, v.model].filter(Boolean).join(' ') || t('common.none')}
+                  </span>
+                  <span className={styles.vehicleMeta}>
+                    {[
+                      v.year,
+                      v.km && t('newTicket.kmValue', { km: v.km }),
+                      v.vehicle_code,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null
+        }
+      />
     </>
   );
 }

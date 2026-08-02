@@ -143,6 +143,22 @@
   align-items: stretch;
   flex: 1;
   min-height: 0;
+
+  /* Centred, because the columns are a fixed 268px and no longer fill the
+     width — six of them did, four do not. Left alone they pack to the start,
+     which in RTL is the right edge, and the board sits against one side of a
+     mostly empty panel. Most visible with the sidebar collapsed, where the
+     panel is at its widest.
+
+     `safe` is the whole point of writing it this way: plain `center` with
+     `overflow-x: auto` puts the overflow on BOTH sides once the columns are
+     wider than the panel, and the first column becomes unreachable — you
+     cannot scroll back past the start of a centred flex line. `safe center`
+     falls back to `start` exactly when that would happen. The unprefixed
+     declaration above it is the fallback for anything that does not know the
+     keyword, which then ignores the second line. */
+  justify-content: center;
+  justify-content: safe center;
 }
 
 .col {

@@ -505,6 +505,133 @@ const dupIns = await rest('customers', a.token, {
 });
 check('a duplicate ת״ז insert is rejected by the unique index', dupIns.status >= 400, `got ${dupIns.status}`);
 
+/* The phone is an identity too, and it is matched on digits — the same number
+ * typed with hyphens, spaces or neither is one customer, not three. */
+for (const phone of ['050-123-4567', '050 1234567', '0501234567']) {
+  await rpc('create_ticket', a.token, { t: { title: 'phone', customer_name: 'טלפון זהה', phone } });
+}
+const byPhone = await (await rest(
+  `customers?name=eq.${encodeURIComponent('טלפון זהה')}&select=id`, a.token,
+)).json();
+check(
+  'one phone written three ways stays one customer',
+  Array.isArray(byPhone) && byPhone.length === 1,
+  `got ${Array.isArray(byPhone) ? byPhone.length : '?'}`,
+);
+
+/* A name with neither ת״ז nor phone is not an identity: it creates no customer
+ * at all, rather than a fresh unmatchable row on every visit. */
+const NAMELESS = 'בלי מזהה';
+for (let i = 0; i < 3; i++) {
+  await rpc('create_ticket', a.token, { t: { title: `anon-${i}`, customer_name: NAMELESS } });
+}
+const anon = await (await rest(
+  `customers?name=eq.${encodeURIComponent(NAMELESS)}&select=id`, a.token,
+)).json();
+check(
+  'a customer name with no ת״ז and no phone creates no customer record',
+  Array.isArray(anon) && anon.length === 0,
+  `got ${Array.isArray(anon) ? anon.length : '?'}`,
+);
+
+/* An explicitly picked customer wins over derivation — this is what the intake
+ * form's search box now sends. The case that matters is a customer with no
+ * phone on file: picking them and typing a number must reuse the record, not
+ * open a second copy of the person just selected. */
+const phoneless = await (await rest('customers', a.token, {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ name: 'ותיק בלי טלפון' }),
+})).json();
+const phonelessId = phoneless[0]?.id;
+
+await rpc('create_ticket', a.token, {
+  t: { title: 'picked', customer_id: phonelessId, customer_name: 'ותיק בלי טלפון', phone: '0509999999' },
+});
+const stillOne = await (await rest(
+  `customers?name=eq.${encodeURIComponent('ותיק בלי טלפון')}&select=id,phone`, a.token,
+)).json();
+check(
+  'picking a phoneless customer reuses the record instead of duplicating it',
+  Array.isArray(stillOne) && stillOne.length === 1 && stillOne[0].id === phonelessId,
+  `got ${JSON.stringify(stillOne)}`,
+);
+check(
+  "the picked customer's empty phone is filled from the ticket",
+  stillOne[0]?.phone === '0509999999',
+  `got ${stillOne[0]?.phone}`,
+);
+
+/* The id is checked, not trusted. create_ticket is SECURITY DEFINER, so RLS
+ * does not filter that lookup — B naming A's customer must fall through to
+ * normal resolution, never hang a ticket on another garage's person. */
+const forgedPick = await (await rpc('create_ticket', b.token, {
+  t: { title: 'forged pick', customer_id: phonelessId, customer_name: 'גנוב', phone: '0508888888' },
+})).json();
+const forgedPickTicket = await (await rest(
+  `tickets?id=eq.${forgedPick.id}&select=customer_id`, b.token,
+)).json();
+check(
+  "create_ticket ignores a customer_id from another garage",
+  Array.isArray(forgedPickTicket) && forgedPickTicket[0]?.customer_id !== phonelessId,
+  `got ${JSON.stringify(forgedPickTicket)}`,
+);
+
+/* The board is four columns, and the database agrees. A status the UI cannot
+ * render is a ticket that vanishes off the board with nowhere to sit — which is
+ * what `diag` and `qa` did for as long as they were allowed. COLUMNS in
+ * packages/shared/src/types.ts must list exactly these four. */
+for (const st of ['todo', 'appr', 'done', 'paid']) {
+  const r = await (await rpc('create_ticket', a.token, {
+    t: { title: `status-${st}`, status: st },
+  })).json();
+  check(`create_ticket accepts the board status "${st}"`, Boolean(r?.key), JSON.stringify(r));
+}
+for (const st of ['prog', 'parts', 'diag', 'qa']) {
+  const res = await rest('tickets', a.token, {
+    method: 'POST',
+    body: JSON.stringify({ key: `GAR-BAD-${st}`, job: `W-BAD-${st}`, title: 'x', status: st }),
+  });
+  check(`a retired status "${st}" is rejected by the check constraint`, res.status >= 400, `got ${res.status}`);
+}
+
+/* The phone is the identifier and a ת״ז may not route around it. Resolution was
+ * `if id_number ... elsif phone ...`, so a ticket carrying an unknown ת״ז never
+ * consulted the phone and inserted a SECOND customer holding a number the first
+ * already had — after which `limit 1` picks between them arbitrarily and the
+ * phone identifies nobody. */
+const SHARED = '0523334455';
+await rpc('create_ticket', a.token, { t: { title: 'p1', customer_name: 'בעל הטלפון', phone: SHARED } });
+await rpc('create_ticket', a.token, {
+  t: { title: 'p2', customer_name: 'מתחזה', phone: SHARED, id_number: 'UNKNOWN-ID' },
+});
+const holders = await (await rest(
+  `customers?phone=eq.${SHARED}&select=id,name`, a.token,
+)).json();
+check(
+  'a ת״ז cannot route around the phone and create a second holder of one number',
+  Array.isArray(holders) && holders.length === 1,
+  `got ${JSON.stringify(holders)}`,
+);
+
+/* A mistyped ת״ז must not cost the garage the ticket. The fill collided with
+ * the partial unique index on (garage_id, id_number) and raised, and because
+ * the RPC is one transaction the ticket, its works and its parts went with it. */
+const clash = await (await rpc('create_ticket', a.token, {
+  t: { title: 'clashing ת״ז', customer_name: 'בעל הטלפון', phone: SHARED, id_number: 'IDA-1' },
+})).json();
+check(
+  'a ת״ז already held by somebody else does not abort the ticket',
+  Boolean(clash?.key),
+  `got ${JSON.stringify(clash)}`,
+);
+const idaOwners = await (await rest('customers?id_number=eq.IDA-1&select=id', a.token)).json();
+check(
+  'and it is not stolen from the customer who holds it',
+  Array.isArray(idaOwners) && idaOwners.length === 1,
+  `got ${JSON.stringify(idaOwners)}`,
+);
+
 /* ============================================================
  *  Phase 4a — invoices are stored, tenant-scoped, and client-unforgeable.
  *  A tax document may be READ by its garage and by nobody else, and may be

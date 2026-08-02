@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './Table.module.css';
 import type { Column, SortState } from './types';
@@ -25,6 +25,11 @@ export interface TableProps<Row> {
   onRowClick?: (row: Row) => void;
   isRowSelected?: (row: Row) => boolean;
   defaultSort?: SortState | null;
+  /** A full-width detail row underneath this one — a panel that belongs to the
+   *  row rather than a column of it. Return null for the closed state, which is
+   *  how the caller keeps the open/closed decision. */
+  renderExpanded?: (row: Row, index: number) => ReactNode;
+
   /** A whole extra row under the body: totals, "12 of 340". */
   footer?: ReactNode;
   className?: string;
@@ -52,6 +57,7 @@ export default function Table<Row>({
   onRowClick,
   isRowSelected,
   defaultSort = null,
+  renderExpanded,
   footer,
   className,
   sort: sortProp,
@@ -112,26 +118,40 @@ export default function Table<Row>({
         </thead>
 
         <tbody>
-          {sorted.map((row, i) => (
-            <tr
-              key={rowKey(row, i)}
-              className={[
-                onRowClick ? styles.clickable : null,
-                isRowSelected?.(row) ? styles.selected : null,
-              ].filter(Boolean).join(' ')}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-            >
-              {columns.map((c) => (
-                <td
-                  key={c.key}
-                  style={{ textAlign: c.align }}
-                  className={c.cellClassName}
+          {sorted.map((row, i) => {
+            const expanded = renderExpanded?.(row, i);
+            return (
+              /* Fragment rather than nesting: a detail panel inside the row's
+                 own <td> would sit in one column and inherit its width. */
+              <Fragment key={rowKey(row, i)}>
+                <tr
+                  className={[
+                    onRowClick ? styles.clickable : null,
+                    isRowSelected?.(row) ? styles.selected : null,
+                  ].filter(Boolean).join(' ')}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
-                  {c.render(row, i)}
-                </td>
-              ))}
-            </tr>
-          ))}
+                  {columns.map((c) => (
+                    <td
+                      key={c.key}
+                      style={{ textAlign: c.align }}
+                      className={c.cellClassName}
+                    >
+                      {c.render(row, i)}
+                    </td>
+                  ))}
+                </tr>
+
+                {expanded != null && (
+                  <tr className={styles.expandedRow}>
+                    <td colSpan={columns.length} className={styles.expanded}>
+                      {expanded}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
 
           {sorted.length === 0 && (
             <tr>

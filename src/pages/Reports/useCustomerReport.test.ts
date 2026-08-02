@@ -95,6 +95,67 @@ describe('rollUp', () => {
     expect(rows.map((r) => r.name)).toEqual(['ג']);
   });
 
+  /* The report is grouped by identity, like the database is. Grouping by the
+     name string made it disagree with the customers table in both directions,
+     and the report is the number the garage acts on. */
+  it('keeps one customer in one row when the name was typed two ways', () => {
+    const rows = rollUp(
+      [
+        ticket({ customer: 'רונית לוי', phone: '052-111-2233', amount: 100 }),
+        ticket({ customer: 'רונית', phone: '0521112233', amount: 50 }),
+      ],
+      filters,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].gross).toBe(150);
+    expect(rows[0].tickets).toBe(2);
+  });
+
+  it('keeps two customers apart when they share a name but not a number', () => {
+    const rows = rollUp(
+      [
+        ticket({ customer: 'משה כהן', phone: '0521112233', amount: 100 }),
+        ticket({ customer: 'משה כהן', phone: '0549998877', amount: 50 }),
+      ],
+      filters,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.gross).sort((a, b) => a - b)).toEqual([50, 100]);
+  });
+
+  it('names the row from the newest ticket, which is the last name confirmed', () => {
+    // listTickets returns newest first.
+    const rows = rollUp(
+      [
+        ticket({ customer: 'רונית לוי', phone: '0521112233' }),
+        ticket({ customer: 'רונית', phone: '0521112233' }),
+      ],
+      filters,
+    );
+    expect(rows[0].name).toBe('רונית לוי');
+    expect(rows[0].phone).toBe('0521112233');
+  });
+
+  it('still groups phoneless tickets by name — that is all they have', () => {
+    const rows = rollUp(
+      [ticket({ customer: 'מזדמן', amount: 100 }), ticket({ customer: 'מזדמן', amount: 40 })],
+      filters,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].gross).toBe(140);
+  });
+
+  it('finds a customer by number, not only by name', () => {
+    const rows = rollUp(
+      [
+        ticket({ customer: 'רונית לוי', phone: '052-111-2233', amount: 100 }),
+        ticket({ customer: 'יוסי', phone: '0549998877', amount: 50 }),
+      ],
+      { ...filters, query: '1112233' },
+    );
+    expect(rows.map((r) => r.name)).toEqual(['רונית לוי']);
+  });
+
   it('returns nothing for no tickets rather than throwing', () => {
     expect(rollUp([], filters)).toEqual([]);
   });

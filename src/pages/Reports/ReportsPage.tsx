@@ -24,10 +24,13 @@ export default function ReportsPage({ tickets }: { tickets: Ticket[] }) {
       key: 'name',
       header: 'reports.fields.customer',
       sortValue: (r) => r.name,
+      /* The number under the name, because it is what the row is grouped by —
+         it used to be a sequential 1001+i that identified nothing and changed
+         whenever a filter did. */
       render: (r) => (
         <>
           <div className={styles.name}>{r.name}</div>
-          <div className={styles.sub}>{r.id}</div>
+          <div className={styles.sub}>{r.phone}</div>
         </>
       ),
     },
@@ -71,14 +74,14 @@ export default function ReportsPage({ tickets }: { tickets: Ticket[] }) {
 
   const exportCsv = () => {
     const head = [
-      t('reports.fields.customer'), t('reports.fields.id'), t('reports.fields.tickets'),
+      t('reports.fields.customer'), t('reports.fields.phone'), t('reports.fields.tickets'),
       t('reports.fields.net'), t('reports.fields.vat', { percent: vatPercent }),
       t('reports.fields.gross'), t('reports.fields.balance'), t('reports.fields.avg'),
     ];
     // Every row, not the page on screen — a report you exported a tenth of is
     // worse than no export.
     const body = sorted.map((r) => [
-      r.name, r.id, r.tickets,
+      r.name, r.phone, r.tickets,
       r.net.toFixed(2), r.vat.toFixed(2), r.gross.toFixed(2),
       r.balance.toFixed(2), r.avg.toFixed(2),
     ]);

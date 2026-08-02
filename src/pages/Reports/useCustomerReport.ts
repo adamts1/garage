@@ -1,10 +1,16 @@
-import { VAT, type Status, type Ticket } from '@garage/shared';
+import { phoneDigits, ticketCustomerKey, VAT, type Status, type Ticket } from '@garage/shared';
 import { useMemo, useState } from 'react';
 
 export type DocFilter = 'all' | 'paid' | 'open' | 'none';
 
 export interface ReportRow {
   name: string;
+  /** The number the row is identified by — blank for the phoneless tickets that
+   *  predate the phone being required, which still group by name. */
+  phone: string;
+  /** The identity the row rolled up under (`phone:…` or `name:…`), not a
+   *  display number. It was a sequential 1001+i that meant nothing and changed
+   *  as soon as a filter did. */
   id: string;
   tickets: number;
   /** Before VAT. */
@@ -39,27 +45,45 @@ export function rollUp(
     if (docFilter === 'paid' && !t.paid) return false;
     if (docFilter === 'open' && !(t.doc && !t.paid)) return false;
     if (docFilter === 'none' && t.doc) return false;
-    if (q && !t.customer.toLowerCase().includes(q)) return false;
+    // By name or by number, since the number is what identifies the customer —
+    // and it is what the advisor has in front of them when someone calls.
+    if (q) {
+      const qDigits = phoneDigits(q);
+      const byName = t.customer.toLowerCase().includes(q);
+      const byPhone = qDigits.length >= 3 && phoneDigits(t.phone).includes(qDigits);
+      if (!byName && !byPhone) return false;
+    }
     return true;
   });
 
+  /* Grouped by identity, not by the name string. The phone is what identifies
+     a customer — that is how create_ticket resolves one — and grouping by name
+     made the report disagree with the database in both directions: one person
+     whose name was typed two ways became two rows and looked like two
+     customers, while two people who share a name became one row whose total
+     belonged to nobody. See ticketCustomerKey in @garage/shared. */
   const byCustomer = new Map<string, Ticket[]>();
   kept.forEach((t) => {
-    const list = byCustomer.get(t.customer) ?? [];
+    const key = ticketCustomerKey(t);
+    const list = byCustomer.get(key) ?? [];
     list.push(t);
-    byCustomer.set(t.customer, list);
+    byCustomer.set(key, list);
   });
 
-  return [...byCustomer.entries()].map(([name, list], i) => {
+  return [...byCustomer.entries()].map(([key, list]) => {
     const gross = list.reduce((s, t) => s + t.amount, 0);
     // Ticket amounts are VAT-inclusive, so net is backed out rather than added.
     const net = gross / (1 + VAT);
     const balance = list
       .filter((t) => t.st === 'done' && !t.paid)
       .reduce((s, t) => s + t.amount, 0);
+    /* The newest ticket's name, because that is the one most recently confirmed
+       at the counter — an older ticket may carry a typo the customer has since
+       corrected. Tickets arrive newest-first from listTickets. */
     return {
-      name,
-      id: String(1001 + i),
+      name: list[0].customer,
+      phone: list[0].phone ?? '',
+      id: key,
       tickets: list.length,
       net,
       vat: gross - net,

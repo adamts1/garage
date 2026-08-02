@@ -1,8 +1,9 @@
 import {
-  createCustomer, deleteCustomer, listCustomers, subscribeToTable, updateCustomer,
-  type Customer,
+  createCustomer, deleteCustomer, listCustomers, listVehicles, subscribeToTable,
+  updateCustomer,
+  type Customer, type Vehicle,
 } from '@garage/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useConfirm } from '../../store';
 
 export type CustomerDraft = Omit<Customer, 'id'>;
@@ -29,16 +30,40 @@ export function useCustomers() {
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
   const [rows, setRows] = useState<Customer[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const load = useCallback(() => {
     listCustomers().then(setRows).catch((e) => dispatch(showError(e)));
   }, [dispatch]);
 
+  /* The cars are promoted onto a customer by create_ticket, so this list grows
+     without anybody visiting this page. Failing quietly is deliberate: a
+     customer table that will not render because the vehicles call failed is a
+     worse outcome than a customer with no cars listed. */
+  const loadVehicles = useCallback(() => {
+    listVehicles().then(setVehicles).catch(() => {});
+  }, []);
+
   useEffect(() => {
     load();
+    loadVehicles();
     // Another tab — or the ticket intake form — adds a customer; it shows here.
-    return subscribeToTable('customers', load);
-  }, [load]);
+    const offCustomers = subscribeToTable('customers', load);
+    const offVehicles = subscribeToTable('vehicles', loadVehicles);
+    return () => { offCustomers(); offVehicles(); };
+  }, [load, loadVehicles]);
+
+  /** Indexed once per change rather than filtered per row, so a garage with a
+   *  few thousand cars does not walk the whole list for every customer. */
+  const vehiclesByCustomer = useMemo(() => {
+    const map = new Map<string, Vehicle[]>();
+    for (const v of vehicles) {
+      const list = map.get(v.customer_id);
+      if (list) list.push(v);
+      else map.set(v.customer_id, [v]);
+    }
+    return map;
+  }, [vehicles]);
 
   const create = useCallback(
     async (draft: CustomerDraft) => {
@@ -90,5 +115,5 @@ export function useCustomers() {
     [confirm, dispatch, load],
   );
 
-  return { rows, create, update, remove };
+  return { rows, vehiclesByCustomer, create, update, remove };
 }
