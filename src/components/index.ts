@@ -8,6 +8,7 @@ export * from './FilterBar';
 export * from './KpiCard';
 export * from './Modal';
 export * from './PageHeader';
+export * from './PickerModal';
 export * from './Pill';
 export * from './Pagination';
 export * from './Table';

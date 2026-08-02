@@ -1,0 +1,98 @@
+.step {
+  width: 100%;
+}
+
+/* Works on one side, that work's parts on the other, split by a divider. */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.col {
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted-d);
+}
+.title svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Which work the parts column is showing. */
+.ofWork {
+  margin-inline-start: 8px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.code {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  flex: none;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+}
+
+.addRow {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addRow:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}

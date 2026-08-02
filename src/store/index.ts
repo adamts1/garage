@@ -22,3 +22,4 @@ export const useAppStore = useStore.withTypes<typeof store>();
 export * from './modalSlice';
 export * from './toastSlice';
 export * from './useConfirm';
+export * from './useModalResult';

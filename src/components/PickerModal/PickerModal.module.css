@@ -1,0 +1,63 @@
+.search {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 15px;
+  text-align: right;
+  margin-bottom: 10px;
+}
+.search:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+/* Scrolls inside the dialog rather than pushing it taller, so the search box
+   and the footer stay put while you arrow through a long catalogue. */
+.list {
+  overflow-y: auto;
+  max-height: 46vh;
+  min-height: 120px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  text-align: right;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.on {
+  background: var(--primary-soft);
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 6px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
