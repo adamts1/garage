@@ -5,7 +5,7 @@ import { CustomersPage } from './pages/Customers';
 import { ItemsPage } from './pages/Items';
 import { ReportsPage } from './pages/Reports';
 import SetupNotice from './SetupNotice';
-import TicketPage from './TicketPage';
+import { TicketPage } from './pages/Ticket';
 import { WorksStep } from './features/works';
 import { isConfigured } from './lib/supabase';
 import { garageName, listCustomers, listVehicles, signOut, subscribeToTable, type Customer, type Vehicle } from '@garage/shared';

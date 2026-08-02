@@ -14,6 +14,22 @@ const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 /** False until .env is filled in - the app shows setup instructions instead of an empty list. */
 export const isConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJECT-REF'));
 
+/* The production Supabase project's ref, so the app can tell where it actually
+   landed rather than where the build profile claimed it would.
+
+   Not a secret: the full project URL ships in the bundle regardless. It is
+   here, and matched against the resolved `url`, because a build's environment
+   is a claim and this is the observation — lib/env.ts compares the two and the
+   badge shouts when they disagree. */
+const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+
+/** True only when this build is genuinely pointed at the garages' real data. */
+export const isProductionDb = isConfigured && url.includes(PRODUCTION_PROJECT_REF);
+
+/** Just the ref (or host, for a local DB) — enough to identify the project on screen. */
+export const projectRef =
+  url.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] ?? url.replace(/^https?:\/\//, '') ?? '';
+
 // A placeholder URL keeps createClient from throwing at import time; nothing calls it while unconfigured.
 export const supabase = createClient(
   isConfigured ? url : 'https://placeholder.supabase.co',

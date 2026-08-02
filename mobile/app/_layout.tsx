@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { setSupabaseClient } from '@garage/shared';
 import AuthGate from '../components/AuthGate';
+import EnvBadge from '../components/EnvBadge';
 import { UserSheet } from '../components/UserSheet';
 import { TicketsProvider } from '../lib/TicketsProvider';
 import { supabase } from '../lib/supabase';
@@ -60,6 +61,9 @@ export default function RootLayout() {
           <UserSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
         </TicketsProvider>
       </AuthGate>
+      {/* Last child, and outside AuthGate: it has to be on top of whatever is
+          drawn, including the login screen and the pre-session spinner. */}
+      <EnvBadge />
     </SafeAreaProvider>
   );
 }
