@@ -167,8 +167,13 @@ export interface Worker {
   initials: string;
   color: string;
   position: number;
-  /** false means retired: hidden from pickers, still resolves on old tickets. */
+  /** false means retired: hidden from pickers, still resolves on old tickets —
+   *  and, since a worker is a person who signs in, no longer able to reach the
+   *  garage at all. current_garage_id() requires this. */
   active: boolean;
+  /** The login behind this worker. NULL for a mechanic with no account and for
+   *  the rows that predate the two tables being joined up. */
+  userId: string | null;
 }
 
 export interface WorkerChip {

@@ -9,7 +9,7 @@
 
    See docs/PRODUCTION.md §4a and migration 20260727000000_invoices.sql. */
 
-import { getClient } from './client';
+import { getClient, invokeError } from './client';
 
 export type InvoiceDocType = 'invoice_receipt' | 'credit_note';
 export type InvoiceStatus = 'issued' | 'cancelled';
@@ -85,18 +85,6 @@ export const listInvoices = async (): Promise<Invoice[]> => {
     .order('issued_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(rowToInvoice);
-};
-
-/* An Edge Function returns a non-2xx with a JSON `{error}` body on failure;
-   supabase-js surfaces that as a FunctionsHttpError whose real message is in
-   error.context. Dig it out so the UI shows "invoicing not configured" rather
-   than a generic "Edge Function returned a non-2xx status code". */
-const invokeError = async (error: any): Promise<Error> => {
-  try {
-    const body = await error?.context?.json?.();
-    if (body?.error) return new Error(body.error);
-  } catch { /* fall through to the generic message */ }
-  return new Error(error?.message ?? 'invoice request failed');
 };
 
 /* Issue a חשבונית מס-קבלה for a ticket. Irreversible — the only undo is a

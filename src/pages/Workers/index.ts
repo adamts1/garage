@@ -1,3 +1,3 @@
 export { default as WorkersPage } from './WorkersPage';
-export { useWorkers } from './useWorkers';
-export type { WorkerDraft } from './useWorkers';
+export { blankStaff, toDraft, useWorkers, WORKER_COLORS } from './useWorkers';
+export type { StaffDraft, WorkerEditDraft } from './useWorkers';

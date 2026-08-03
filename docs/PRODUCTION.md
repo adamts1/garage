@@ -440,7 +440,7 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] Realtime → a change arriving mid-write is deferred and re-pulled once the
       write settles, not discarded  (§3.7)
 
-> Proven on every CI run by `supabase/tests/tenancy.mjs` (90 checks): ten
+> Proven on every CI run by `supabase/tests/tenancy.mjs` (103 checks): ten
 > concurrent creates get ten unique keys, a failed create leaves no orphan, a
 > forged garage_id is ignored, and two people with one name stay two customers.
 >
@@ -549,6 +549,41 @@ apps and both go dark. So schema first, then auth, then the flip.
 > rows belonging to garage `00000000`, the pre-tenancy backfill tenant, which
 > has no members and no tickets. RLS was filtering them correctly. Data left
 > over from the migration, not a fault in the page.
+
+### The staff screen manages the people who sign in ✅
+- [x] **A worker and a user are one person.** They were two tables for two ideas
+      that turned out to be one: `garage_members` is who may sign in,
+      `garage_workers` is who a ticket is assigned to, and nothing joined them —
+      so somebody added by the onboarding script could sign in and was absent
+      from the staff list. `garage_workers.user_id` links them.
+- [x] **A trigger, not a fixed caller.** `garage_members_ensure_worker` gives
+      every new membership a worker row, so "can sign in" and "appears on the
+      staff screen" cannot drift apart again whichever path created the person.
+      Patching the script would have fixed one caller; this fixes all of them.
+- [x] **Retiring removes the garage, not the account.** `current_garage_id()`
+      now requires an active worker row, so a retired person signs in and lands
+      on the existing `no-garage` screen. One flag — the toggle the screen has
+      always had — rather than a second one beside it to forget.
+- [x] `manage-staff` Edge Function creates the account, the membership and the
+      worker together, and undoes them as a unit if any step fails. The garage
+      comes from the caller, never the payload. It also owns role changes, and
+      **refuses to remove a garage's last admin** — nothing in the app could
+      appoint another one.
+- [x] `garage_staff()` joins the three places one person's facts live, two of
+      which no client may read. SECURITY DEFINER, no arguments, and nothing at
+      all for a non-admin.
+- [x] The screen is admin-only by redirect as well as by a hidden nav item — a
+      hidden link does nothing about a typed address, and this page shows every
+      colleague's email. Code is gone from the form (derived server-side), and
+      the colour is swatches rather than `#3e5c76`.
+
+> **Two bugs the tests caught before the code shipped.** The trigger and the
+> function both tried to create the worker row — the function now fills in the
+> trigger's. And `my_garages` had to become SECURITY DEFINER: its new join reads
+> `garage_workers`, whose read policy is `garage_id = current_garage_id()`, which
+> is already NULL for a retired person — so as an invoker the join matched
+> nothing, `coalesce` fell through to true, and the check defeated itself in
+> exactly the case it existed for.
 
 ### Phase 4a — Invoicing 🔒 *(build complete; awaiting the accountant gate)*
 - [x] Immutable `invoices` table — frozen line items, per-invoice VAT rate, provider-owned numbering, cannot be edited or deleted (trigger). `20260727000000_invoices.sql`
