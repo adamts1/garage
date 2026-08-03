@@ -2,7 +2,7 @@
    The UI keeps using the `Ticket` shape it always had - everything below
    maps between that shape and the tickets / works / work_items rows. */
 
-import { getClient } from './client';
+import { getClient, invokeError } from './client';
 import type { Ticket, Worker } from './types';
 import type { PartRow, TicketWork, WorkDef } from './catalog';
 
@@ -141,7 +141,7 @@ const rowToWorkDef = (r: any): WorkDef => ({
 export const listWorkers = async (): Promise<Worker[]> => {
   const { data, error } = await getClient()
     .from('garage_workers')
-    .select('id, code, name, initials, color, position, active')
+    .select('id, code, name, initials, color, position, active, user_id')
     .order('position');
   if (error) throw error;
   return (data ?? []).map((r: any): Worker => ({
@@ -152,29 +152,82 @@ export const listWorkers = async (): Promise<Worker[]> => {
     color: r.color,
     position: r.position,
     active: r.active,
+    userId: r.user_id ?? null,
   }));
 };
 
-export const createWorker = async (w: Omit<Worker, 'id'>): Promise<Worker> => {
-  const { data, error } = await getClient()
-    .from('garage_workers')
-    // garage_id is left to its current_garage_id() default — the caller never
-    // names its own tenant. See the migration's note on work_defs.
-    .insert({
-      code: w.code,
-      name: w.name,
-      initials: w.initials,
-      color: w.color,
-      position: w.position,
-      active: w.active,
-    })
-    .select('id, code, name, initials, color, position, active')
-    .single();
+/** A worker plus the login behind them: the shape the staff screen renders.
+ *  `email` and `role` are null for a worker with no account — a mechanic who
+ *  does not use the app, or a row that predates the two tables being joined. */
+export interface Staff extends Worker {
+  email: string | null;
+  role: 'admin' | 'member' | null;
+}
+
+/* Three facts about one person from three places, one of which no client may
+   read at all. See the garage_staff() comment in the migration: it is SECURITY
+   DEFINER, takes no arguments, and returns nothing to a non-admin. */
+export const listStaff = async (): Promise<Staff[]> => {
+  const { data, error } = await getClient().rpc('garage_staff');
   if (error) throw error;
-  return data as Worker;
+  return (data ?? []).map((r: any): Staff => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    initials: r.initials,
+    color: r.color,
+    position: r.position,
+    active: r.active,
+    userId: r.user_id ?? null,
+    email: r.email ?? null,
+    role: r.role ?? null,
+  }));
 };
 
-export const updateWorker = async (id: string, patch: Partial<Omit<Worker, 'id'>>): Promise<void> => {
+/* Adding a person means creating an account, which needs the service_role key —
+   so it cannot happen here. The manage-staff function does all three writes
+   together (account, membership, worker) and undoes them as a unit if any step
+   fails; see supabase/functions/manage-staff.
+
+   The code is not a parameter. It is what tickets store in `assignee` and the
+   function derives it, because it was a field on a form that nobody outside the
+   database ever needed to see. */
+export interface NewStaff {
+  email: string;
+  password: string;
+  name: string;
+  role: 'admin' | 'member';
+  initials: string;
+  color: string;
+}
+
+export const createStaff = async (s: NewStaff): Promise<Worker> => {
+  const { data, error } = await getClient().functions.invoke('manage-staff', {
+    body: { action: 'create', ...s },
+  });
+  if (error) throw await invokeError(error);
+  const r = data.worker;
+  return {
+    id: r.id, code: r.code, name: r.name, initials: r.initials,
+    color: r.color, position: r.position, active: r.active, userId: r.user_id ?? null,
+  };
+};
+
+/** Promote or step somebody down. Refused by the function when it would leave
+ *  the garage with no admin — there is no other way to appoint one. */
+export const setStaffRole = async (userId: string, role: 'admin' | 'member'): Promise<void> => {
+  const { error } = await getClient().functions.invoke('manage-staff', {
+    body: { action: 'set_role', user_id: userId, role },
+  });
+  if (error) throw await invokeError(error);
+};
+
+/** What the staff screen may change directly. Deliberately not `code`, which
+ *  tickets store and the function derives, and not `userId`, which is the link
+ *  to an account and is set once when that account is made. */
+export type WorkerEdit = Partial<Pick<Worker, 'name' | 'initials' | 'color' | 'position' | 'active'>>;
+
+export const updateWorker = async (id: string, patch: WorkerEdit): Promise<void> => {
   const { error } = await getClient().from('garage_workers').update(patch).eq('id', id);
   if (error) throw error;
 };

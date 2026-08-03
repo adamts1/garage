@@ -1,13 +1,17 @@
-import { isGarageAdmin, suggestInitials, type Worker } from '@garage/shared';
+import { isGarageAdmin, suggestInitials, type GarageRole, type Staff } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Navigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { CrudForm } from '../../components/CrudForm';
 import { SelectField, TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
 import { CellInput, CellSelect, RowActions, Table, type Column } from '../../components/Table';
 import styles from './WorkersPage.module.css';
-import { blankWorker, toDraft, useWorkers, WORKER_COLORS, type WorkerDraft } from './useWorkers';
+import {
+  blankStaff, toDraft, useWorkers, WORKER_COLORS,
+  type StaffDraft, type WorkerEditDraft,
+} from './useWorkers';
 
 const Avatar = ({ color, initials }: { color: string; initials: string }) => (
   <span className={styles.avatar} style={{ background: color }}>
@@ -15,33 +19,58 @@ const Avatar = ({ color, initials }: { color: string; initials: string }) => (
   </span>
 );
 
+/* Squares you can point at, instead of #3e5c76. The colour is the chip on the
+   board — an entirely visual decision, and a hex code is the one way to make it
+   look like a setting nobody should touch. */
+const ColorPicker = ({ value, onChange, label }: {
+  value: string;
+  onChange: (c: string) => void;
+  label: string;
+}) => (
+  <div className={styles.colors} role="radiogroup" aria-label={label}>
+    {WORKER_COLORS.map((c) => (
+      <button
+        key={c}
+        type="button"
+        role="radio"
+        aria-checked={c === value}
+        aria-label={c}
+        className={`${styles.colorDot}${c === value ? ` ${styles.colorOn}` : ''}`}
+        style={{ background: c }}
+        onClick={() => onChange(c)}
+      />
+    ))}
+  </div>
+);
+
+/* The garage's people — the same people who sign in. There is no separate
+   notion of a mechanic any more: adding somebody here creates their account,
+   their membership and their board chip together.
+
+   Admin only, and not merely by hiding the button: the whole page is theirs. It
+   shows every colleague's email and role, and it is the one place a role can be
+   changed. */
 export default function WorkersPage() {
   const { t } = useTranslation();
-  const { rows, activeCount, create, update, toggleActive, remove } = useWorkers();
-
-  /* Who the garage employs is an admin's list. Reading it stays open to
-     everyone — the board draws a mechanic's chip on every card, and the
-     assignee picker has to have somebody to offer. */
-  const canManage = isGarageAdmin();
+  const { rows, activeCount, busy, create, update, toggleActive, setRole } = useWorkers();
 
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<WorkerDraft>(blankWorker);
+  const [draft, setDraft] = useState<StaffDraft>(blankStaff);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [edit, setEdit] = useState<WorkerDraft>(blankWorker);
+  const [edit, setEdit] = useState<WorkerEditDraft>(toDraft({} as Staff));
 
-  /* Only the fields that have a label under workers.fields. `position` and
-     `active` are part of the draft but are not typed by hand — position is
-     assigned on create, active is the retire button — and naming one here would
-     build a translation key that does not exist. */
-  type LabelledField = 'code' | 'name' | 'initials' | 'color';
+  /* A hidden nav item is still a typeable address, and this page reads other
+     people's email addresses. The redirect is the boundary; the missing link is
+     the courtesy. */
+  if (!isGarageAdmin()) return <Navigate to="/" replace />;
 
-  const draftField = (key: LabelledField) => ({
+  const draftField = (key: 'name' | 'email' | 'password' | 'initials') => ({
     value: draft[key],
     onChange: (e: { target: { value: string } }) =>
       setDraft((prev) => ({ ...prev, [key]: e.target.value })),
   });
 
-  const editField = (key: LabelledField) => ({
+  const editField = (key: keyof WorkerEditDraft) => ({
     value: edit[key],
     'aria-label': t(`workers.fields.${key}`),
     onChange: (e: { target: { value: string } }) =>
@@ -50,72 +79,79 @@ export default function WorkersPage() {
 
   const submitNew = async () => {
     if (await create(draft)) {
-      setDraft(blankWorker);
+      setDraft(blankStaff);
       setAdding(false);
     }
   };
 
-  const columns: Column<Worker>[] = [
+  const columns: Column<Staff>[] = [
     {
       key: 'name',
       header: 'workers.fields.name',
       sortValue: (w) => w.name,
       render: (w) =>
         editingId === w.id ? (
-          <CellInput {...editField('name')} />
+          <div className={styles.editRow}>
+            <CellInput {...editField('name')} />
+            <CellInput className={styles.initialsCell} {...editField('initials')} />
+          </div>
         ) : (
           <div className={styles.person}>
             <Avatar color={w.color} initials={w.initials} />
-            <strong>{w.name}</strong>
+            <span className={w.active ? undefined : styles.retired}>{w.name}</span>
           </div>
         ),
     },
     {
-      key: 'code',
-      header: 'workers.fields.code',
-      width: 130,
-      sortValue: (w) => w.code,
-      cellClassName: styles.code,
-      render: (w) => (editingId === w.id ? <CellInput {...editField('code')} /> : w.code),
+      key: 'email',
+      header: 'workers.fields.email',
+      sortValue: (w) => w.email ?? '',
+      cellClassName: styles.muted,
+      /* Not editable. Changing an address means changing a login, which belongs
+         to the auth system rather than to a table this screen writes. */
+      render: (w) => w.email ?? t('workers.noAccount'),
     },
     {
-      key: 'initials',
-      header: 'workers.fields.initials',
-      width: 120,
-      render: (w) => (editingId === w.id ? <CellInput {...editField('initials')} /> : w.initials),
+      key: 'role',
+      header: 'workers.fields.role',
+      width: 150,
+      sortValue: (w) => w.role ?? '',
+      /* Changed here, but written by the function — which refuses to remove the
+         garage's last admin, because nothing in the app could appoint another. */
+      render: (w) =>
+        w.userId && w.role ? (
+          <CellSelect
+            value={w.role}
+            disabled={busy}
+            aria-label={t('workers.fields.role')}
+            onChange={(e) => void setRole(w, e.target.value as GarageRole)}
+          >
+            <option value="member">{t('workers.roles.member')}</option>
+            <option value="admin">{t('workers.roles.admin')}</option>
+          </CellSelect>
+        ) : (
+          <span className={styles.muted}>{t('common.none')}</span>
+        ),
     },
     {
       key: 'color',
       header: 'workers.fields.color',
-      width: 130,
+      width: 190,
       render: (w) =>
         editingId === w.id ? (
-          <CellSelect {...editField('color')}>
-            {WORKER_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
-          </CellSelect>
+          <ColorPicker
+            value={edit.color}
+            label={t('workers.fields.color')}
+            onChange={(color) => setEdit((prev) => ({ ...prev, color }))}
+          />
         ) : (
           <span className={styles.swatch} style={{ background: w.color }} aria-hidden="true" />
         ),
     },
     {
-      key: 'active',
-      header: 'workers.fields.status',
-      width: 110,
-      sortValue: (w) => (w.active ? 0 : 1),
-      render: (w) => (
-        <span className={w.active ? styles.active : styles.retired}>
-          {t(w.active ? 'workers.active' : 'workers.inactive')}
-        </span>
-      ),
-    },
-    /* Read-only for a member, so the column is not a row of buttons that
-       report a permission error when pressed. The database refuses the writes
-       too — see the garage_workers policies — because a hidden button is a
-       courtesy, not a boundary. */
-    ...(canManage ? [{
       key: 'actions',
       width: 230,
-      render: (w: Worker) => (
+      render: (w) => (
         <RowActions>
           {editingId === w.id ? (
             <>
@@ -123,32 +159,28 @@ export default function WorkersPage() {
                 variant="primary"
                 size="sm"
                 disabled={!edit.name.trim()}
-                onClick={async () => {
-                  if (await update(w.id, edit)) setEditingId(null);
-                }}
+                onClick={async () => { if (await update(w.id, edit)) setEditingId(null); }}
               >
                 {t('common.save')}
               </Button>
-              <Button size="sm" onClick={() => setEditingId(null)}>
-                {t('common.cancel')}
-              </Button>
+              <Button size="sm" onClick={() => setEditingId(null)}>{t('common.cancel')}</Button>
             </>
           ) : (
             <>
               <Button size="sm" onClick={() => { setEditingId(w.id); setEdit(toDraft(w)); }}>
                 {t('common.edit')}
               </Button>
+              {/* Retiring is the only way out, and it is reversible: it takes
+                  the person off the board AND out of the garage, while every
+                  ticket they closed keeps their name. */}
               <Button size="sm" onClick={() => void toggleActive(w)}>
                 {t(w.active ? 'workers.retire' : 'workers.reactivate')}
-              </Button>
-              <Button variant="ghostDanger" size="sm" onClick={() => void remove(w)}>
-                {t('common.delete')}
               </Button>
             </>
           )}
         </RowActions>
       ),
-    }] : []),
+    },
   ];
 
   return (
@@ -157,20 +189,15 @@ export default function WorkersPage() {
         title="workers.title"
         count={activeCount}
         actions={
-          canManage ? (
-            <Button variant="primary" onClick={() => setAdding((v) => !v)}>
-              {adding ? t('common.cancel') : t('workers.add')}
-            </Button>
-          ) : undefined
+          <Button variant="primary" onClick={() => setAdding((v) => !v)}>
+            {adding ? t('common.cancel') : t('workers.add')}
+          </Button>
         }
       />
 
-      {/* Said out loud rather than left as an absence. A member who came here to
-          add a mechanic should learn why they cannot, not conclude the screen
-          is broken — which is exactly what a missing button looks like. */}
-      {!canManage && <p className={styles.readOnly}>{t('workers.adminOnly')}</p>}
+      <p className={styles.hint}>{t('workers.hint')}</p>
 
-      {adding && canManage && (
+      {adding && (
         <CrudForm
           onSubmit={() => void submitNew()}
           actions={
@@ -184,31 +211,41 @@ export default function WorkersPage() {
               <Button
                 variant="primary"
                 type="submit"
-                disabled={!draft.code.trim() || !draft.name.trim()}
+                disabled={busy || !draft.name.trim() || !draft.email.trim() || draft.password.length < 8}
               >
                 {t('common.save')}
               </Button>
             </>
           }
         >
+          <TextField label="workers.fields.name" required autoFocus {...draftField('name')} />
+          <TextField label="workers.fields.email" type="email" required {...draftField('email')} />
+          {/* Handed over in person, exactly as the onboarding script does it —
+              there is no inbox in this flow. */}
           <TextField
-            label="workers.fields.code"
-            hint="workers.codeHint"
+            label="workers.fields.password"
+            type="password"
             required
-            autoFocus
-            {...draftField('code')}
+            hint="workers.passwordHint"
+            {...draftField('password')}
           />
-          <TextField label="workers.fields.name" required {...draftField('name')} />
-          <TextField
-            label="workers.fields.initials"
-            /* Left blank, the name supplies them — so the placeholder shows what
-               would be saved rather than repeating the label. */
-            placeholder={draft.name ? suggestInitials(draft.name) : undefined}
-            {...draftField('initials')}
-          />
-          <SelectField label="workers.fields.color" {...draftField('color')}>
-            {WORKER_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
+          <SelectField
+            label="workers.fields.role"
+            value={draft.role}
+            onChange={(e) => setDraft((prev) => ({ ...prev, role: e.target.value as GarageRole }))}
+          >
+            <option value="member">{t('workers.roles.member')}</option>
+            <option value="admin">{t('workers.roles.admin')}</option>
           </SelectField>
+          <TextField label="workers.fields.initials" {...draftField('initials')} />
+          <div className={styles.colorField}>
+            <span className={styles.colorLabel}>{t('workers.fields.color')}</span>
+            <ColorPicker
+              value={draft.color}
+              label={t('workers.fields.color')}
+              onChange={(color) => setDraft((prev) => ({ ...prev, color }))}
+            />
+          </div>
         </CrudForm>
       )}
 

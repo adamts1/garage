@@ -1,4 +1,4 @@
-import { garageName, signOut } from '@garage/shared';
+import { garageName, isGarageAdmin, signOut } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -14,7 +14,10 @@ export const NAV_ITEMS = [
   { key: 'nav.expenses', path: '/expenses', Icon: IconCard },
   { key: 'nav.suppliers', path: '/suppliers', Icon: IconBox },
   { key: 'nav.customers', path: '/customers', Icon: IconCustomers },
-  { key: 'nav.workers', path: '/workers', Icon: IconWrench },
+  /* The staff screen shows every colleague's email and is the only place a role
+     is changed, so it is an admin's. The page redirects as well — hiding a link
+     does nothing about an address somebody types. */
+  { key: 'nav.workers', path: '/workers', Icon: IconWrench, adminOnly: true },
   { key: 'nav.works', path: '/works', Icon: IconToolbox },
   { key: 'nav.items', path: '/items', Icon: IconParts },
   { key: 'nav.reports', path: '/reports', Icon: IconReports },
@@ -72,7 +75,7 @@ export default function Sidebar({
       </div>
 
       <nav className="nav-list">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !item.adminOnly || isGarageAdmin()).map((item) => (
           /* A real <a href>, not a button: middle-click and "open in new tab"
              work, and the browser shows where each item goes. */
           <Link
