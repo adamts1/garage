@@ -326,6 +326,7 @@ const rowToTicket = (r: any): Ticket => ({
         name: w.name,
         labor: Number(w.labor),
         custom: w.custom,
+        notes: w.notes ?? undefined,
         items: (w.work_items ?? [])
           .slice()
           .sort((a: any, b: any) => a.position - b.position)
@@ -400,6 +401,9 @@ const worksPayload = (works: TicketWork[]) =>
     name: w.name,
     labor: w.labor,
     custom: w.custom ?? false,
+    // Trimmed to nothing collapses to null in the RPC, so a note cleared in the
+    // UI does not come back as an empty string next time the ticket is opened.
+    notes: w.notes?.trim() || null,
     position: i,
     items: w.items.map((p, j) => ({
       sku: p.sku,
@@ -648,9 +652,9 @@ export const subscribeToTickets = (onChange: () => void) => {
   return () => void getClient().removeChannel(channel);
 };
 
-/** Same, for the customers / items / vehicles tables. */
+/** Same, for the catalog-ish tables an app lists on a screen of its own. */
 export const subscribeToTable = (
-  table: 'customers' | 'items' | 'vehicles' | 'garage_workers',
+  table: 'customers' | 'items' | 'vehicles' | 'garage_workers' | 'work_defs',
   onChange: () => void,
 ) => {
   const channel = getClient()

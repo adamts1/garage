@@ -64,7 +64,7 @@ describe('printTicket', () => {
   });
 
   it('is headed by the signed-in garage, not a name compiled into the app', () => {
-    setCurrentGarage({ id: 'g1', name: 'מוסך הרצל' });
+    setCurrentGarage({ id: 'g1', name: 'מוסך הרצל', role: 'admin' });
     printTicket(ticket, totals);
     expect(doc()).toContain('מוסך הרצל');
     expect(doc()).not.toContain('מוסך אי-תן');

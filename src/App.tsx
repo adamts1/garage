@@ -11,6 +11,7 @@ import { CustomersPage } from './pages/Customers';
 import { ExpensesPage } from './pages/Expenses';
 import { InvoicesPage } from './pages/Invoices';
 import { ItemsPage } from './pages/Items';
+import { WorksPage } from './pages/Works';
 import { NewTicketPage } from './pages/NewTicket';
 import { ReportsPage } from './pages/Reports';
 import { SuppliersPage } from './pages/Suppliers';
@@ -166,6 +167,7 @@ export default function App() {
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/workers" element={<WorkersPage />} />
               <Route path="/items" element={<ItemsPage />} />
+              <Route path="/works" element={<WorksPage />} />
               <Route path="/reports" element={<ReportsPage tickets={tickets} />} />
               <Route
                 path="/archive"

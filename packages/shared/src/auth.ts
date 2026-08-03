@@ -18,10 +18,17 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { getClient } from './client';
 
+/** What a member may do in their garage. Two, and only the one distinction:
+ *  who may change the name or price of a work already on a ticket. Assigned by
+ *  scripts/onboard-garage.mjs; there is no in-app editor, so nobody can demote
+ *  themselves out of their own prices. */
+export type GarageRole = 'admin' | 'member';
+
 /** A garage the signed-in user belongs to. Mirrors public.my_garages(). */
 export interface Garage {
   id: string;
   name: string;
+  role: GarageRole;
 }
 
 /** What the app needs to decide which screen to render. */
@@ -58,6 +65,16 @@ let currentGarage: Garage | null = null;
 export const setCurrentGarage = (g: Garage | null): void => { currentGarage = g; };
 
 export const getCurrentGarage = (): Garage | null => currentGarage;
+
+/** Whether the signed-in user may change what a customer is charged.
+ *
+ *  Read from the same module-level garage as the name above, so it is populated
+ *  before any screen that could act on it renders and cleared on sign-out.
+ *
+ *  This is what the UI reads to decide whether to offer an editable price. It
+ *  is NOT the boundary: save_ticket_works re-checks the role in the database,
+ *  because a value a client can read is a value a client can lie about. */
+export const isGarageAdmin = (): boolean => currentGarage?.role === 'admin';
 
 /** The garage's display name. Falls back to the generic word rather than to
  *  some other garage's name — wrong is worse than plain on a customer's quote. */
@@ -105,9 +122,12 @@ export const onAuthStateChange = (fn: (session: Session | null) => void): (() =>
 export const listMyGarages = async (): Promise<Garage[]> => {
   const { data, error } = await getClient().rpc('my_garages');
   if (error) throw error;
-  return (data ?? []).map((r: { garage_id: string; garage_name: string }) => ({
+  return (data ?? []).map((r: { garage_id: string; garage_name: string; role: string }) => ({
     id: r.garage_id,
     name: r.garage_name,
+    // Anything unrecognised is the lesser privilege. A role this build has not
+    // heard of must not read as admin.
+    role: r.role === 'admin' ? 'admin' : 'member',
   }));
 };
 

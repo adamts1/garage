@@ -17,6 +17,11 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
   const pickWork = usePickWork();
   const pickPart = usePickPart();
 
+  /* The initial value is read on the FIRST render only, and on a saved ticket
+     that render happens before the works have come back from the database — so
+     this was null for every existing ticket and stayed null until somebody
+     clicked a row. The fallback below is what actually makes a work selected;
+     this is only the "which one did they click" half. */
   const [selectedUid, setSelectedUid] = useState<string | null>(works[0]?.uid ?? null);
 
   /* A counter, not works.length: removing a work and adding another would
@@ -24,7 +29,15 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
   const seq = useRef(1);
   const nextUid = () => `w${seq.current++}`;
 
-  const current = works.find((w) => w.uid === selectedUid) ?? null;
+  /* Falls back to the first work, so opening a ticket that already has works
+     lands on one instead of on an empty right-hand pane. Derived rather than
+     synced in an effect: an effect would render the empty state once and then
+     replace it, and it would need to re-fire whenever the works arrive, are
+     reordered, or the selected one is removed. Covers all three by construction.
+
+     This is what makes the notes field reachable at all — it belongs to the
+     selected work, and before this nothing was selected until you clicked. */
+  const current = works.find((w) => w.uid === selectedUid) ?? works[0] ?? null;
 
   const addWork = useCallback(
     async (initialQuery = '') => {

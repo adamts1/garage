@@ -150,7 +150,7 @@ There is no signup. Accounts are created by an operator, together with the
 membership that joins them to a garage:
 
 ```bash
-npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
+npm run onboard -- --garage "מוסך הרצל" --email avi@example.com --admin
 ```
 
 It prints a generated password once and stores it nowhere. Pass `--garage-id` to
@@ -168,6 +168,43 @@ read customer PII. An existing email is left with its password untouched, so
 > constant, so every garage on the system introduced itself as the first one we
 > onboarded.
 
+### 5.0 Admin or member
+
+Two roles, and one distinction: **only an admin may change the name or the price
+of a work already on a ticket** — the numbers a customer is charged. A member
+does everything else, including adding a work, removing one, editing its parts,
+and writing the note that records what was actually done.
+
+This script is the only place a role is ever set. There is deliberately **no
+in-app role editor**: a garage with one admin who demoted themselves would need
+the service_role key to get their price list back.
+
+**`--admin` or `--member` is required, and there is no default.** The membership
+row is written with an upsert, so re-running this for somebody who already
+exists rewrites their role — a default would mean an omitted flag quietly
+demoting a garage's only admin. Passing both is refused too.
+
+```bash
+npm run onboard -- --garage-id <uuid> --email mechanic@example.com --member
+```
+
+Re-running is also how a role is changed, since there is nowhere else to change
+it. The password is left alone for an account that already exists:
+
+```bash
+npm run onboard -- --garage-id <uuid> --email avi@example.com --admin   # promote
+```
+
+The UI reads the role to decide whether to render an editable price, but that is
+not the boundary — `save_ticket_works` re-checks it in the database, against the
+values as they were **before** the save. It has to be checked there rather than
+in a policy, because the function replaces a ticket's works wholesale: at the
+row level an edit and an addition are the same INSERT, so the previous value has
+to be in scope for the rule to be expressible at all.
+
+Everyone who existed when the roles landed became an admin. Silently demoting the
+person who onboarded the garage would have locked them out of their own prices.
+
 ### A new garage starts empty
 
 No works, no parts, no workers. It was the reverse until 2026-07-30: every new
@@ -180,7 +217,7 @@ Pass `--catalog` to seed the standard catalog anyway, which is what demos and
 smoke tests want:
 
 ```bash
-npm run onboard -- --catalog --garage "מוסך הדגמה" --email demo@example.com
+npm run onboard -- --catalog --garage "מוסך הדגמה" --email demo@example.com --admin
 ```
 
 Workers are never seeded, because there is no plausible guess: the garage enters
@@ -230,7 +267,7 @@ To target production, use `onboard:prod`, which reads `.env.production.local`
 instead of `.env.local`:
 
 ```bash
-npm run onboard:prod -- --garage "..." --email ...
+npm run onboard:prod -- --garage "..." --email ... --admin
 ```
 
 Copy `.env.production.local.example` to `.env.production.local` once and fill in

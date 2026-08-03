@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 /* Create a garage and its first user, in one step.
  *
- *   node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com
+ *   node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com --admin
+ *
+ * --admin or --member is REQUIRED, with no default. Only an admin may change
+ * the name or the price of a work already on a ticket; a member does every
+ * other thing the app can do. This script is the only place a role is set —
+ * there is deliberately no in-app editor, so the sole admin of a garage cannot
+ * demote themselves out of their own price list.
+ *
+ * The requirement is not pedantry. The membership row is written with an
+ * upsert, so re-running this for somebody who already exists rewrites their
+ * role; a default would mean an omitted flag quietly demoting a garage's only
+ * admin, with the service_role key as the only way back.
  *
  * This is the only way accounts come into existence. There is no self-signup,
  * no invite code and no join RPC — which is what makes the "signed in but
@@ -102,10 +113,31 @@ const email = valued('email')?.trim().toLowerCase();
 const password = valued('password') ?? randomBytes(9).toString('base64url');
 const existingGarageId = valued('garage-id');
 
+/* The role has to be said out loud — there is no default.
+
+   It was `--admin, or member if you say nothing`, and the membership row is
+   written with an upsert, so re-running this for an existing admin without the
+   flag silently demoted them. That is a real way to lose a garage's only admin,
+   and since there is no in-app role editor the way back is the service_role
+   key. Requiring the word removes the failure mode instead of documenting it:
+   you cannot forget to type something the script refuses to run without. */
+const wantsAdmin = args.has('admin');
+const wantsMember = args.has('member');
+const role = wantsAdmin ? 'admin' : 'member';
+
 if (!url || !serviceKey) die('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
 if (!email) die('Missing --email');
 if (!garageName && !existingGarageId) die('Missing --garage (or --garage-id to join an existing one)');
 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) die(`Not an email address: ${email}`);
+if (wantsAdmin && wantsMember) die('Pass --admin or --member, not both.');
+if (!wantsAdmin && !wantsMember) {
+  die(
+    'Missing --admin or --member. Only an admin can change the name or price of a work ' +
+      'on a ticket; a member does everything else. This is the only place the role is set, ' +
+      'and re-running writes it — so it has to be stated every time, including when adding ' +
+      'somebody to a garage that already exists.',
+  );
+}
 
 /* A service_role key is a full-access credential, and the anon key is a
    plausible thing to paste by mistake — both are JWTs from the same dashboard
@@ -222,11 +254,16 @@ if (createErr) {
 /* ---------- 3. the membership ---------- */
 // The step that matters. A user without this row can sign in and then see
 // nothing — the state AuthGate exists to catch.
+//
+// The role rides along, because this is the only place it is ever set: there is
+// no in-app role editor, which is what makes it impossible for the one admin a
+// garage has to demote themselves and lock the prices away from everybody.
+// Which one it is was demanded up front — see the argument checks.
 const { error: memberErr } = await db
   .from('garage_members')
-  .upsert({ garage_id: garageId, user_id: userId }, { onConflict: 'garage_id,user_id' });
+  .upsert({ garage_id: garageId, user_id: userId, role }, { onConflict: 'garage_id,user_id' });
 if (memberErr) die(`User and garage exist but could not be linked: ${memberErr.message}`);
-console.log(`\x1b[32m✓\x1b[0m membership linked\n`);
+console.log(`\x1b[32m✓\x1b[0m membership linked  role ${role}\n`);
 
 /* ---------- 4. a starter catalog, only when asked ----------
 
