@@ -42,3 +42,11 @@
   color: #a5544b;
   font-weight: 700;
 }
+
+/* Why the add button is not here. A member who came to add a mechanic should
+   learn that, not conclude the page is broken. */
+.readOnly {
+  margin: -6px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}

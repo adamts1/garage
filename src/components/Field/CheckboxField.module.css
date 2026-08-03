@@ -30,3 +30,22 @@
   font-size: 11.5px;
   color: var(--muted);
 }
+
+/* An unticked box that has to be ticked. Colouring the label as well as the
+   message, because a 16px square going red is easy to miss. */
+.invalid {
+  color: var(--danger);
+}
+.invalid .box {
+  accent-color: var(--danger);
+  outline: 1px solid var(--danger);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.error {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+}

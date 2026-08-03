@@ -440,7 +440,7 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] Realtime → a change arriving mid-write is deferred and re-pulled once the
       write settles, not discarded  (§3.7)
 
-> Proven on every CI run by `supabase/tests/tenancy.mjs` (85 checks): ten
+> Proven on every CI run by `supabase/tests/tenancy.mjs` (90 checks): ten
 > concurrent creates get ten unique keys, a failed create leaves no orphan, a
 > forged garage_id is ignored, and two people with one name stay two customers.
 >
@@ -518,6 +518,37 @@ apps and both go dark. So schema first, then auth, then the flip.
 > **Known and deliberate:** a member can delete a work and add it back at a
 > different price, because adding is allowed. Closing that means locking deletion
 > too — considered and not chosen. Recorded rather than quietly patched.
+
+### Intake validation, the staff list, and a board that fills its panel ✅
+- [x] **The board's columns grow.** They were a fixed 268px: six of them filled
+      a panel, four left a third of it empty and packed to one side. Centring
+      them only moved the emptiness to both sides. `flex: 1 1 268px` with a
+      `min-width` fills the width at any sidebar state and still falls back to
+      the designed width and scrolls when the window is narrow.
+- [x] **Intake requires what a service history is worth anything without**:
+      name, phone, מספר רישוי, יצרן, קילומטר, and מפתח התקבל. Each field says so
+      itself — the message appears once the field has been left, or once saving
+      was attempted, so a blank form is not red before anybody has typed.
+- [x] The save button is **not disabled**. A greyed-out button explains nothing,
+      and pressing it is how most people ask what is wrong — so pressing it is
+      what turns the objections on, and it scrolls back to the details.
+- [x] **`keyReceived` had no control at all.** It sat in the form's state and
+      fed the `מפתח התקבל` flag, and nothing ever rendered it — so every ticket
+      the web app has written says the key was not received. Now on screen, and
+      required: the key is the one physical thing the garage takes custody of.
+- [x] **The staff list is an admin's.** A worker's code is what every ticket
+      stores in `assignee`, so deleting one is not cosmetic. Reading stays open
+      to everyone, because the board draws a mechanic's chip on every card.
+      Enforced by policy, not only by hiding buttons.
+      `20260803010000_workers_admin_only.sql`
+- [x] `garage_workers` finally joined the realtime publication — the gap noted
+      when the works catalog was built. The workers screen has subscribed since
+      it was written and had never once received an event.
+
+> **Not a bug, worth recording:** workers "missing" from the screen were four
+> rows belonging to garage `00000000`, the pre-tenancy backfill tenant, which
+> has no members and no tickets. RLS was filtering them correctly. Data left
+> over from the migration, not a fault in the page.
 
 ### Phase 4a — Invoicing 🔒 *(build complete; awaiting the accountant gate)*
 - [x] Immutable `invoices` table — frozen line items, per-invoice VAT rate, provider-owned numbering, cannot be edited or deleted (trigger). `20260727000000_invoices.sql`

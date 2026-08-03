@@ -2,21 +2,24 @@ import { modelsFor, VEHICLE_MAKES, type Ticket } from '@garage/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
-import { SelectField, TextAreaField, TextField } from '../../components/Field';
+import { CheckboxField, SelectField, TextAreaField, TextField } from '../../components/Field';
 import { WorksStep } from '../../features/works';
 import { IconCar, IconCustomers, IconDoc } from '../../icons';
 import styles from './NewTicketPage.module.css';
-import { useNewTicket, YEARS } from './useNewTicket';
+import { useNewTicket, YEARS, type RequiredField } from './useNewTicket';
 
 const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 /** i18n keys for the fields a ticket cannot be saved without, so the footer can
  *  name them in the same words the labels use. */
-const REQUIRED_LABELS = {
+const REQUIRED_LABELS: Record<RequiredField, string> = {
   customerName: 'customers.fields.name',
   customerPhone: 'customers.fields.phone',
   licensePlate: 'newTicket.fields.plate',
-} as const;
+  manufacturer: 'newTicket.fields.manufacturer',
+  km: 'newTicket.fields.km',
+  keyReceived: 'newTicket.fields.keyReceived',
+};
 
 export interface NewTicketPageProps {
   tickets: Ticket[];
@@ -36,6 +39,14 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
     onChange: (e: { target: { value: string } }) => form.set(key, e.target.value),
   });
 
+  /* The required half of a field: the marker, the message, and the blur that
+     earns the right to show it. Spread after `field`, so it wins on `onBlur`. */
+  const required = (key: RequiredField) => ({
+    required: true,
+    onBlur: () => form.touch(key),
+    error: form.invalid(key) ? t(`newTicket.invalid.${key}`) : undefined,
+  });
+
   const models = modelsFor(form.form.manufacturer);
 
   const goTo = (n: 1 | 2, id: string) => {
@@ -46,7 +57,15 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
   return (
     <form
       className="intake-form"
-      onSubmit={(e) => { e.preventDefault(); form.submit(); }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        /* Refused: put them on the first field it objected to, rather than
+           leaving them to hunt the page for whichever one went red. */
+        if (!form.submit()) {
+          document.getElementById('sec-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setTab(1);
+        }
+      }}
       onKeyDown={(e) => {
         /* Enter belongs to the works tables' inputs — it must not submit the
            ticket from halfway through filling one in. */
@@ -138,8 +157,8 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
             <IconCustomers /> {t('newTicket.customerDetails')}
           </h3>
           <div className={styles.row3}>
-            <TextField dense required label="customers.fields.name" {...field('customerName')} />
-            <TextField dense required label="customers.fields.phone" type="tel" {...field('customerPhone')} />
+            <TextField dense label="customers.fields.name" {...field('customerName')} {...required('customerName')} />
+            <TextField dense label="customers.fields.phone" type="tel" {...field('customerPhone')} {...required('customerPhone')} />
             <TextField dense label="customers.fields.id_number" inputMode="numeric" {...field('idNumber')} />
           </div>
 
@@ -176,7 +195,7 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
             <IconCar /> {t('newTicket.vehicleDetails')}
           </h3>
           <div className={styles.row2}>
-            <TextField dense required label="newTicket.fields.plate" {...field('licensePlate')} />
+            <TextField dense label="newTicket.fields.plate" {...field('licensePlate')} {...required('licensePlate')} />
             {/* A list, not a menu: `list` offers the known makes while the input
                 stays free text, so a grey import or a thirty-year-old model is
                 typed straight into the same field. See VEHICLE_CATALOG. */}
@@ -187,6 +206,7 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
               autoComplete="off"
               hint="newTicket.pickOrType"
               {...field('manufacturer')}
+              {...required('manufacturer')}
             />
             <datalist id="vehicle-makes">
               {VEHICLE_MAKES.map((m) => <option key={m} value={m} />)}
@@ -225,9 +245,22 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
               /* Digits only, stripped as typed — the field feeds a numeric
                  column and a stray "ק״מ" would be silently dropped later. */
               onChange={(e) => form.set('km', e.target.value.replace(/\D/g, ''))}
+              {...required('km')}
             />
             <TextField dense label="newTicket.fields.vehicleCode" {...field('vehicleCode')} />
           </div>
+
+          {/* The field existed in the form's state and fed the "מפתח התקבל"
+              flag, and no control ever rendered it — so every ticket the web
+              app has written said the key was not received. Now it is on the
+              screen, and required: the key is the one physical thing the
+              garage takes custody of. */}
+          <CheckboxField
+            label="newTicket.fields.keyReceived"
+            checked={form.form.keyReceived}
+            onChange={(e) => { form.set('keyReceived', e.target.checked); form.touch('keyReceived'); }}
+            error={form.invalid('keyReceived') ? t('newTicket.invalid.keyReceived') : undefined}
+          />
         </div>
 
         <div className="form-section span-2">
@@ -259,12 +292,10 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
         )}
         <div className="foot-spacer" />
         <Button onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          disabled={!form.canSave}
-        >
+        {/* Deliberately NOT disabled. A greyed-out button explains nothing, and
+            pressing it is how most people ask what is wrong — so pressing it is
+            what turns the field-level objections on. */}
+        <Button type="submit" variant="primary" size="lg">
           {t('newTicket.save')} <span className="arrow">←</span>
         </Button>
       </div>

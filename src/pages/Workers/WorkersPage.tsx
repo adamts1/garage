@@ -1,4 +1,4 @@
-import { suggestInitials, type Worker } from '@garage/shared';
+import { isGarageAdmin, suggestInitials, type Worker } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -18,6 +18,11 @@ const Avatar = ({ color, initials }: { color: string; initials: string }) => (
 export default function WorkersPage() {
   const { t } = useTranslation();
   const { rows, activeCount, create, update, toggleActive, remove } = useWorkers();
+
+  /* Who the garage employs is an admin's list. Reading it stays open to
+     everyone — the board draws a mechanic's chip on every card, and the
+     assignee picker has to have somebody to offer. */
+  const canManage = isGarageAdmin();
 
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<WorkerDraft>(blankWorker);
@@ -103,10 +108,14 @@ export default function WorkersPage() {
         </span>
       ),
     },
-    {
+    /* Read-only for a member, so the column is not a row of buttons that
+       report a permission error when pressed. The database refuses the writes
+       too — see the garage_workers policies — because a hidden button is a
+       courtesy, not a boundary. */
+    ...(canManage ? [{
       key: 'actions',
       width: 230,
-      render: (w) => (
+      render: (w: Worker) => (
         <RowActions>
           {editingId === w.id ? (
             <>
@@ -139,7 +148,7 @@ export default function WorkersPage() {
           )}
         </RowActions>
       ),
-    },
+    }] : []),
   ];
 
   return (
@@ -148,13 +157,20 @@ export default function WorkersPage() {
         title="workers.title"
         count={activeCount}
         actions={
-          <Button variant="primary" onClick={() => setAdding((v) => !v)}>
-            {adding ? t('common.cancel') : t('workers.add')}
-          </Button>
+          canManage ? (
+            <Button variant="primary" onClick={() => setAdding((v) => !v)}>
+              {adding ? t('common.cancel') : t('workers.add')}
+            </Button>
+          ) : undefined
         }
       />
 
-      {adding && (
+      {/* Said out loud rather than left as an absence. A member who came here to
+          add a mechanic should learn why they cannot, not conclude the screen
+          is broken — which is exactly what a missing button looks like. */}
+      {!canManage && <p className={styles.readOnly}>{t('workers.adminOnly')}</p>}
+
+      {adding && canManage && (
         <CrudForm
           onSubmit={() => void submitNew()}
           actions={
