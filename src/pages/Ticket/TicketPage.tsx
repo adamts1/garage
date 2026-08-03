@@ -17,6 +17,8 @@ const shekel = (n: number) =>
 export interface TicketPageProps {
   ticket: Ticket;
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** Awaited, so an action can save before it runs. See useTickets.saveTicket. */
+  saveTicket: (next: Ticket, worksChanged: boolean) => Promise<void>;
   /** Code → chip, retired workers included: this page shows history. */
   workerChips: WorkerMap;
   onBack: () => void;
@@ -38,14 +40,24 @@ const Val = ({ children }: { children?: string | number | null }) =>
     ? <span className="kv-empty">-</span>
     : <>{children}</>;
 
-export default function TicketPage({ ticket, setTickets, workerChips, onBack }: TicketPageProps) {
+export default function TicketPage({
+  ticket: stored, setTickets, saveTicket, workerChips, onBack,
+}: TicketPageProps) {
   const { t } = useTranslation();
-  const page = useTicketPage({ ticket, setTickets, onBack });
-  const { photos, invoice, busy, totals, works } = page;
+  const page = useTicketPage({ ticket: stored, setTickets, saveTicket, onBack });
+  /* `ticket` here is the DRAFT when there are unsaved edits, and the stored row
+     otherwise — so everything below renders what the user has in hand. The prop
+     is deliberately renamed out of the way: reading the stored ticket by
+     accident is how a screen ends up showing a price it is not about to save. */
+  const { photos, invoice, busy, totals, works, ticket } = page;
 
   const [note, setNote] = useState('');
   const [step, setStep] = useState('tp-details');
   const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
+
+  /** Every way out of this page goes through here, so there is one answer to
+   *  "what happens to my edits" rather than one per button. */
+  const leave = async () => { if (await page.confirmLeave()) onBack(); };
 
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
   const column = COLUMNS.find((c) => c.id === ticket.st);
@@ -77,7 +89,7 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
 
           <div className="foot-spacer" />
 
-          <button className="btn ghost" onClick={onBack}>
+          <button className="btn ghost" onClick={() => void leave()}>
             {t('ticket.backToList')} <span className="arrow">←</span>
           </button>
         </div>
@@ -366,8 +378,16 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
           <IconTrash /> {t('ticket.deleteTicket')}
         </button>
         <div className="foot-spacer" />
-        <button className="btn ghost" onClick={onBack}>{t('common.close')}</button>
-        <button className="btn primary lg" onClick={() => scrollTo('tp-works')}>
+        {page.dirty && <span className="tp-unsaved">{t('ticket.unsaved')}</span>}
+        <button className="btn ghost" onClick={() => void leave()}>{t('common.close')}</button>
+        {/* This used to call scrollTo('tp-works'). A primary button labelled
+            "שמור" that scrolled, because everything already saved itself on
+            every keystroke. Now it is the save. */}
+        <button
+          className="btn primary lg"
+          onClick={() => void page.save()}
+          disabled={!page.dirty || busy}
+        >
           {t('common.save')} <span className="arrow">←</span>
         </button>
       </footer>

@@ -13,41 +13,32 @@ import { useWorksStep } from './useWorksStep';
 const shekel = (n: number) =>
   '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/* The note, typed locally and committed when you leave the field.
+/* The note, written against the selected work.
  *
- * Every other control here writes straight through `patchWork`, and on the
- * ticket page that lands in `setTickets`, which persists on the spot — so a
- * keystroke becomes a `save_ticket_works` call, and that call DELETES every
- * work and work_item on the ticket and re-inserts them. One character, one
- * wipe-and-rebuild of the whole tree, broadcast to every other screen.
+ * A plain controlled field. It briefly held its own draft and committed on
+ * blur, because on the ticket page every `setWorks` used to persist on the
+ * spot — a keystroke became a `save_ticket_works` call that deleted and
+ * re-inserted the whole works tree. That is fixed where it belonged, in the
+ * ticket page's own draft, so writing through on change is cheap again.
  *
- * That is tolerable for a number typed into a narrow cell. It is not tolerable
- * for a sentence: thirty characters is thirty transactions. So this one holds
- * its own draft and commits once, on blur, and only when the text actually
- * changed.
- *
- * Keyed by the work's uid at the call site, so selecting another work remounts
- * it with that work's note instead of needing an effect to re-seed. The trade
- * is that a note edited elsewhere while this field is open shows up when you
- * switch works rather than immediately — which is the right way round: it
- * cannot overwrite what somebody is in the middle of typing. */
-function NotesField({ initial, label, placeholder, onCommit }: {
-  initial: string;
+ * And it has to write through: the save button is enabled by the ticket being
+ * dirty, so a field that withheld its text until blur would leave the button
+ * greyed out while somebody was still typing into it. */
+function NotesField({ value, label, placeholder, onChange }: {
+  value: string;
   label: string;
   placeholder: string;
-  onCommit: (value: string) => void;
+  onChange: (value: string) => void;
 }) {
-  const [draft, setDraft] = useState(initial);
   return (
     <label className={styles.notes}>
       <span className={styles.notesLabel}>{label}</span>
       <textarea
         className={styles.notesInput}
         rows={2}
-        value={draft}
+        value={value}
         placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { if (draft !== initial) onCommit(draft); }}
+        onChange={(e) => onChange(e.target.value)}
       />
     </label>
   );
@@ -301,11 +292,10 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               Open to everyone — it records labour, it does not price it. */}
           {current && (
             <NotesField
-              key={current.uid}
-              initial={current.notes ?? ''}
+              value={current.notes ?? ''}
               label={t('works.notes')}
               placeholder={t('works.notesPlaceholder')}
-              onCommit={(notes) => step.patchWork(current.uid, { notes })}
+              onChange={(notes) => step.patchWork(current.uid, { notes })}
             />
           )}
 

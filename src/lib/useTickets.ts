@@ -93,5 +93,42 @@ export function useTickets() {
     void persist(prev, next); // save second
   }, [persist]);
 
-  return { tickets, setTickets, loading, error, refetch };
+  /* Save one ticket and wait for it.
+   *
+   * setTickets persists in the background and returns nothing, which is right
+   * for the board — dragging a card is the action, and nobody waits on it. It
+   * is wrong for anything that has to happen AFTER a save has landed: issuing
+   * an invoice against works still in flight would put lines on a tax document
+   * that do not match the database, and that document cannot be deleted.
+   *
+   * Same shape as mobile's useTickets.saveTicket, which the ticket editor there
+   * has always used. Paint first, then push, then let the deferred realtime
+   * pull settle — the writing counter is shared with setTickets, so a refetch
+   * arriving mid-save is still deferred rather than dropped. */
+  const saveTicket = useCallback(
+    async (next: Ticket, worksChanged: boolean) => {
+      setError(null);
+      const painted = current.current.map((t) => (t.k === next.k ? next : t));
+      current.current = painted;
+      setLocal(painted);
+
+      writing.current++;
+      try {
+        await updateTicket(next, worksChanged);
+      } catch (e: any) {
+        setError(e.message ?? String(e));
+        pending.current = true;   // our optimistic state may be a lie now
+        throw e;                  // the caller decides whether to carry on
+      } finally {
+        writing.current--;
+        if (writing.current === 0 && pending.current) {
+          pending.current = false;
+          await refetch().catch(() => {});
+        }
+      }
+    },
+    [refetch],
+  );
+
+  return { tickets, setTickets, saveTicket, loading, error, refetch };
 }

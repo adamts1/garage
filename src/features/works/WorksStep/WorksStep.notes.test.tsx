@@ -66,40 +66,34 @@ describe('the per-work notes field', () => {
   });
 });
 
-/* On the ticket page every setWorks persists immediately, and the save wipes
-   and re-inserts the ticket's whole works tree. Writing through on each
-   keystroke made a sentence into thirty of those. */
+/* The field writes through on change — into whatever state the host gave it,
+   which on the ticket page is a draft that goes nowhere until "שמור". It has to
+   write through rather than wait for blur, because the save button is enabled
+   by the ticket being dirty: a field holding its text back would leave the
+   button greyed out while somebody was still typing into it.
+
+   That nothing reaches the database until save is a property of the ticket
+   page, and is asserted there — see useTicketPage.test.tsx. */
 describe('when the note is written back', () => {
-  it('does not save while you are still typing', () => {
-    const setWorks = vi.fn();
-    render(<WorksStep works={[work('w1')]} setWorks={setWorks} combinedEmpty />);
-
-    fireEvent.change(notesField()!, { target: { value: 'הוחלפו' } });
-    fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם' } });
-    fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם הדיסקים' } });
-
-    expect(setWorks).not.toHaveBeenCalled();
-  });
-
-  it('saves once, on leaving the field', () => {
+  it('reports each edit to the host, so the ticket knows it has changed', () => {
     const setWorks = vi.fn();
     render(<WorksStep works={[work('w1')]} setWorks={setWorks} combinedEmpty />);
 
     fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם הדיסקים' } });
-    fireEvent.blur(notesField()!);
 
     expect(setWorks).toHaveBeenCalledTimes(1);
     expect(setWorks.mock.calls[0][0][0]).toMatchObject({ uid: 'w1', notes: 'הוחלפו גם הדיסקים' });
   });
 
-  it('does not save at all when the text was not changed', () => {
+  it('leaves the other works alone', () => {
     const setWorks = vi.fn();
-    render(<WorksStep works={[work('w1', { notes: 'כבר כתוב' })]} setWorks={setWorks} combinedEmpty />);
+    render(<WorksStep works={[work('w1'), work('w2')]} setWorks={setWorks} combinedEmpty />);
 
-    notesField()!.focus();
-    fireEvent.blur(notesField()!);
+    fireEvent.change(notesField()!, { target: { value: 'משהו' } });
 
-    expect(setWorks).not.toHaveBeenCalled();
+    const next = setWorks.mock.calls[0][0];
+    expect(next[1]).toMatchObject({ uid: 'w2' });
+    expect(next[1].notes).toBeUndefined();
   });
 
   it('shows the right note after switching to another work', () => {

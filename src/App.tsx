@@ -50,7 +50,7 @@ export default function App() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { tickets, setTickets, loading, error } = useTickets();   // Supabase-backed, live
+  const { tickets, setTickets, saveTicket, loading, error } = useTickets();   // Supabase-backed, live
 
   // Name the browser tab after the garage — several are often open at once.
   useEffect(() => { document.title = garageName(); }, []);
@@ -155,6 +155,7 @@ export default function App() {
                   <TicketRoute
                     tickets={tickets}
                     setTickets={setTickets}
+                    saveTicket={saveTicket}
                     workerChips={workerChips}
                     onBack={() => navigate('/')}
                   />
