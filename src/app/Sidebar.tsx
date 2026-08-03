@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
   IconBoard, IconBox, IconCard, IconClock, IconCustomers, IconDoc, IconParts,
-  IconPin, IconReports, IconWrench,
+  IconPin, IconReports, IconToolbox, IconWrench,
 } from '../icons';
 
 /* The sidebar and the routing table are the same list. A page that is not here
@@ -15,6 +15,7 @@ export const NAV_ITEMS = [
   { key: 'nav.suppliers', path: '/suppliers', Icon: IconBox },
   { key: 'nav.customers', path: '/customers', Icon: IconCustomers },
   { key: 'nav.workers', path: '/workers', Icon: IconWrench },
+  { key: 'nav.works', path: '/works', Icon: IconToolbox },
   { key: 'nav.items', path: '/items', Icon: IconParts },
   { key: 'nav.reports', path: '/reports', Icon: IconReports },
   { key: 'nav.archive', path: '/archive', Icon: IconClock },

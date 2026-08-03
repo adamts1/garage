@@ -440,7 +440,7 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] Realtime → a change arriving mid-write is deferred and re-pulled once the
       write settles, not discarded  (§3.7)
 
-> Proven on every CI run by `supabase/tests/tenancy.mjs` (73 checks): ten
+> Proven on every CI run by `supabase/tests/tenancy.mjs` (85 checks): ten
 > concurrent creates get ten unique keys, a failed create leaves no orphan, a
 > forged garage_id is ignored, and two people with one name stay two customers.
 >
@@ -477,6 +477,47 @@ apps and both go dark. So schema first, then auth, then the flip.
       come from `vehicles`, which `create_ticket` fills as tickets are opened, so
       the list is a by-product of normal work rather than something to maintain.
       `Table` grew an optional `renderExpanded` for this and stays reusable.
+
+### Works catalog, per-work notes, and the first roles ✅
+- [x] **קטלוג עבודות** at `/works` — create, rename, reprice and delete the works
+      a ticket copies from. The data layer already existed (`listWorkDefs` and
+      friends in `packages/shared/src/db.ts`); only the screen was missing, so
+      the catalog could previously be changed only through the database. The
+      page says on screen what the two tables mean: repricing here moves the
+      *next* ticket, never one already written.
+- [x] `work_defs` joined the realtime publication. Without it
+      `subscribeToTable('work_defs')` attaches to a channel that can never fire —
+      the subscription reads as live in the code while the screen goes stale.
+      **`garage_workers` has the same gap and still has it** — the Workers page's
+      subscription is a silent no-op. Noted, not fixed here.
+- [x] **Per-work notes on a ticket** (`works.notes`) — what was actually done,
+      against the work it was done on. Any member may write one: it records
+      labour, it does not price it. Belongs to the ticket's copy of the work,
+      exactly like `name` and `labor`, and never reaches the `work_defs` entry.
+- [x] **Roles: `admin` and `member`** on `garage_members`, set only by
+      `scripts/onboard-garage.mjs --admin`. One distinction: only an admin may
+      change the **name or price of a work already on a ticket**. There is no
+      in-app editor on purpose — a garage's only admin cannot demote themselves
+      out of their own price list. Everyone who existed at migration time became
+      an admin; silently demoting whoever onboarded the garage would have locked
+      them out.
+- [x] The check lives **inside `save_ticket_works`, not in a policy**. The
+      function replaces a ticket's works wholesale — delete every row, re-insert
+      from the payload — so at the row level an edit and an addition are the same
+      INSERT, and a policy that refused the first would refuse the second. It
+      compares against a snapshot taken before the delete, which is the only
+      place both values are in scope. `20260803000000_works_notes_and_roles.sql`
+- [x] The UI gate is a convenience, not the boundary: `isGarageAdmin()` decides
+      whether to render an editable price, and the database re-checks. An
+      unrecognised role resolves to the *lesser* privilege, so a build that has
+      not heard of a future role never opens a field the server will refuse.
+- [x] Proven in `tenancy.mjs`: a member cannot rename or reprice an existing work
+      and the rejected save leaves it untouched; a member can add, remove and
+      annotate; an admin can reprice; and a member cannot promote themselves.
+
+> **Known and deliberate:** a member can delete a work and add it back at a
+> different price, because adding is allowed. Closing that means locking deletion
+> too — considered and not chosen. Recorded rather than quietly patched.
 
 ### Phase 4a — Invoicing 🔒 *(build complete; awaiting the accountant gate)*
 - [x] Immutable `invoices` table — frozen line items, per-invoice VAT rate, provider-owned numbering, cannot be edited or deleted (trigger). `20260727000000_invoices.sql`

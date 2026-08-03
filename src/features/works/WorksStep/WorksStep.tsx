@@ -1,4 +1,4 @@
-import { workTotal, type PartRow, type TicketWork } from '@garage/shared';
+import { isGarageAdmin, workTotal, type PartRow, type TicketWork } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
@@ -24,6 +24,15 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
   const step = useWorksStep({ works, setWorks });
   const { current } = step;
 
+  /* What a customer is charged is an admin's call. A member still adds works,
+     removes them, edits their parts and writes the note — everything except
+     renaming or repricing one that is already on the ticket.
+
+     This only decides what to render. save_ticket_works re-checks the role in
+     the database against the values as they were before the save, because a
+     flag the client reads is a flag the client can lie about. */
+  const canPrice = isGarageAdmin();
+
   const workColumns: Column<TicketWork>[] = [
     {
       key: 'code',
@@ -43,11 +52,15 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       header: 'works.fields.name',
       render: (w) => (
         <div className={styles.nameCell}>
-          <CellInput
-            value={w.name}
-            aria-label={t('works.fields.name')}
-            onChange={(e) => step.patchWork(w.uid, { name: e.target.value })}
-          />
+          {canPrice ? (
+            <CellInput
+              value={w.name}
+              aria-label={t('works.fields.name')}
+              onChange={(e) => step.patchWork(w.uid, { name: e.target.value })}
+            />
+          ) : (
+            <span className={styles.locked} title={t('works.adminOnly')}>{w.name}</span>
+          )}
           {w.custom && <span className={styles.badge}>{t('picker.work.new')}</span>}
         </div>
       ),
@@ -56,15 +69,18 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       key: 'labor',
       header: 'works.fields.labor',
       width: 84,
-      render: (w) => (
-        <CellInput
-          type="number"
-          min={0}
-          value={w.labor}
-          aria-label={t('works.fields.labor')}
-          onChange={(e) => step.patchWork(w.uid, { labor: Number(e.target.value) || 0 })}
-        />
-      ),
+      render: (w) =>
+        canPrice ? (
+          <CellInput
+            type="number"
+            min={0}
+            value={w.labor}
+            aria-label={t('works.fields.labor')}
+            onChange={(e) => step.patchWork(w.uid, { labor: Number(e.target.value) || 0 })}
+          />
+        ) : (
+          <span className={styles.locked} title={t('works.adminOnly')}>{shekel(w.labor)}</span>
+        ),
     },
     {
       key: 'parts',
@@ -161,7 +177,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
         <EmptyState
           title="works.emptyTitle"
           body="works.emptyBody"
-          icon={<IconToolbox />}
+          icon={<IconToolbox size={44} />}
           large
           actions={
             <Button variant="primary" onClick={() => void step.addWork()}>
@@ -227,6 +243,23 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               {current && <span className={styles.ofWork}>{current.name}</span>}
             </span>
           </div>
+
+          {/* What was actually done, against the work it was done on. Above the
+              parts rather than inside the table: it is a sentence, not a cell,
+              and it has to stay reachable when the work has no parts at all.
+              Open to everyone — it records labour, it does not price it. */}
+          {current && (
+            <label className={styles.notes}>
+              <span className={styles.notesLabel}>{t('works.notes')}</span>
+              <textarea
+                className={styles.notesInput}
+                rows={2}
+                value={current.notes ?? ''}
+                placeholder={t('works.notesPlaceholder')}
+                onChange={(e) => step.patchWork(current.uid, { notes: e.target.value })}
+              />
+            </label>
+          )}
 
           {!current || current.items.length === 0 ? (
             <EmptyState

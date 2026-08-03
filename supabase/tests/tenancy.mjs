@@ -53,7 +53,7 @@ const admin = (path, init = {}) =>
   });
 
 /** Create a garage, a user, and the membership joining them. */
-const makeTenant = async (garageName, email) => {
+const makeTenant = async (garageName, email, role = 'admin') => {
   const password = `Test-${Math.abs(hash(email))}-pw`;
 
   const gRes = await admin('/rest/v1/garages', {
@@ -73,7 +73,7 @@ const makeTenant = async (garageName, email) => {
 
   await admin('/rest/v1/garage_members', {
     method: 'POST',
-    body: JSON.stringify({ garage_id: garage.id, user_id: user.id }),
+    body: JSON.stringify({ garage_id: garage.id, user_id: user.id, role }),
   });
 
   const sRes = await fetch(`${API}/auth/v1/token?grant_type=password`, {
@@ -84,7 +84,7 @@ const makeTenant = async (garageName, email) => {
   const session = await sRes.json();
   if (!session.access_token) throw new Error(`could not sign in: ${JSON.stringify(session)}`);
 
-  return { garage, user, token: session.access_token };
+  return { garage, user, role, token: session.access_token };
 };
 
 // Deterministic per-email password; avoids a random that differs between the
@@ -630,6 +630,120 @@ check(
   'and it is not stolen from the customer who holds it',
   Array.isArray(idaOwners) && idaOwners.length === 1,
   `got ${JSON.stringify(idaOwners)}`,
+);
+
+/* ============================================================
+ *  Roles — who may change what a customer is charged.
+ *
+ *  A member does the job: adds works, removes them, edits their parts, writes
+ *  down what was done. Only an admin renames or reprices a work already on the
+ *  ticket. The check cannot live in a policy, because save_ticket_works wipes
+ *  and re-inserts every row — an edit and an insert are the same INSERT — so it
+ *  compares against a snapshot taken before the delete, and that is what these
+ *  exercise.
+ * ============================================================ */
+
+// A second user inside garage A, this one a plain member.
+const memberEmail = `iso-m-${stamp}@garage.test`;
+const memberPassword = `Test-${Math.abs(hash(memberEmail))}-pw`;
+const memberUser = await (await admin('/auth/v1/admin/users', {
+  method: 'POST',
+  body: JSON.stringify({ email: memberEmail, password: memberPassword, email_confirm: true }),
+})).json();
+await admin('/rest/v1/garage_members', {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, user_id: memberUser.id, role: 'member' }),
+});
+const memberToken = (await (await fetch(`${API}/auth/v1/token?grant_type=password`, {
+  method: 'POST',
+  headers: { apikey: ANON, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: memberEmail, password: memberPassword }),
+})).json()).access_token;
+
+check('a member can sign in to the same garage', Boolean(memberToken), memberToken ? 'ok' : 'no token');
+
+/* my_garages is how both apps learn the role, so it has to carry it. */
+const adminGarages = await (await rpc('my_garages', a.token, {})).json();
+const memberGarages = await (await rpc('my_garages', memberToken, {})).json();
+check(
+  'my_garages reports the role — admin',
+  Array.isArray(adminGarages) && adminGarages[0]?.role === 'admin',
+  JSON.stringify(adminGarages),
+);
+check(
+  'my_garages reports the role — member',
+  Array.isArray(memberGarages) && memberGarages[0]?.role === 'member',
+  JSON.stringify(memberGarages),
+);
+
+const priced = await (await rpc('create_ticket', a.token, {
+  t: { title: 'priced', customer_name: 'לקוח', phone: '0521234567', plate: '10-000-01' },
+  works: [{ uid: 'w1', code: 'BR1', name: 'החלפת רפידות', labor: 400, items: [] }],
+})).json();
+
+const saveWorks = (token, works) =>
+  rpc('save_ticket_works', token, { p_ticket_id: priced.id, works });
+
+const worksOf = async (token) =>
+  (await (await rest(`works?ticket_id=eq.${priced.id}&select=uid,name,labor,notes`, token)).json());
+
+// The two the rule is actually about.
+const memberReprice = await saveWorks(memberToken, [
+  { uid: 'w1', code: 'BR1', name: 'החלפת רפידות', labor: 900, items: [] },
+]);
+check('a member cannot change the price of a work already on a ticket', memberReprice.status >= 400,
+  `got ${memberReprice.status}`);
+
+const memberRename = await saveWorks(memberToken, [
+  { uid: 'w1', code: 'BR1', name: 'שם אחר לגמרי', labor: 400, items: [] },
+]);
+check('a member cannot change the name of a work already on a ticket', memberRename.status >= 400,
+  `got ${memberRename.status}`);
+
+check(
+  'and the rejected save left the work exactly as it was',
+  (await worksOf(a.token)).some((w) => w.uid === 'w1' && Number(w.labor) === 400),
+  JSON.stringify(await worksOf(a.token)),
+);
+
+// Everything a member must still be able to do.
+const memberAdds = await saveWorks(memberToken, [
+  { uid: 'w1', code: 'BR1', name: 'החלפת רפידות', labor: 400, notes: 'הוחלפו גם הדיסקים', items: [] },
+  { uid: 'w2', code: 'OIL', name: 'החלפת שמן', labor: 250, items: [] },
+]);
+check('a member can add a work and annotate one', memberAdds.status < 400, `got ${memberAdds.status}`);
+check(
+  'the note is stored against the work on the ticket',
+  (await worksOf(a.token)).some((w) => w.uid === 'w1' && w.notes === 'הוחלפו גם הדיסקים'),
+  JSON.stringify(await worksOf(a.token)),
+);
+
+const memberRemoves = await saveWorks(memberToken, [
+  { uid: 'w1', code: 'BR1', name: 'החלפת רפידות', labor: 400, notes: 'הוחלפו גם הדיסקים', items: [] },
+]);
+check('a member can remove a work', memberRemoves.status < 400, `got ${memberRemoves.status}`);
+
+// And the thing an admin is for.
+const adminReprice = await saveWorks(a.token, [
+  { uid: 'w1', code: 'BR1', name: 'החלפת רפידות', labor: 900, items: [] },
+]);
+check('an admin can reprice', adminReprice.status < 400, `got ${adminReprice.status}`);
+check(
+  'and the new price is what is stored',
+  (await worksOf(a.token)).some((w) => w.uid === 'w1' && Number(w.labor) === 900),
+  JSON.stringify(await worksOf(a.token)),
+);
+
+/* The role is not a client-side flag: a member cannot promote themselves. */
+const selfPromote = await rest(`garage_members?user_id=eq.${memberUser.id}`, memberToken, {
+  method: 'PATCH',
+  body: JSON.stringify({ role: 'admin' }),
+});
+const stillMember = (await (await rpc('my_garages', memberToken, {})).json())[0]?.role;
+check(
+  'a member cannot promote themselves to admin',
+  stillMember === 'member',
+  `patch got ${selfPromote.status}, role is now ${stillMember}`,
 );
 
 /* ============================================================

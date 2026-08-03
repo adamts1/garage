@@ -43,12 +43,25 @@ describe('resolveAuth', () => {
   });
 
   it('a session with a garage is signed in', async () => {
-    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך ראשי' }], error: null });
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך ראשי', role: 'admin' }], error: null });
 
     const auth = await resolveAuth(session);
     expect(auth.status).toBe('in');
-    expect(auth.garages).toEqual([{ id: 'g1', name: 'מוסך ראשי' }]);
+    expect(auth.garages).toEqual([{ id: 'g1', name: 'מוסך ראשי', role: 'admin' }]);
     expect(auth.error).toBeNull();
+  });
+
+  /* The role decides whether the app offers an editable price. It is not the
+     boundary — save_ticket_works re-checks in the database — but a client that
+     resolved an unknown value to the HIGHER privilege would open a field the
+     server is about to refuse, which reads to the user as the app losing their
+     work. Anything not exactly 'admin' is a member. */
+  it('reads any unrecognised role as the lesser privilege', async () => {
+    for (const role of ['owner', 'ADMIN', '', null, undefined]) {
+      stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך ראשי', role }], error: null });
+      const auth = await resolveAuth(session);
+      expect(auth.garages[0].role).toBe('member');
+    }
   });
 
   it('a session with NO garage is its own state, not signed in', async () => {
@@ -80,8 +93,8 @@ describe('resolveAuth', () => {
     // a schema change.
     stubClient({
       data: [
-        { garage_id: 'g1', garage_name: 'מוסך א' },
-        { garage_id: 'g2', garage_name: 'מוסך ב' },
+        { garage_id: 'g1', garage_name: 'מוסך א', role: 'admin' },
+        { garage_id: 'g2', garage_name: 'מוסך ב', role: 'member' },
       ],
       error: null,
     });
@@ -112,15 +125,15 @@ describe('the current garage name', () => {
   });
 
   it('is the garage of the signed-in session', async () => {
-    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל', role: 'admin' }], error: null });
 
     await resolveAuth(session);
-    expect(getCurrentGarage()).toEqual({ id: 'g1', name: 'מוסך הרצל' });
+    expect(getCurrentGarage()).toEqual({ id: 'g1', name: 'מוסך הרצל', role: 'admin' });
     expect(garageName()).toBe('מוסך הרצל');
   });
 
   it('is cleared on sign-out, so the next user never sees the previous garage', async () => {
-    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל', role: 'admin' }], error: null });
     await resolveAuth(session);
 
     await resolveAuth(null);
@@ -128,7 +141,7 @@ describe('the current garage name', () => {
   });
 
   it('is cleared when membership cannot be read', async () => {
-    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל' }], error: null });
+    stubClient({ data: [{ garage_id: 'g1', garage_name: 'מוסך הרצל', role: 'admin' }], error: null });
     await resolveAuth(session);
 
     stubClient({ data: null, error: { message: 'network unreachable' } });
@@ -147,8 +160,8 @@ describe('the current garage name', () => {
   it('takes the first membership when a user belongs to more than one', async () => {
     stubClient({
       data: [
-        { garage_id: 'g1', garage_name: 'מוסך א' },
-        { garage_id: 'g2', garage_name: 'מוסך ב' },
+        { garage_id: 'g1', garage_name: 'מוסך א', role: 'admin' },
+        { garage_id: 'g2', garage_name: 'מוסך ב', role: 'member' },
       ],
       error: null,
     });

@@ -141,7 +141,9 @@ export const IconCheck = () => (
   </svg>
 );
 
-export const IconToolbox = ({ size = 44 }: { size?: number }) => (
+/* Defaults to the inline 19 like the rest, so it sits correctly beside a label
+   in the sidebar. The empty state asks for the large one explicitly. */
+export const IconToolbox = ({ size = base.width }: { size?: number }) => (
   <svg {...base} width={size} height={size} strokeWidth={1.3}>
     <rect x="3" y="8" width="18" height="11" rx="2" />
     <path d="M3 12h18" />

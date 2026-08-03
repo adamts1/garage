@@ -150,7 +150,7 @@ There is no signup. Accounts are created by an operator, together with the
 membership that joins them to a garage:
 
 ```bash
-npm run onboard -- --garage "מוסך הרצל" --email avi@example.com
+npm run onboard -- --garage "מוסך הרצל" --email avi@example.com --admin
 ```
 
 It prints a generated password once and stores it nowhere. Pass `--garage-id` to
@@ -167,6 +167,35 @@ read customer PII. An existing email is left with its password untouched, so
 > (change it in the `garages` table). Until 2026-07-30 all of those read a
 > constant, so every garage on the system introduced itself as the first one we
 > onboarded.
+
+### 5.0 Admin or member
+
+Two roles, and one distinction: **only an admin may change the name or the price
+of a work already on a ticket** — the numbers a customer is charged. A member
+does everything else, including adding a work, removing one, editing its parts,
+and writing the note that records what was actually done.
+
+`--admin` is how it is set, and this script is the only place it is ever set.
+There is deliberately **no in-app role editor**: a garage with one admin who
+demoted themselves would need the service_role key to get their price list back.
+
+Default is `member`, so the flag has to be passed for the person who owns the
+garage. The reverse default would mean every mechanic added later silently got
+the keys to the price list.
+
+```bash
+npm run onboard -- --garage-id <uuid> --email mechanic@example.com   # a member
+```
+
+The UI reads the role to decide whether to render an editable price, but that is
+not the boundary — `save_ticket_works` re-checks it in the database, against the
+values as they were **before** the save. It has to be checked there rather than
+in a policy, because the function replaces a ticket's works wholesale: at the
+row level an edit and an addition are the same INSERT, so the previous value has
+to be in scope for the rule to be expressible at all.
+
+Everyone who existed when the roles landed became an admin. Silently demoting the
+person who onboarded the garage would have locked them out of their own prices.
 
 ### A new garage starts empty
 

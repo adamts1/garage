@@ -35,6 +35,12 @@ export interface TicketWork {
   labor: number;
   items: PartRow[];
   custom?: boolean;       // true when it isn't in the catalog
+  /** What was actually done, in the mechanic's words.
+   *
+   *  Belongs to this ticket's copy of the work, exactly like `name` and
+   *  `labor` — writing one never touches the WorkDef it came from. Any member
+   *  may write it: it records labour, it does not price it. */
+  notes?: string;
 }
 
 export const VAT = 0.18;

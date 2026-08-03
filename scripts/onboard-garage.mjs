@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /* Create a garage and its first user, in one step.
  *
- *   node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com
+ *   node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com --admin
+ *
+ * Pass --admin for the person who owns the garage: only an admin may change the
+ * name or the price of a work already on a ticket. Everyone else is a member,
+ * which is every other thing the app can do. This script is the only place a
+ * role is set — there is deliberately no in-app editor, so the sole admin of a
+ * garage cannot demote themselves out of their own price list.
  *
  * This is the only way accounts come into existence. There is no self-signup,
  * no invite code and no join RPC — which is what makes the "signed in but
@@ -222,11 +228,20 @@ if (createErr) {
 /* ---------- 3. the membership ---------- */
 // The step that matters. A user without this row can sign in and then see
 // nothing — the state AuthGate exists to catch.
+//
+// The role rides along, because this is the only place it is ever set: there is
+// no in-app role editor, which is what makes it impossible for the one admin a
+// garage has to demote themselves and lock the prices away from everybody.
+//
+// `member` by default. The first person onboarded into a garage is its owner
+// and needs --admin; leaving the default at admin would mean every mechanic
+// added later silently got the keys to the price list.
+const role = args.has('admin') ? 'admin' : 'member';
 const { error: memberErr } = await db
   .from('garage_members')
-  .upsert({ garage_id: garageId, user_id: userId }, { onConflict: 'garage_id,user_id' });
+  .upsert({ garage_id: garageId, user_id: userId, role }, { onConflict: 'garage_id,user_id' });
 if (memberErr) die(`User and garage exist but could not be linked: ${memberErr.message}`);
-console.log(`\x1b[32m✓\x1b[0m membership linked\n`);
+console.log(`\x1b[32m✓\x1b[0m membership linked  role ${role}\n`);
 
 /* ---------- 4. a starter catalog, only when asked ----------
 
