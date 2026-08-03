@@ -62,6 +62,14 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
             <span className={styles.locked} title={t('works.adminOnly')}>{w.name}</span>
           )}
           {w.custom && <span className={styles.badge}>{t('picker.work.new')}</span>}
+          {/* The note lives in the pane beside this table, which means it is
+              invisible from here — and a note nobody can tell is there is a
+              note nobody reads. This marks the rows that have one. */}
+          {w.notes?.trim() && (
+            <span className={styles.hasNote} title={w.notes} aria-label={t('works.notes')}>
+              ✎
+            </span>
+          )}
         </div>
       ),
     },
@@ -220,7 +228,9 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                 rows={works}
                 rowKey={(w) => w.uid}
                 onRowClick={(w) => step.setSelectedUid(w.uid)}
-                isRowSelected={(w) => w.uid === step.selectedUid}
+                /* current, not selectedUid: the highlight has to follow the
+                   fallback, or the pane shows a work no row claims. */
+                isRowSelected={(w) => w.uid === current?.uid}
                 /* Labour plus that work's parts, so this foots to the pre-VAT
                    subtotal — not to the summary's labour-only figure. */
                 footer={
