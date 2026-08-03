@@ -175,16 +175,24 @@ of a work already on a ticket** — the numbers a customer is charged. A member
 does everything else, including adding a work, removing one, editing its parts,
 and writing the note that records what was actually done.
 
-`--admin` is how it is set, and this script is the only place it is ever set.
-There is deliberately **no in-app role editor**: a garage with one admin who
-demoted themselves would need the service_role key to get their price list back.
+This script is the only place a role is ever set. There is deliberately **no
+in-app role editor**: a garage with one admin who demoted themselves would need
+the service_role key to get their price list back.
 
-Default is `member`, so the flag has to be passed for the person who owns the
-garage. The reverse default would mean every mechanic added later silently got
-the keys to the price list.
+**`--admin` or `--member` is required, and there is no default.** The membership
+row is written with an upsert, so re-running this for somebody who already
+exists rewrites their role — a default would mean an omitted flag quietly
+demoting a garage's only admin. Passing both is refused too.
 
 ```bash
-npm run onboard -- --garage-id <uuid> --email mechanic@example.com   # a member
+npm run onboard -- --garage-id <uuid> --email mechanic@example.com --member
+```
+
+Re-running is also how a role is changed, since there is nowhere else to change
+it. The password is left alone for an account that already exists:
+
+```bash
+npm run onboard -- --garage-id <uuid> --email avi@example.com --admin   # promote
 ```
 
 The UI reads the role to decide whether to render an editable price, but that is
@@ -209,7 +217,7 @@ Pass `--catalog` to seed the standard catalog anyway, which is what demos and
 smoke tests want:
 
 ```bash
-npm run onboard -- --catalog --garage "מוסך הדגמה" --email demo@example.com
+npm run onboard -- --catalog --garage "מוסך הדגמה" --email demo@example.com --admin
 ```
 
 Workers are never seeded, because there is no plausible guess: the garage enters
@@ -259,7 +267,7 @@ To target production, use `onboard:prod`, which reads `.env.production.local`
 instead of `.env.local`:
 
 ```bash
-npm run onboard:prod -- --garage "..." --email ...
+npm run onboard:prod -- --garage "..." --email ... --admin
 ```
 
 Copy `.env.production.local.example` to `.env.production.local` once and fill in
