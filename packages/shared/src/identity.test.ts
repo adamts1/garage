@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  customerByPhone, isUsablePhone, phoneConflict, phoneDigits, ticketCustomerKey,
+  CUSTOMER_MATCH_LIMIT, customerByPhone, isUsablePhone, matchCustomers, phoneConflict,
+  phoneDigits, ticketCustomerKey,
   type CustomerIdentity,
 } from './identity';
 import type { Ticket } from './types';
@@ -94,6 +95,44 @@ describe('phoneConflict', () => {
 
   it('holds its tongue until the number is long enough to judge', () => {
     expect(phoneConflict(customers, { phone: '052', name: 'משה כהן' })).toBeNull();
+  });
+});
+
+/* One filter, used by both intake forms. It was two copies, which is how the
+   web and the phone come to disagree about who a search finds. */
+describe('matchCustomers', () => {
+  const customers = [
+    cust({ id: 'a', name: 'רונית לוי', phone: '052-111-2233' }),
+    cust({ id: 'b', name: 'משה כהן', phone: '0549998877' }),
+    cust({ id: 'c', name: 'רונית ברק', phone: null }),
+  ];
+
+  it('offers nothing for an empty query rather than the whole book', () => {
+    expect(matchCustomers(customers, '')).toEqual([]);
+    expect(matchCustomers(customers, '   ')).toEqual([]);
+  });
+
+  it('matches a partial name', () => {
+    expect(matchCustomers(customers, 'רונית').map((c) => c.id)).toEqual(['a', 'c']);
+  });
+
+  it('matches a phone on its digits, however it was typed on either side', () => {
+    expect(matchCustomers(customers, '1112233').map((c) => c.id)).toEqual(['a']);
+    expect(matchCustomers(customers, '052-111').map((c) => c.id)).toEqual(['a']);
+  });
+
+  it('will not search on a two-digit fragment — that is everybody', () => {
+    expect(matchCustomers(customers, '05')).toEqual([]);
+  });
+
+  it('survives a customer with no phone on file', () => {
+    expect(() => matchCustomers(customers, '999')).not.toThrow();
+    expect(matchCustomers(customers, '999').map((c) => c.id)).toEqual(['b']);
+  });
+
+  it('caps the list, so the box stays a shortcut', () => {
+    const many = Array.from({ length: 30 }, (_, i) => cust({ id: `x${i}`, name: `לקוח ${i}` }));
+    expect(matchCustomers(many, 'לקוח')).toHaveLength(CUSTOMER_MATCH_LIMIT);
   });
 });
 
