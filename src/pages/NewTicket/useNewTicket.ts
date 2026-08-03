@@ -64,16 +64,31 @@ const IDENTITY_FIELDS = new Set<keyof TicketForm>(['customerName', 'customerPhon
 export const toDueDate = (iso: string) => (iso ? iso.split('-').reverse().join('/') : '-');
 
 /** The fields a ticket may not be saved without, in the order they appear on
- *  the form. The phone is what identifies the customer on the next visit — see
- *  create_ticket's resolution — so a ticket saved without one opens a brand new
- *  customer record every time. The plate is the same story for the car. Both
- *  are required here rather than left to the server, which still accepts a bare
- *  ticket for the tests and the older callers. */
-export function missingRequired(form: TicketForm): Array<'customerName' | 'customerPhone' | 'licensePlate'> {
-  const missing: Array<'customerName' | 'customerPhone' | 'licensePlate'> = [];
+ *  the form.
+ *
+ *  Each earns its place. The phone is what identifies the customer on the next
+ *  visit — see create_ticket's resolution — so a ticket without one opens a
+ *  brand new customer record every time. The plate is the same story for the
+ *  car. The maker and the kilometres are what a service history is worth
+ *  anything without: a row of plates with no model and no reading cannot say
+ *  when a car was last serviced or at what mileage. And the key is the one
+ *  physical thing the garage takes custody of.
+ *
+ *  Required here rather than at the server, which still accepts a bare ticket
+ *  for the tests and the older callers. */
+export type RequiredField =
+  | 'customerName' | 'customerPhone' | 'licensePlate' | 'manufacturer' | 'km' | 'keyReceived';
+
+export function missingRequired(form: TicketForm): RequiredField[] {
+  const missing: RequiredField[] = [];
   if (!form.customerName.trim()) missing.push('customerName');
   if (!isUsablePhone(form.customerPhone)) missing.push('customerPhone');
   if (!form.licensePlate.trim()) missing.push('licensePlate');
+  if (!form.manufacturer.trim()) missing.push('manufacturer');
+  // The field strips to digits as it is typed, so anything left is a reading.
+  if (!form.km.trim()) missing.push('km');
+  // Not "answered" — ticked. The car does not come in without its key.
+  if (!form.keyReceived) missing.push('keyReceived');
   return missing;
 }
 
@@ -167,9 +182,27 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
   /* Was: a name, a plate, or one work — any one of the three. That let a ticket
      through with a customer name and nothing else, and since the customer is
      resolved by ת״ז then phone, every such ticket minted another copy of the
-     same person. Name, phone and plate are now all required. */
+     same person. See missingRequired for what each of them is for. */
   const missing = useMemo(() => missingRequired(form), [form]);
   const canSave = missing.length === 0;
+
+  /* Which fields have earned the right to be shown as wrong.
+     A form that turns red before it has been filled in is telling somebody off
+     for not having typed yet. A field goes red once they have left it, and
+     everything goes red once they have tried to save. */
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [attempted, setAttempted] = useState(false);
+
+  const touch = useCallback(
+    (field: string) => setTouched((prev) => new Set(prev).add(field)),
+    [],
+  );
+
+  const invalid = useCallback(
+    (field: RequiredField) =>
+      missing.includes(field) && (attempted || touched.has(field)),
+    [attempted, missing, touched],
+  );
 
   /* The phone is the customer's identity, so a number already on file means the
      ticket is about to be attached to somebody — and if the name does not match,
@@ -193,8 +226,14 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     if (conflict) pickCustomer(conflict.customer);
   }, [conflict, pickCustomer]);
 
-  const submit = useCallback(() => {
-    if (!canSave) return;
+  /* Returns whether it saved, so the page can move focus to the first field it
+     objected to rather than leaving somebody to hunt for the red one. */
+  const submit = useCallback((): boolean => {
+    /* The button is deliberately NOT disabled: a disabled button explains
+       nothing, and pressing it is how most people ask what is wrong. So the
+       press is what turns the objections on. */
+    setAttempted(true);
+    if (!canSave) return false;
 
     const maxKey = tickets.reduce((max, t) => Math.max(max, Number(t.k.split('-')[1]) || 0), 0);
     const maxJob = tickets.reduce((max, t) => Math.max(max, Number(t.job.split('-')[1]) || 0), 0);
@@ -241,12 +280,13 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
 
     setTickets((prev) => [ticket, ...prev]);
     onDone();
+    return true;
   }, [canSave, form, onDone, setTickets, tickets, totals.total, works]);
 
   return {
     form, set, works, setWorks,
     matches, showMatches, setShowMatches,
     vehicleChoices, pickCustomer, pickVehicle,
-    totals, canSave, missing, conflict, adoptConflict, submit,
+    totals, canSave, missing, invalid, touch, conflict, adoptConflict, submit,
   };
 }

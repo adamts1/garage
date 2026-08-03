@@ -232,6 +232,9 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
     !form.customerName.trim() && 'שם',
     !isUsablePhone(form.customerPhone) && 'טלפון',
     !form.licensePlate.trim() && 'מספר רישוי',
+    !form.manufacturer.trim() && 'יצרן',
+    !form.km.trim() && 'קילומטר',
+    !form.keyReceived && 'מפתח',
   ].filter(Boolean) as string[];
   const canSave = missing.length === 0;
 
@@ -458,7 +461,7 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
               form's <datalist> makes. The models follow the make above, and a
               make the catalog does not carry simply offers none. */}
           <ComboField
-            label="יצרן"
+            label="יצרן *"
             value={form.manufacturer}
             options={VEHICLE_MAKES}
             onChange={(v) => set('manufacturer', v)}
@@ -476,7 +479,7 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
             <Field label="שנה" flex>
               <TextInput style={s.input} keyboardType="numeric" value={form.year} onChangeText={(v) => set('year', v)} />
             </Field>
-            <Field label="קילומטר" flex>
+            <Field label="קילומטר *" flex>
               <TextInput style={s.input} keyboardType="numeric" value={form.km} onChangeText={(v) => set('km', v.replace(/\D/g, ''))} />
             </Field>
             <Field label="קוד רכב" flex>
@@ -492,7 +495,7 @@ export default function TicketCreate({ onClose, onCreated, embedded = false }: {
             }}>
               {form.keyReceived ? <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text> : null}
             </View>
-            <Text style={s.body}>מפתח התקבל</Text>
+            <Text style={s.body}>מפתח התקבל *</Text>
           </Pressable>
         </View>
 

@@ -143,26 +143,23 @@
   align-items: stretch;
   flex: 1;
   min-height: 0;
-
-  /* Centred, because the columns are a fixed 268px and no longer fill the
-     width — six of them did, four do not. Left alone they pack to the start,
-     which in RTL is the right edge, and the board sits against one side of a
-     mostly empty panel. Most visible with the sidebar collapsed, where the
-     panel is at its widest.
-
-     `safe` is the whole point of writing it this way: plain `center` with
-     `overflow-x: auto` puts the overflow on BOTH sides once the columns are
-     wider than the panel, and the first column becomes unreachable — you
-     cannot scroll back past the start of a centred flex line. `safe center`
-     falls back to `start` exactly when that would happen. The unprefixed
-     declaration above it is the fallback for anything that does not know the
-     keyword, which then ignores the second line. */
-  justify-content: center;
-  justify-content: safe center;
 }
 
 .col {
-  flex: 0 0 268px;
+  /* Share the width rather than sit in the middle of it.
+
+     These were a fixed 268px. Six columns filled a panel; four left a third of
+     it empty, and the leftover fell to one side — so the board was briefly
+     centred instead, which only moved the emptiness to both sides. Growing is
+     what actually wanted doing: four wider columns fit more of a card's title
+     and plate without scrolling, and the panel has no dead space at either
+     edge whether the sidebar is open or collapsed.
+
+     The basis stays 268px, so a narrow window still lays them out at the width
+     they were designed for and scrolls — `min-width` is what stops flex from
+     squeezing four columns into a phone and making all four useless. */
+  flex: 1 1 268px;
+  min-width: 268px;
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
   border-radius: 14px;

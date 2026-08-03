@@ -734,6 +734,47 @@ check(
   JSON.stringify(await worksOf(a.token)),
 );
 
+/* The staff list is an admin's too. A worker's code is what every ticket stores
+ * in `assignee`, so deleting one is not a cosmetic act — but reading has to stay
+ * open to everybody, because the board draws a mechanic's chip on every card. */
+const workerRead = await rest('garage_workers?select=id', memberToken);
+check('a member can read the staff list', workerRead.status < 400, `got ${workerRead.status}`);
+
+const memberAddsWorker = await rest('garage_workers', memberToken, {
+  method: 'POST',
+  body: JSON.stringify({ code: 'zz', name: 'לא אמור להיווצר', initials: 'לא', color: '#000000' }),
+});
+check('a member cannot add a worker', memberAddsWorker.status >= 400, `got ${memberAddsWorker.status}`);
+
+const adminAddsWorker = await rest('garage_workers', a.token, {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ code: 'mx', name: 'מכונאי', initials: 'מכ', color: '#1d2d44' }),
+});
+check('an admin can add a worker', adminAddsWorker.status < 400, `got ${adminAddsWorker.status}`);
+const workerId = (await adminAddsWorker.json())[0]?.id;
+
+const memberEditsWorker = await rest(`garage_workers?id=eq.${workerId}`, memberToken, {
+  method: 'PATCH',
+  body: JSON.stringify({ name: 'שם אחר' }),
+});
+const afterEdit = await (await rest(`garage_workers?id=eq.${workerId}&select=name`, a.token)).json();
+check(
+  'a member cannot rename a worker',
+  afterEdit[0]?.name === 'מכונאי',
+  `patch got ${memberEditsWorker.status}, name is ${afterEdit[0]?.name}`,
+);
+
+const memberDeletesWorker = await rest(`garage_workers?id=eq.${workerId}`, memberToken, {
+  method: 'DELETE',
+});
+const afterDelete = await (await rest(`garage_workers?id=eq.${workerId}&select=id`, a.token)).json();
+check(
+  'a member cannot delete a worker out from under the tickets that name it',
+  Array.isArray(afterDelete) && afterDelete.length === 1,
+  `delete got ${memberDeletesWorker.status}, ${afterDelete.length} rows left`,
+);
+
 /* The role is not a client-side flag: a member cannot promote themselves. */
 const selfPromote = await rest(`garage_members?user_id=eq.${memberUser.id}`, memberToken, {
   method: 'PATCH',
