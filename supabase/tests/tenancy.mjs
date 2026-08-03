@@ -775,6 +775,145 @@ check(
   `delete got ${memberDeletesWorker.status}, ${afterDelete.length} rows left`,
 );
 
+/* ---------- staff are users ----------
+ *
+ * garage_staff() joins three places a client cannot reach on its own: the
+ * membership role, and the account's email. It is SECURITY DEFINER, so what
+ * keeps it honest is that it takes no arguments — the garage comes from
+ * current_garage_id() — and returns nothing to a non-admin.
+ *
+ * The manage-staff function itself is only exercised when the local edge
+ * runtime is up (`supabase functions serve`). CI does not start it, so those
+ * checks are skipped there rather than failing; what CANNOT be skipped is the
+ * database half below, which is where the isolation actually lives. */
+
+const staffAsAdmin = await (await rpc('garage_staff', a.token, {})).json();
+check(
+  'garage_staff returns the garage to an admin, with the email and the role',
+  Array.isArray(staffAsAdmin) && staffAsAdmin.every((s) => 'email' in s && 'role' in s),
+  JSON.stringify(staffAsAdmin).slice(0, 160),
+);
+
+const staffAsMember = await (await rpc('garage_staff', memberToken, {})).json();
+check(
+  'garage_staff tells a member nothing — not even their own row',
+  Array.isArray(staffAsMember) && staffAsMember.length === 0,
+  JSON.stringify(staffAsMember),
+);
+
+/* Everyone who can sign in has a row on the staff screen. Without the backfill
+ * the screen is empty for exactly the people the onboarding script created,
+ * which is every garage. */
+const backfilled = staffAsAdmin.find((s) => s.user_id === a.user.id);
+check(
+  'the migration gave every existing member a worker row',
+  Boolean(backfilled?.email),
+  JSON.stringify(backfilled),
+);
+
+/* Retiring somebody removes the garage, not the account: current_garage_id()
+ * requires an active row, so they sign in and land on the no-garage screen.
+ * This is the one behaviour that makes "no longer works here" mean something. */
+const memberWorker = (await (await admin(
+  `/rest/v1/garage_workers?garage_id=eq.${a.garage.id}&user_id=eq.${memberUser.id}&select=id`,
+)).json())[0];
+await admin(`/rest/v1/garage_workers?id=eq.${memberWorker.id}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ active: false }),
+});
+
+const retiredGarages = await (await rpc('my_garages', memberToken, {})).json();
+check(
+  'a retired person resolves to no garage at all',
+  Array.isArray(retiredGarages) && retiredGarages.length === 0,
+  JSON.stringify(retiredGarages),
+);
+const retiredTickets = await (await rest('tickets?select=key', memberToken)).json();
+check(
+  'and therefore sees none of the garage\'s data',
+  Array.isArray(retiredTickets) && retiredTickets.length === 0,
+  `got ${Array.isArray(retiredTickets) ? retiredTickets.length : JSON.stringify(retiredTickets)} tickets`,
+);
+
+// Put them back, or every check after this one is testing a retired user.
+await admin(`/rest/v1/garage_workers?id=eq.${memberWorker.id}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ active: true }),
+});
+const restored = await (await rpc('my_garages', memberToken, {})).json();
+check('reactivating gives the garage back', restored.length === 1, JSON.stringify(restored));
+
+/* ---------- manage-staff, when it is being served ---------- */
+const fn = (token, body) =>
+  fetch(`${API}/functions/v1/manage-staff`, {
+    method: 'POST',
+    headers: { apikey: ANON, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+const fnUp = await fn(a.token, { action: 'ping' }).then((r) => r.status !== 503).catch(() => false);
+if (!fnUp) {
+  console.log('  \x1b[33mskip\x1b[0m  manage-staff checks — no edge runtime (run: supabase functions serve)');
+} else {
+  const memberCreates = await fn(memberToken, {
+    action: 'create', email: `nope-${stamp}@garage.test`, password: 'password123', name: 'לא', role: 'member',
+  });
+  check('a member cannot create a person', memberCreates.status === 403, `got ${memberCreates.status}`);
+
+  const newEmail = `hired-${stamp}@garage.test`;
+  const hired = await fn(a.token, {
+    action: 'create', email: newEmail, password: 'password123', name: 'עובד חדש', role: 'member',
+    initials: 'עח', color: '#4f7a5b',
+  });
+  check('an admin can create a person', hired.status < 400, `got ${hired.status} ${await hired.clone().text()}`);
+
+  const hiredBody = await hired.json().catch(() => ({}));
+  const hiredUser = (await (await admin('/auth/v1/admin/users')).json()).users
+    ?.find((u) => u.email === newEmail);
+  const hiredMember = (await (await admin(
+    `/rest/v1/garage_members?garage_id=eq.${a.garage.id}&user_id=eq.${hiredUser?.id}&select=role`,
+  )).json())[0];
+  check(
+    'creating a person makes the account, the membership and the worker together',
+    Boolean(hiredUser) && hiredMember?.role === 'member' && Boolean(hiredBody.worker?.id),
+    `user ${Boolean(hiredUser)}, member ${hiredMember?.role}, worker ${hiredBody.worker?.id}`,
+  );
+
+  /* The garage comes from the caller. A garage_id in the body is a claim. */
+  const forged = await fn(a.token, {
+    action: 'create', email: `forge-${stamp}@garage.test`, password: 'password123',
+    name: 'מזויף', role: 'member', garage_id: b.garage.id,
+  });
+  const forgedUser = (await (await admin('/auth/v1/admin/users')).json()).users
+    ?.find((u) => u.email === `forge-${stamp}@garage.test`);
+  const inB = await (await admin(
+    `/rest/v1/garage_members?garage_id=eq.${b.garage.id}&user_id=eq.${forgedUser?.id}&select=user_id`,
+  )).json();
+  check(
+    'a forged garage_id in the body is ignored',
+    forged.status < 400 && Array.isArray(inB) && inB.length === 0,
+    `create got ${forged.status}, landed in B: ${JSON.stringify(inB)}`,
+  );
+
+  /* Nothing in the app can appoint an admin, so the last one may not step down. */
+  const lastAdmin = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
+  check('the last admin cannot step down', lastAdmin.status === 409, `got ${lastAdmin.status}`);
+
+  const promote = await fn(a.token, { action: 'set_role', user_id: memberUser.id, role: 'admin' });
+  check('an admin can promote somebody', promote.status < 400, `got ${promote.status}`);
+
+  const nowTwo = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
+  check('and can then step down, once there is a second', nowTwo.status < 400, `got ${nowTwo.status}`);
+
+  // Back to how the rest of the file expects to find them.
+  await admin(`/rest/v1/garage_members?garage_id=eq.${a.garage.id}&user_id=eq.${a.user.id}`, {
+    method: 'PATCH', body: JSON.stringify({ role: 'admin' }),
+  });
+  await admin(`/rest/v1/garage_members?garage_id=eq.${a.garage.id}&user_id=eq.${memberUser.id}`, {
+    method: 'PATCH', body: JSON.stringify({ role: 'member' }),
+  });
+}
+
 /* The role is not a client-side flag: a member cannot promote themselves. */
 const selfPromote = await rest(`garage_members?user_id=eq.${memberUser.id}`, memberToken, {
   method: 'PATCH',

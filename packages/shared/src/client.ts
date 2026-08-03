@@ -26,3 +26,19 @@ export const getClient = (): SupabaseClient => {
   }
   return client;
 };
+
+/* An Edge Function returns a non-2xx with a JSON `{error}` body on failure;
+   supabase-js surfaces that as a FunctionsHttpError whose real message is in
+   error.context. Dig it out so the UI shows "that email already has an account"
+   rather than a generic "Edge Function returned a non-2xx status code".
+
+   Lives here rather than beside one caller: every function this app invokes
+   fails the same way, and the second caller is how a private helper becomes a
+   copy of itself. */
+export const invokeError = async (error: any): Promise<Error> => {
+  try {
+    const body = await error?.context?.json?.();
+    if (body?.error) return new Error(body.error);
+  } catch { /* fall through to the generic message */ }
+  return new Error(error?.message ?? 'the request failed');
+};
