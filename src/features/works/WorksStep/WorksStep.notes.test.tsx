@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { TicketWork } from '@garage/shared';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WorksStep from './WorksStep';
 
@@ -63,5 +63,53 @@ describe('the per-work notes field', () => {
     isGarageAdmin.mockReturnValue(false);
     render(<WorksStep works={[work('w1')]} setWorks={vi.fn()} combinedEmpty />);
     expect(notesField()).not.toBeNull();
+  });
+});
+
+/* On the ticket page every setWorks persists immediately, and the save wipes
+   and re-inserts the ticket's whole works tree. Writing through on each
+   keystroke made a sentence into thirty of those. */
+describe('when the note is written back', () => {
+  it('does not save while you are still typing', () => {
+    const setWorks = vi.fn();
+    render(<WorksStep works={[work('w1')]} setWorks={setWorks} combinedEmpty />);
+
+    fireEvent.change(notesField()!, { target: { value: 'הוחלפו' } });
+    fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם' } });
+    fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם הדיסקים' } });
+
+    expect(setWorks).not.toHaveBeenCalled();
+  });
+
+  it('saves once, on leaving the field', () => {
+    const setWorks = vi.fn();
+    render(<WorksStep works={[work('w1')]} setWorks={setWorks} combinedEmpty />);
+
+    fireEvent.change(notesField()!, { target: { value: 'הוחלפו גם הדיסקים' } });
+    fireEvent.blur(notesField()!);
+
+    expect(setWorks).toHaveBeenCalledTimes(1);
+    expect(setWorks.mock.calls[0][0][0]).toMatchObject({ uid: 'w1', notes: 'הוחלפו גם הדיסקים' });
+  });
+
+  it('does not save at all when the text was not changed', () => {
+    const setWorks = vi.fn();
+    render(<WorksStep works={[work('w1', { notes: 'כבר כתוב' })]} setWorks={setWorks} combinedEmpty />);
+
+    notesField()!.focus();
+    fireEvent.blur(notesField()!);
+
+    expect(setWorks).not.toHaveBeenCalled();
+  });
+
+  it('shows the right note after switching to another work', () => {
+    const works = [work('w1', { notes: 'ראשונה' }), work('w2', { notes: 'שנייה' })];
+    const { rerender } = render(<WorksStep works={works} setWorks={vi.fn()} combinedEmpty />);
+    expect((notesField() as HTMLTextAreaElement).value).toBe('ראשונה');
+
+    // Selecting w2 is a click on its row; the pane follows `current`.
+    fireEvent.click(screen.getByText('עבודה w2'));
+    rerender(<WorksStep works={works} setWorks={vi.fn()} combinedEmpty />);
+    expect((notesField() as HTMLTextAreaElement).value).toBe('שנייה');
   });
 });

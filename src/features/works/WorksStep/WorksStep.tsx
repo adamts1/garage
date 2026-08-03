@@ -1,4 +1,5 @@
 import { isGarageAdmin, workTotal, type PartRow, type TicketWork } from '@garage/shared';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
@@ -11,6 +12,46 @@ import { useWorksStep } from './useWorksStep';
    ₪150.00 looks like a bug. */
 const shekel = (n: number) =>
   '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/* The note, typed locally and committed when you leave the field.
+ *
+ * Every other control here writes straight through `patchWork`, and on the
+ * ticket page that lands in `setTickets`, which persists on the spot — so a
+ * keystroke becomes a `save_ticket_works` call, and that call DELETES every
+ * work and work_item on the ticket and re-inserts them. One character, one
+ * wipe-and-rebuild of the whole tree, broadcast to every other screen.
+ *
+ * That is tolerable for a number typed into a narrow cell. It is not tolerable
+ * for a sentence: thirty characters is thirty transactions. So this one holds
+ * its own draft and commits once, on blur, and only when the text actually
+ * changed.
+ *
+ * Keyed by the work's uid at the call site, so selecting another work remounts
+ * it with that work's note instead of needing an effect to re-seed. The trade
+ * is that a note edited elsewhere while this field is open shows up when you
+ * switch works rather than immediately — which is the right way round: it
+ * cannot overwrite what somebody is in the middle of typing. */
+function NotesField({ initial, label, placeholder, onCommit }: {
+  initial: string;
+  label: string;
+  placeholder: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(initial);
+  return (
+    <label className={styles.notes}>
+      <span className={styles.notesLabel}>{label}</span>
+      <textarea
+        className={styles.notesInput}
+        rows={2}
+        value={draft}
+        placeholder={placeholder}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { if (draft !== initial) onCommit(draft); }}
+      />
+    </label>
+  );
+}
 
 export interface WorksStepProps {
   works: TicketWork[];
@@ -259,16 +300,13 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               and it has to stay reachable when the work has no parts at all.
               Open to everyone — it records labour, it does not price it. */}
           {current && (
-            <label className={styles.notes}>
-              <span className={styles.notesLabel}>{t('works.notes')}</span>
-              <textarea
-                className={styles.notesInput}
-                rows={2}
-                value={current.notes ?? ''}
-                placeholder={t('works.notesPlaceholder')}
-                onChange={(e) => step.patchWork(current.uid, { notes: e.target.value })}
-              />
-            </label>
+            <NotesField
+              key={current.uid}
+              initial={current.notes ?? ''}
+              label={t('works.notes')}
+              placeholder={t('works.notesPlaceholder')}
+              onCommit={(notes) => step.patchWork(current.uid, { notes })}
+            />
           )}
 
           {!current || current.items.length === 0 ? (
