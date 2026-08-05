@@ -19,7 +19,6 @@ vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
   return {
     ...actual,
-    garageName: () => 'מוסך הבדיקה',
     listTicketPhotos: vi.fn(async () => []),
     subscribeToTicketPhotos: vi.fn(() => () => {}),
     listWorkDefs: vi.fn(async () => []),

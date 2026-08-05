@@ -178,9 +178,15 @@ Deno.serve(async (req) => {
       if (!target) return json({ error: 'that person is not in your garage' }, 404);
 
       /* A garage with no admin cannot appoint one: nothing in the app can write
-         a role, so the only way back is the service_role key and a shell. Refuse
-         the step that gets there — including an admin demoting themselves, which
-         is the likeliest way it would happen. */
+         a role, so the only way back is the service_role key and a shell.
+
+         The self-rule above now reaches this case first, and by construction:
+         only an admin gets here, so a target who is also an admin means the
+         garage has two, and a target who is the caller was already refused.
+         This is therefore unreachable through this endpoint, and it stays —
+         it is the invariant, not the guard. Relaxing the rule above must not
+         quietly cost a garage its last admin, and a count that cannot fire is
+         cheaper than remembering that. */
       if (target.role === 'admin' && role === 'member') {
         const { count } = await admin
           .from('garage_members')

@@ -895,15 +895,30 @@ if (!fnUp) {
     `create got ${forged.status}, landed in B: ${JSON.stringify(inB)}`,
   );
 
-  /* Nothing in the app can appoint an admin, so the last one may not step down. */
-  const lastAdmin = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
-  check('the last admin cannot step down', lastAdmin.status === 409, `got ${lastAdmin.status}`);
+  /* Nobody changes their own role — not even out of a garage that has other
+     admins to spare. This used to be allowed once a second admin existed, and
+     the second admin is not the point: the staff screen is admin-only, so the
+     moment the write lands the person who made it has no screen left to undo it
+     with. It is somebody else's to do. */
+  const stepDown = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
+  check('the only admin cannot step down', stepDown.status === 403, `got ${stepDown.status}`);
 
   const promote = await fn(a.token, { action: 'set_role', user_id: memberUser.id, role: 'admin' });
   check('an admin can promote somebody', promote.status < 400, `got ${promote.status}`);
 
-  const nowTwo = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
-  check('and can then step down, once there is a second', nowTwo.status < 400, `got ${nowTwo.status}`);
+  const stillNo = await fn(a.token, { action: 'set_role', user_id: a.user.id, role: 'member' });
+  check('nor once there is a second admin', stillNo.status === 403, `got ${stillNo.status}`);
+
+  const stillAdmin = (await (await admin(
+    `/rest/v1/garage_members?garage_id=eq.${a.garage.id}&user_id=eq.${a.user.id}&select=role`,
+  )).json())[0]?.role;
+  check('and the refused demotion changed nothing', stillAdmin === 'admin', `role is ${stillAdmin}`);
+
+  /* The other direction still works: demoting is a thing admins do to each
+     other. This is the path the last-admin count guards, and it must not
+     misfire now that there are two. */
+  const demoteOther = await fn(a.token, { action: 'set_role', user_id: memberUser.id, role: 'member' });
+  check('an admin can demote another admin', demoteOther.status < 400, `got ${demoteOther.status}`);
 
   // Back to how the rest of the file expects to find them.
   await admin(`/rest/v1/garage_members?garage_id=eq.${a.garage.id}&user_id=eq.${a.user.id}`, {
