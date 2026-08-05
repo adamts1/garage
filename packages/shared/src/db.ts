@@ -40,6 +40,28 @@ export const updateCustomer = async (id: string, patch: Partial<Omit<Customer, '
   if (error) throw error;
 };
 
+/* Who in this garage already holds this ת״ז.
+
+   Asked of the database rather than of a list the screen loaded minutes ago.
+   The in-memory check is what makes the warning appear while somebody types;
+   this is what decides whether a save may go through — a customer added on
+   another counter's screen is not in the list, and `customers_garage_id_number_key`
+   would then reject the write with a constraint name instead of a person.
+
+   At most one row can come back: that index is unique per garage. RLS scopes
+   it, so there is no garage to pass and no other garage to reach. */
+export const customerHoldingIdNumber = async (
+  idNumber: string,
+  exceptId?: string | null,
+): Promise<Customer | null> => {
+  const wanted = idNumber.trim();
+  if (!wanted) return null;
+  const query = getClient().from('customers').select('*').eq('id_number', wanted);
+  const { data, error } = await (exceptId ? query.neq('id', exceptId) : query).maybeSingle();
+  if (error) throw error;
+  return (data as Customer) ?? null;
+};
+
 export const deleteCustomer = async (id: string) => {
   const { error } = await getClient().from('customers').delete().eq('id', id);
   if (error) throw error;
@@ -351,6 +373,11 @@ const rowToTicket = (r: any): Ticket => ({
   plate: r.plate ?? '',
   car: r.car ?? '',
   customer: r.customer_name ?? '',
+  /* The record create_ticket resolved this ticket to. Read back now, where it
+     used to be write-only: the ticket page edits the customer's ת״ז, and
+     "which customer" cannot be re-derived from a denormalised name. NULL on
+     tickets that predate resolution — the page falls back to the phone. */
+  customerId: r.customer_id ?? null,
   amount: Number(r.amount),
   done: r.done,
   subtasks: r.subtasks ?? [],
@@ -362,10 +389,18 @@ const rowToTicket = (r: any): Ticket => ({
   address: r.address ?? undefined,
   km: r.km ?? undefined,
   year: r.year ?? undefined,
+  /* The manufacturer's vehicle code, as typed at intake. A real column on
+     tickets since the baseline, written by create_ticket and — until now —
+     never read back, so the one field on the intake form actually labelled
+     "קוד" existed only in the moment it was typed. It is on the printed work
+     order, which is where a garage looks it up. */
+  vehicleCode: r.vehicle_code ?? undefined,
   notes: r.notes ?? undefined,
   createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : undefined,
   createdAtISO: r.created_at ?? undefined,
   paid: r.paid ?? undefined,
+  // Written by the tickets_stamp_paid_at trigger, never by ticketToRow.
+  paidAt: r.paid_at ?? null,
   payMethod: r.pay_method ?? undefined,
   doc: r.doc ?? undefined,
   reference: r.reference ?? undefined,

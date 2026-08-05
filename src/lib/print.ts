@@ -166,6 +166,7 @@ export const printTicket = (
           ${row('רכב', t.car)}
           ${row('שנה', t.year)}
           ${row('קילומטראז׳', t.km)}
+          ${row('קוד רכב', t.vehicleCode)}
         </table>
       </section>
     </div>

@@ -1,4 +1,4 @@
-import type { PartDef, PartRow, WorkDef } from '@garage/shared';
+import { toCatalogCode, type PartDef, type PartRow, type WorkDef } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -37,7 +37,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
 
   const startCreate = (typed: string) => {
     const looksLikeCode = /^[A-Za-z0-9\-_]+$/.test(typed);
-    setCode(looksLikeCode ? typed.toUpperCase() : '');
+    setCode(looksLikeCode ? toCatalogCode(typed) : '');
     setName(looksLikeCode ? '' : typed);
     setPrice('');
     setItems([]);
@@ -55,11 +55,16 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
   const patch = (sku: string, next: Partial<PartRow>) =>
     setItems((prev) => prev.map((i) => (i.sku === sku ? { ...i, ...next } : i)));
 
+  /* Uppercase Latin, always. The fallback used to be the first six characters
+     of the name, which for a Hebrew name produced a Hebrew code — so the code
+     is now asked for rather than invented, and the button below waits for it. */
+  const cleanCode = toCatalogCode(code);
+
   const submit = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !cleanCode) return;
     const def: WorkDef = {
       id: `custom-${Date.now()}`,
-      code: (code.trim() || name.trim().slice(0, 6)).toUpperCase(),
+      code: cleanCode,
       name: name.trim(),
       labor: Number(price) || 0,
       hours: 0,
@@ -160,14 +165,24 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
       actions={
         <>
           <Button onClick={() => setMode('search')}>→ {t('picker.backToSearch')}</Button>
-          <Button variant="primary" disabled={!name.trim()} onClick={submit}>
+          <Button variant="primary" disabled={!name.trim() || !cleanCode} onClick={submit}>
             {t('picker.work.submit')}
           </Button>
         </>
       }
     >
       <div className={styles.form}>
-        <TextField label="picker.work.code" value={code} onChange={(e) => setCode(e.target.value)} />
+        <TextField
+          label="picker.work.code"
+          required
+          hint="works.codeFormat"
+          value={code}
+          /* Normalised as it is typed, so what is on screen is what is stored —
+             lowercase becomes uppercase under the cursor and Hebrew simply does
+             not appear, which says the rule better than a message after the
+             fact would. */
+          onChange={(e) => setCode(toCatalogCode(e.target.value))}
+        />
         <TextField
           label="picker.work.name"
           required

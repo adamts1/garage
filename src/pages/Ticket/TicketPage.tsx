@@ -48,18 +48,22 @@ export default function TicketPage({
 }: TicketPageProps) {
   const { t } = useTranslation();
   const page = useTicketPage({ ticket, setTickets, onBack });
-  const { photos, invoice, busy, totals, works } = page;
+  const { photos, invoice, busy, totals, works, dirty } = page;
 
-  const [note, setNote] = useState('');
+  /* Everything on this screen reads the DRAFT, not the row. The row is what the
+     database holds; the draft is what the person is looking at, and until they
+     press save the two are allowed to differ. */
+  const draft = page.draft;
+
   const [step, setStep] = useState('tp-details');
   const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
 
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
-  const column = COLUMNS.find((c) => c.id === ticket.st);
-  const closed = isClosed(ticket);
-  const settled = isSettled(ticket);
-  const wa = waNumber(ticket.phone);
-  const chip = workerChip(workerChips, ticket.who);
+  const column = COLUMNS.find((c) => c.id === draft.st);
+  const closed = isClosed(draft);
+  const settled = isSettled(draft);
+  const wa = waNumber(draft.phone);
+  const chip = workerChip(workerChips, draft.who);
   const worker = chip.n;
 
   /* Who this ticket can be handed to: the active staff, plus — when the person
@@ -68,7 +72,7 @@ export default function TicketPage({
      again is not offered anywhere else, and losing them is not an option
      either: the ticket says what it says until somebody changes it. */
   const assignable = assignableWorkers(workers);
-  const assigneeGone = Boolean(ticket.who) && !assignable.some((w) => w.code === ticket.who);
+  const assigneeGone = Boolean(draft.who) && !assignable.some((w) => w.code === draft.who);
 
   return (
     <div className="tp">
@@ -95,7 +99,7 @@ export default function TicketPage({
                 <select
                   className="tp-assign-select"
                   aria-label={t('ticket.assignWorker')}
-                  value={ticket.who ?? ''}
+                  value={draft.who ?? ''}
                   onChange={(e) => page.assign(e.target.value || null)}
                 >
                   <option value="">{t('ticket.unassigned')}</option>
@@ -105,7 +109,7 @@ export default function TicketPage({
                   {/* Retired, and still on this ticket. Kept selectable so the
                       control can show the truth; not offered to any other. */}
                   {assigneeGone && (
-                    <option value={ticket.who ?? ''}>{t('ticket.workerRetired', { name: worker })}</option>
+                    <option value={draft.who ?? ''}>{t('ticket.workerRetired', { name: worker })}</option>
                   )}
                 </select>
               </span>
@@ -114,7 +118,8 @@ export default function TicketPage({
 
           <div className="foot-spacer" />
 
-          <button className="btn ghost" onClick={onBack}>
+          {/* Both ways out ask first when something is unsaved. */}
+          <button className="btn ghost" onClick={() => void page.leave()}>
             {t('ticket.backToList')} <span className="arrow">←</span>
           </button>
         </div>
@@ -142,32 +147,74 @@ export default function TicketPage({
               <h3 className="card-title"><IconCar /> {t('ticket.vehicle')}</h3>
               <dl className="kv">
                 <dt>{t('ticket.fields.plate')}</dt>
-                <dd>{ticket.plate ? <span className="plate">{ticket.plate}</span> : <Val>{null}</Val>}</dd>
-                <dt>{t('ticket.fields.model')}</dt><dd><Val>{ticket.car}</Val></dd>
-                <dt>{t('ticket.fields.year')}</dt><dd><Val>{ticket.year}</Val></dd>
+                <dd>{draft.plate ? <span className="plate">{draft.plate}</span> : <Val>{null}</Val>}</dd>
+                <dt>{t('ticket.fields.model')}</dt><dd><Val>{draft.car}</Val></dd>
+                <dt>{t('ticket.fields.year')}</dt><dd><Val>{draft.year}</Val></dd>
                 <dt>{t('ticket.fields.km')}</dt>
-                <dd><Val>{ticket.km ? t('ticket.kmValue', { km: ticket.km }) : null}</Val></dd>
+                <dd><Val>{draft.km ? t('ticket.kmValue', { km: draft.km }) : null}</Val></dd>
+                {/* Read back from the ticket at last, so what is printed can be
+                    checked against what is on screen. */}
+                <dt>{t('ticket.fields.vehicleCode')}</dt>
+                <dd><Val>{draft.vehicleCode}</Val></dd>
               </dl>
             </section>
 
             <section className="card">
               <h3 className="card-title"><IconCustomers /> {t('ticket.customer')}</h3>
               <dl className="kv">
-                <dt>{t('ticket.fields.name')}</dt><dd><b>{ticket.customer}</b></dd>
+                <dt>{t('ticket.fields.name')}</dt><dd><b>{draft.customer}</b></dd>
                 <dt>{t('ticket.fields.phone')}</dt>
                 <dd>
-                  {ticket.phone
-                    ? <a className="kv-link" href={`tel:${ticket.phone}`} dir="ltr">{ticket.phone}</a>
+                  {draft.phone
+                    ? <a className="kv-link" href={`tel:${draft.phone}`} dir="ltr">{draft.phone}</a>
                     : <Val>{null}</Val>}
                 </dd>
                 <dt>{t('ticket.fields.email')}</dt>
                 <dd>
-                  {ticket.email
-                    ? <a className="kv-link" href={`mailto:${ticket.email}`} dir="ltr">{ticket.email}</a>
+                  {draft.email
+                    ? <a className="kv-link" href={`mailto:${draft.email}`} dir="ltr">{draft.email}</a>
                     : <Val>{null}</Val>}
                 </dd>
-                <dt>{t('ticket.fields.address')}</dt><dd><Val>{ticket.address}</Val></dd>
+                <dt>{t('ticket.fields.address')}</dt><dd><Val>{draft.address}</Val></dd>
+
+                {/* The one editable thing about the customer on this screen.
+                    It is a column on `customers`, not on the ticket — a person
+                    has one ת״ז, not one per visit — so it is saved to the
+                    record this ticket belongs to. Blank is a real answer: most
+                    walk-ins never give it. */}
+                <dt>{t('ticket.fields.idNumber')}</dt>
+                <dd>
+                  <input
+                    className={`kv-input${page.idConflict ? ' invalid' : ''}`}
+                    inputMode="numeric"
+                    dir="ltr"
+                    aria-label={t('ticket.fields.idNumber')}
+                    placeholder={page.customer ? t('ticket.idPlaceholder') : ''}
+                    value={page.idNumber}
+                    disabled={!page.customer}
+                    title={page.customer ? undefined : t('ticket.noCustomerRecord')}
+                    onChange={(e) => page.setIdNumber(e.target.value)}
+                  />
+                </dd>
               </dl>
+
+              {/* Taken, and by whom — the same courtesy the intake form pays
+                  a phone number that is already on file. The database would
+                  refuse the save anyway; this says so before the typing is
+                  finished, and names the person instead of a constraint. */}
+              {page.idConflict && (
+                <div className="tp-warn" role="status">
+                  {t(
+                    page.idConflict.differentName
+                      ? 'ticket.idTakenByOther'
+                      : 'ticket.idTakenBySame',
+                    { name: page.idConflict.customer.name },
+                  )}
+                </div>
+              )}
+              {!page.customer && (
+                <div className="tp-note">{t('ticket.noCustomerRecord')}</div>
+              )}
             </section>
           </div>
 
@@ -236,12 +283,13 @@ export default function TicketPage({
 
             <section className="card">
               <h3 className="card-title"><IconChat /> {t('ticket.notes')}</h3>
+              {/* Typed into the draft. It used to write to the database on
+                  every blur — a note was final the moment the cursor left it. */}
               <textarea
                 className="note-box"
                 placeholder={t('ticket.notesPlaceholder')}
-                value={note || ticket.notes || ''}
-                onChange={(e) => setNote(e.target.value)}
-                onBlur={() => page.patch({ notes: note })}
+                value={draft.notes ?? ''}
+                onChange={(e) => page.patch({ notes: e.target.value })}
               />
             </section>
           </div>
@@ -277,9 +325,9 @@ export default function TicketPage({
 
           <section className="card">
             <h3 className="card-title"><IconCard /> {t('ticket.billing')}</h3>
-            <div className={`bill-note${ticket.paid ? ' ok' : ''}`}>
-              {ticket.doc
-                ? t(ticket.paid ? 'ticket.billPaid' : 'ticket.billOpen')
+            <div className={`bill-note${draft.paid ? ' ok' : ''}`}>
+              {draft.doc
+                ? t(draft.paid ? 'ticket.billPaid' : 'ticket.billOpen')
                 : t('ticket.billNone')}
             </div>
             <dl className="kv">
@@ -289,17 +337,17 @@ export default function TicketPage({
               </dd>
               <dt>{t('ticket.fields.payment')}</dt>
               <dd>
-                {ticket.paid
-                  ? t('ticket.paidWith', { method: ticket.payMethod })
-                  : ticket.doc ? t('ticket.openCharge') : '-'}
+                {draft.paid
+                  ? t('ticket.paidWith', { method: draft.payMethod })
+                  : draft.doc ? t('ticket.openCharge') : '-'}
               </dd>
-              <dt>{t('ticket.fields.document')}</dt><dd>{ticket.doc ?? '-'}</dd>
+              <dt>{t('ticket.fields.document')}</dt><dd>{draft.doc ?? '-'}</dd>
             </dl>
 
             <button className="btn primary block" onClick={() => void page.close()} disabled={settled}>
               <IconCard /> {settled
                 ? t('ticket.alreadySettled')
-                : ticket.st === 'done'
+                : draft.st === 'done'
                   ? t('ticket.collectPayment')   // ready for pickup, still owes money
                   : t('ticket.closeAndCharge')}
             </button>
@@ -354,7 +402,7 @@ export default function TicketPage({
               wa ? (
                 <a
                   className="btn whatsapp block"
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage(ticket, totals.total, photos))}`}
+                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage(draft, totals.total, photos))}`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -372,7 +420,7 @@ export default function TicketPage({
             <button
               className="btn ghost block"
               onClick={() => warnIfBlocked(printTicket(
-                ticket,
+                draft,
                 totals,
                 { workerName: worker, photoCount: photos.length },
               ))}
@@ -398,13 +446,23 @@ export default function TicketPage({
         </div>
       )}
 
+      {/* The save button used to scroll the page to the works table. Nothing on
+          this screen saved anything, because everything already had. */}
       <footer className="tp-foot">
         <button className="btn danger" onClick={() => void page.remove()}>
           <IconTrash /> {t('ticket.deleteTicket')}
         </button>
         <div className="foot-spacer" />
-        <button className="btn ghost" onClick={onBack}>{t('common.close')}</button>
-        <button className="btn primary lg" onClick={() => scrollTo('tp-works')}>
+        {dirty && <span className="tp-unsaved" role="status">{t('ticket.unsaved')}</span>}
+        <button className="btn ghost" onClick={page.discard} disabled={!dirty || busy}>
+          {t('ticket.discard')}
+        </button>
+        <button className="btn ghost" onClick={() => void page.leave()}>{t('common.close')}</button>
+        <button
+          className="btn primary lg"
+          onClick={() => void page.save()}
+          disabled={!dirty || busy}
+        >
           {t('common.save')} <span className="arrow">←</span>
         </button>
       </footer>

@@ -1,4 +1,6 @@
-import { isGarageAdmin, workTotal, type PartRow, type TicketWork } from '@garage/shared';
+import {
+  isGarageAdmin, toCatalogCode, workTotal, type PartRow, type TicketWork,
+} from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
@@ -84,7 +86,9 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           className={styles.code}
           value={w.code}
           aria-label={t('works.fields.code')}
-          onChange={(e) => step.patchWork(w.uid, { code: e.target.value })}
+          /* Same rule as the catalog it came from: a code is uppercase Latin,
+             whichever screen types it. */
+          onChange={(e) => step.patchWork(w.uid, { code: toCatalogCode(e.target.value) })}
         />
       ),
     },

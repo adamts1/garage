@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTicketsStore } from '../lib/TicketsProvider';
-import { ARCHIVE_AFTER_DAYS, COLUMNS, isArchived } from '@garage/shared';
+import { COLUMNS, isArchived } from '@garage/shared';
 import type { Status, Ticket } from '@garage/shared';
 import { C, rtl, s } from '../lib/theme';
 
@@ -110,7 +110,7 @@ export default function TicketListPane({ onSelect, onNew, selectedKey }: {
 
       {status === 'archive' ? (
         <Text style={[s.dim, { textAlign: 'center', paddingTop: 10, paddingHorizontal: 12 }]}>
-          כרטיסים ששולמו, {ARCHIVE_AFTER_DAYS} ימים לאחר תאריך היעד
+          כרטיסים ששולמו, מהיום שלאחר התשלום
         </Text>
       ) : null}
 

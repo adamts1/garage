@@ -34,6 +34,10 @@ vi.mock('@garage/shared', async (importActual) => {
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
     cancelInvoice: (...a: unknown[]) => cancelInvoice(...a),
     subscribeToInvoices: vi.fn(() => () => {}),
+    // The page reads the garage's customers to show (and warn about) the ת״ז.
+    listCustomers: vi.fn(async () => []),
+    updateCustomer: vi.fn(async () => {}),
+    subscribeToTable: vi.fn(() => () => {}),
   };
 });
 

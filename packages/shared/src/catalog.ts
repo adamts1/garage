@@ -43,6 +43,38 @@ export interface TicketWork {
   notes?: string;
 }
 
+/* A catalog code — a work's `code`, a part's `sku` — is uppercase Latin.
+ *
+ * It was free text, and the two "create it while you type" pickers filled it in
+ * from the name when it was left blank: `name.slice(0, 6).toUpperCase()`. For a
+ * Hebrew name that produces a Hebrew code — "החלפת שמן" became "החלפת" — and a
+ * code in the same script as the description is not a code any more. It cannot
+ * be dictated over a phone, it cannot be typed on a supplier's keypad, and in
+ * an RTL table it sits in the description column's own direction, which is why
+ * it reads as missing rather than as wrong.
+ *
+ * So: A-Z, digits, and the two separators anybody actually types. Everything
+ * else is dropped rather than transliterated — a guessed Latin spelling of a
+ * Hebrew word is a code nobody can predict, and the field is one keystroke to
+ * fill in properly.
+ */
+export const toCatalogCode = (raw: string): string =>
+  raw
+    /* Trimmed BEFORE spaces become separators: this runs on every keystroke,
+       and a trailing space that turned into a '-' would leave one hanging at
+       the end of every code somebody paused in the middle of typing. A '-' the
+       person typed themselves is kept, so "BRK-" can still become "BRK-01". */
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Z0-9\-_]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-_]+/, '');
+
+/** Whether a code can be stored as it stands. Blank is not: it is the state the
+ *  old fallback quietly filled in, and it prints as a dash. */
+export const isValidCatalogCode = (raw: string): boolean => toCatalogCode(raw).length > 0;
+
 export const VAT = 0.18;
 
 

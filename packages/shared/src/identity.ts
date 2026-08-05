@@ -78,6 +78,52 @@ export function phoneConflict<C extends CustomerIdentity>(
   return { customer: holder, differentName: looseName(holder.name) !== looseName(name) };
 }
 
+/* ---------- the ת״ז, which is not the identifier but is unique ----------
+
+   The phone decides who a customer is; the ת״ז only has to not be two people's.
+   `customers_garage_id_number_key` enforces that in the database — a unique
+   index per garage, where the column is not null — so a second holder is not a
+   judgement call the way a shared phone is: it is a write that will be refused.
+
+   Which is exactly why it is worth catching in the app. Left to the database it
+   surfaces as a 23505 on save, naming a constraint rather than the person who
+   already holds the number. */
+
+/** The minimum for the ת״ז rules. Wider than CustomerIdentity because the
+ *  number itself has to be readable, and `Customer` satisfies it structurally. */
+export interface CustomerWithIdNumber extends CustomerIdentity {
+  id_number: string | null;
+}
+
+/** Punctuation and case are not identity here either: ' 12345678 ' and
+ *  '12345678' are one number, and a blank field is not a number at all. */
+export const normalizeIdNumber = (id: string | null | undefined): string =>
+  (id ?? '').trim();
+
+/** The customer already holding this ת״ז, if any. */
+export function customerByIdNumber<C extends CustomerWithIdNumber>(
+  customers: readonly C[],
+  idNumber: string | null | undefined,
+): C | undefined {
+  const wanted = normalizeIdNumber(idNumber);
+  if (!wanted) return undefined;
+  return customers.find((c) => normalizeIdNumber(c.id_number) === wanted);
+}
+
+/** The ת״ז is taken. Same shape and the same restraint as phoneConflict: it
+ *  reports, and the person at the counter decides. `null` when the number is
+ *  free, blank, or already belongs to the customer being edited — putting a
+ *  number back on the record that holds it is not a conflict. */
+export function idNumberConflict<C extends CustomerWithIdNumber>(
+  customers: readonly C[],
+  { idNumber, name, ownerId }: { idNumber: string; name: string; ownerId?: string | null },
+): PhoneConflict<C> | null {
+  const holder = customerByIdNumber(customers, idNumber);
+  if (!holder) return null;
+  if (ownerId && holder.id === ownerId) return null;
+  return { customer: holder, differentName: looseName(holder.name) !== looseName(name) };
+}
+
 /** How many matches the search box offers before it stops being a shortcut. */
 export const CUSTOMER_MATCH_LIMIT = 6;
 

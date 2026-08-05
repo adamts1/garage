@@ -57,9 +57,12 @@ export interface Ticket {
   /** The customer this ticket was explicitly opened against, when the advisor
    *  picked an existing one out of the search box rather than typing a name.
    *
-   *  In transit only, like idNumber: `tickets.customer_id` is a real column,
-   *  but it is filled by create_ticket's own resolution, never mapped by
-   *  ticketToRow, and reading a ticket back never repopulates this field.
+   *  `tickets.customer_id` is a real column, filled by create_ticket's own
+   *  resolution and never written by ticketToRow — on the way in this is a
+   *  request, not a fact. Reading a ticket back DOES populate it (since the
+   *  ticket page edits the customer's ת״ז, and "which customer" cannot be
+   *  recovered from a denormalised name); it is NULL on tickets opened before
+   *  resolution existed.
    *
    *  It exists because the search box knows something the ת״ז-then-phone
    *  resolution cannot recover: *which* record the human meant. A customer
@@ -70,13 +73,18 @@ export interface Ticket {
   km?: string;
   year?: string;
 
-  /** Vehicle details, in transit only — like idNumber, these are NOT columns on
+  /** Make and model, in transit only — like idNumber, these are NOT columns on
    *  tickets. They ride along so create_ticket can promote the car into the
    *  vehicles table (keyed on customer + plate), where the next ticket's
    *  auto-fill reads them. The ticket keeps its own denormalised `car` string;
    *  reading a ticket back never repopulates these. See docs/PRODUCTION.md §3.10. */
   manufacturer?: string;
   model?: string;
+
+  /** The manufacturer's vehicle code, as typed at intake. Unlike the two above
+   *  this IS a column on tickets (`vehicle_code`) — and it is read back, so it
+   *  can be printed on the work order. ticketToRow does not write it: it is set
+   *  once by create_ticket, with the rest of what the intake form captured. */
   vehicleCode?: string;
   createdAt?: string;
   /** raw ISO timestamp - createdAt is already localised, so it can't be sorted or aged */
@@ -85,32 +93,51 @@ export interface Ticket {
 
   /* set when the ticket is closed and billed */
   paid?: boolean;
+  /** ISO timestamp of when the status became 'paid', written by the database
+   *  and cleared if the ticket leaves שולם. Read-only here: ticketToRow does
+   *  not send it, because a client that decides when it was paid is a client
+   *  that can archive somebody else's ticket. What ages a ticket off the
+   *  board — see isArchived. */
+  paidAt?: string | null;
   payMethod?: string;
   doc?: string;
   reference?: string;
 }
 
-/** Two days after a ticket is settled it drops off the board into the archive.
- *  "Settled" means paid (status 'paid'); the clock runs from the due date, or
- *  from the creation date when the ticket has no due date. This is derived, not
- *  stored — recomputed on every render, so a paid ticket archives itself once it
- *  ages out, and reappears on the board the moment it's dragged out of 'שולם'. */
-export const ARCHIVE_AFTER_DAYS = 2;
+/* A paid ticket stays on the board for the rest of the day it was paid, and is
+   in the archive the next morning.
+ *
+ * It used to be counted from the DUE DATE — two days after it, if paid — which
+ * meant a ticket paid late was already past its cutoff, and vanished from שולם
+ * the instant the money was taken. The column that shows what the garage
+ * collected today was empty on exactly the tickets it was about.
+ *
+ * The clock now runs from `paid_at`, stamped by the database when the status
+ * becomes 'paid' (see 20260805000000_paid_at.sql), and the cutoff is the
+ * following MIDNIGHT rather than a rolling 24 hours: "tomorrow" to a garage
+ * means the next working morning, not the same hour tomorrow. A car paid at
+ * 08:00 and one paid at 19:00 both leave the board overnight.
+ *
+ * Derived, not stored — recomputed on every render, so a ticket archives itself
+ * as the day turns, and reappears the moment it is dragged out of שולם. */
+export const ARCHIVE_AFTER_DAYS = 1;
 
-// due is a 'DD/MM/YYYY' string (or '-' when unset); parse it to a Date at midnight.
-const parseDueDate = (s: string | undefined): Date | null => {
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((s ?? '').trim());
-  if (!m) return null;
-  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  return Number.isNaN(d.getTime()) ? null : d;
-};
+/** Midnight at the start of the day `d` falls in, in the garage's own timezone
+ *  — which is the browser's, and is what "the next morning" has to mean. */
+const startOfDay = (d: Date): Date =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 export const isArchived = (t: Ticket, now: Date = new Date()): boolean => {
   if (t.st !== 'paid') return false;
-  // due date first; fall back to the raw ISO creation timestamp when there's none
-  const base = parseDueDate(t.due) ?? (t.createdAtISO ? new Date(t.createdAtISO) : null);
-  if (!base || Number.isNaN(base.getTime())) return false;
-  const cutoff = new Date(base);
+
+  const paid = t.paidAt ? new Date(t.paidAt) : null;
+  /* No stamp: a row written before the migration landed, or by a client that
+     has not caught up. Keep it on the board. A ticket somebody can still see is
+     a ticket they can still act on; one that disappeared is the complaint this
+     whole rule exists to answer. */
+  if (!paid || Number.isNaN(paid.getTime())) return false;
+
+  const cutoff = startOfDay(paid);
   cutoff.setDate(cutoff.getDate() + ARCHIVE_AFTER_DAYS);
   return now.getTime() >= cutoff.getTime();
 };

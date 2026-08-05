@@ -1107,6 +1107,54 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
 
 /* blanks read as blanks, not as data */
 .kv-empty { color: color-mix(in srgb, var(--steel) 55%, #fff); font-weight: 600; }
+
+/* an editable value inside a detail list: reads as the text beside it until it
+   is focused, so the card does not turn into a form */
+.kv-input {
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 2px 7px;
+  width: 130px;
+  max-width: 100%;
+}
+.kv-input:hover:not(:disabled) { border-color: var(--border); }
+.kv-input:focus {
+  outline: none;
+  background: var(--surface);
+  border-color: var(--slate);
+}
+.kv-input:disabled { color: var(--muted); cursor: not-allowed; }
+.kv-input.invalid { border-color: var(--danger); color: var(--danger); }
+.kv-input::placeholder { color: var(--steel); font-weight: 600; }
+
+/* the number is already somebody else's — said in the card, before the save */
+.tp-warn {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.tp-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* what the save button is for, when there is something to save */
+.tp-unsaved {
+  color: var(--warn);
+  font-size: 12.5px;
+  font-weight: 800;
+}
 .kv-link { color: var(--slate); font-weight: 700; text-decoration: none; }
 .kv-link:hover { text-decoration: underline; }
 
