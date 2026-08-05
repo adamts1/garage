@@ -1,0 +1,262 @@
+{
+  "common": {
+    "close": "סגור",
+    "cancel": "ביטול",
+    "save": "שמור",
+    "delete": "מחק",
+    "error": "שגיאה",
+    "none": "—"
+  },
+  "nav": {
+    "tickets": "עבודות",
+    "menu": "תפריט"
+  },
+  "setup": {
+    "title": "חסרה הגדרת Supabase",
+    "body": "צור קובץ mobile/.env לפי .env.example, עם הכתובת והמפתח של אותו פרויקט Supabase שהאתר משתמש בו:",
+    "restart": "אחרי השמירה יש להפעיל מחדש: npx expo start -c"
+  },
+  "env": {
+    "mismatch": "⚠ אי-התאמה: בילד {{variant}} מחובר ל־{{project}}",
+    "staging": "STAGING · {{project}}",
+    "unset": "לא מוגדר",
+    "variant": {
+      "production": "פרודקשן",
+      "staging": "סטיג׳ינג"
+    }
+  },
+  "auth": {
+    "appName": "מוסך",
+    "tagline": "מערכת ניהול מוסך חכמה",
+    "welcome": "ברוכים הבאים",
+    "subtitle": "התחברו כדי להמשיך למערכת",
+    "email": "אימייל",
+    "emailPlaceholder": "הכנס את האימייל שלך",
+    "password": "סיסמה",
+    "passwordPlaceholder": "הכנס את הסיסמה שלך",
+    "show": "הצג",
+    "hide": "הסתר",
+    "showPassword": "הצג סיסמה",
+    "hidePassword": "הסתר סיסמה",
+    "forgot": "שכחת סיסמה?",
+    "forgotNotice": "לאיפוס סיסמה פנו לתמיכה ונטפל בזה מיד.",
+    "signIn": "כניסה",
+    "signOut": "התנתקות",
+    "user": "משתמש",
+    "errors": {
+      "credentials": "האימייל או הסיסמה שגויים.",
+      "unconfirmed": "החשבון עדיין לא אושר. פנו לתמיכה.",
+      "network": "אין חיבור לרשת. בדקו את החיבור ונסו שוב.",
+      "generic": "ההתחברות נכשלה. נסו שוב, ואם זה חוזר — פנו לתמיכה."
+    },
+    "noGarage": {
+      "title": "אין הרשאה למוסך",
+      "body": "המשתמש קיים אך אינו משויך למוסך. פנו לתמיכה כדי להשלים את ההגדרה.",
+      "error": "לא הצלחנו לאמת את ההרשאות. נסו שוב, ואם זה חוזר — פנו לתמיכה."
+    }
+  },
+  "tickets": {
+    "loading": "טוען קריאות…",
+    "searchPlaceholder": "חיפוש לפי מספר, לקוח, רכב או מספר רישוי",
+    "new": "כרטיס חדש",
+    "chip": "{{title}} ({{n}})",
+    "all": "הכול",
+    "archive": "ארכיון",
+    "archiveHint": "כרטיסים ששולמו, מהיום שלאחר התשלום",
+    "archiveEmpty": "אין כרטיסים בארכיון",
+    "noMatch": "אין קריאות שתואמות את הסינון",
+    "empty": "אין קריאות",
+    "error": "שגיאה: {{message}}",
+    "unnamedCar": "רכב ללא שם",
+    "detail": {
+      "title": "בחר קריאה מהרשימה",
+      "hint": "או הקש + כדי לפתוח כרטיס עבודה חדש"
+    }
+  },
+  "ticket": {
+    "notFound": "הקריאה {{key}} לא נמצאה",
+    "finish": "סיים עבודה",
+    "unassigned": "לא הוקצה",
+    "tabs": {
+      "details": "פרטי כרטיס",
+      "works": "עבודות ופריטים",
+      "photos": "תמונות",
+      "history": "היסטוריה",
+      "notes": "הערות"
+    },
+    "fields": {
+      "title": "תיאור התקלה",
+      "customer": "לקוח",
+      "phone": "טלפון",
+      "address": "כתובת",
+      "car": "רכב",
+      "plate": "מספר רישוי",
+      "km": "קילומטראז'",
+      "year": "שנה",
+      "due": "יעד",
+      "status": "סטטוס",
+      "priority": "דחיפות",
+      "assignee": "אחראי",
+      "notes": "הערות",
+      "blocked": "חסימה (אם יש)"
+    },
+    "leave": {
+      "title": "לצאת בלי לשמור?",
+      "body": "יש שינויים שלא נשמרו.",
+      "confirm": "צא בלי לשמור"
+    },
+    "checklist": {
+      "title": "משימות ({{done}}/{{total}})",
+      "empty": "אין משימות",
+      "hint": "המשימות נסגרות לפי הסדר — המסד שומר מונה, לא סימון לכל שורה."
+    },
+    "photos": {
+      "camera": "צלם תמונה",
+      "library": "מהגלריה",
+      "uploading": "מעלה…",
+      "empty": "אין תמונות בכרטיס זה",
+      "deleteHint": "לחיצה ארוכה על תמונה כדי למחוק",
+      "permissionTitle": "אין הרשאה",
+      "cameraPermission": "יש לאשר גישה למצלמה בהגדרות המכשיר.",
+      "libraryPermission": "יש לאשר גישה לתמונות בהגדרות המכשיר.",
+      "uploadFailed": "העלאה נכשלה",
+      "uploadFailedBody": "לא ניתן להעלות את התמונה.",
+      "deleteTitle": "מחיקת תמונה",
+      "deleteBody": "למחוק את התמונה מהכרטיס?",
+      "deleteFailed": "המחיקה נכשלה",
+      "deleteFailedBody": "לא ניתן למחוק את התמונה."
+    },
+    "whatsapp": {
+      "quote": "שלח הצעה לאישור הלקוח",
+      "ready": "שלח עדכון: הרכב מוכן לאיסוף",
+      "noPhoneTitle": "אין מספר טלפון",
+      "noPhoneBody": "לא הוזן מספר טלפון ללקוח בכרטיס.",
+      "openFailed": "לא ניתן לפתוח את וואטסאפ במכשיר."
+    }
+  },
+  "create": {
+    "title": "כרטיס עבודה חדש",
+    "searchPlaceholder": "חיפוש לקוח קיים לפי שם או טלפון",
+    "noCustomerMatch": "לא נמצא לקוח תואם",
+    "pickVehicle": "בחר רכב ללקוח:",
+    "customerSection": "פרטי לקוח",
+    "vehicleSection": "פרטי רכב",
+    "business": "עסקי",
+    "keyReceived": "מפתח התקבל *",
+    "comboPlaceholder": "בחר מהרשימה או הקלד",
+    "modelPlaceholder": "הקלד דגם",
+    "duePlaceholder": "לדוגמה 15/08/2026",
+    "totalLabel": "סה״כ כולל מע״מ",
+    "missing": "חסר: {{fields}}",
+    "submit": "שמור כרטיס",
+    "saveFailed": "שמירה נכשלה",
+    "saveFailedBody": "לא ניתן ליצור את הכרטיס.",
+    "kmSuffix": "{{km}} ק״מ",
+    "fields": {
+      "name": "שם *",
+      "phone": "טלפון *",
+      "idNumber": "ת״ז",
+      "email": "דוא״ל",
+      "address": "כתובת",
+      "city": "עיר",
+      "plate": "מספר רישוי *",
+      "manufacturer": "יצרן *",
+      "model": "דגם",
+      "year": "שנה",
+      "km": "קילומטר *",
+      "vehicleCode": "קוד רכב",
+      "details": "פרטים / תיאור התקלה",
+      "due": "יעד (תאריך סיום)"
+    },
+    "required": {
+      "customerName": "שם",
+      "customerPhone": "טלפון",
+      "licensePlate": "מספר רישוי",
+      "manufacturer": "יצרן",
+      "km": "קילומטר",
+      "keyReceived": "מפתח"
+    },
+    "leave": {
+      "title": "לצאת בלי לשמור?",
+      "body": "הכרטיס החדש לא נשמר."
+    },
+    "conflict": {
+      "differentName": "מספר הטלפון הזה שמור אצל {{name}}. הכרטיס ייפתח על הלקוח הזה, לא על השם שהוקלד.",
+      "sameName": "הטלפון הזה כבר רשום אצל {{name}} — הכרטיס ייפתח על הלקוח הקיים.",
+      "open": "פתח על הלקוח הזה"
+    }
+  },
+  "works": {
+    "section": "עבודות",
+    "add": "הוסף עבודה",
+    "empty": "לא הוזנו עבודות",
+    "summary": "{{n}} פריטים · {{amount}}",
+    "labor": "עבודה",
+    "noParts": "אין פריטים לעבודה זו",
+    "addPart": "+ הוסף פריט לעבודה",
+    "subtotal": "סה״כ עבודה",
+    "remove": "מחק עבודה",
+    "priceTitle": "מחיר ליחידה",
+    "totals": {
+      "net": "סה״כ לפני מע״מ",
+      "vat": "מע״מ ({{percent}}%)",
+      "total": "סה״כ לתשלום"
+    },
+    "picker": {
+      "title": "בחר עבודה מהקטלוג",
+      "search": "חיפוש עבודה או קוד",
+      "noMatch": "לא נמצאה עבודה בשם \"{{query}}\"",
+      "empty": "אין עבודות בקטלוג של המוסך.",
+      "create": "עבודה חדשה",
+      "createNamed": "צור עבודה חדשה: \"{{query}}\"",
+      "meta": "עבודה ₪{{labor}} · {{hours}} שע׳ · {{parts}} חלקים"
+    },
+    "form": {
+      "title": "עבודה חדשה",
+      "name": "שם העבודה *",
+      "namePlaceholder": "לדוגמה: החלפת רפידות",
+      "code": "קוד",
+      "codePlaceholder": "EXH-01",
+      "price": "מחיר עבודה",
+      "keep": "שמור בקטלוג המוסך",
+      "keepHint": "העבודה תופיע בקטלוג בפעם הבאה. פריטים מוסיפים לה בכרטיס.",
+      "onceHint": "עבודה חד־פעמית לכרטיס הזה בלבד.",
+      "submit": "צור והוסף לכרטיס",
+      "failed": "לא נשמר בקטלוג",
+      "failedBody": "העבודה נוספה לכרטיס אך לא נשמרה בקטלוג המוסך: {{message}}"
+    }
+  },
+  "parts": {
+    "picker": {
+      "title": "הוסף חלק",
+      "search": "חיפוש חלק או מק״ט",
+      "noMatch": "לא נמצא חלק בשם \"{{query}}\"",
+      "empty": "לא נמצאו חלקים",
+      "create": "פריט חדש",
+      "createNamed": "צור פריט חדש: \"{{query}}\"",
+      "outOfStock": "אזל מהמלאי",
+      "inStock": "במלאי: {{stock}}"
+    },
+    "form": {
+      "title": "פריט חדש",
+      "name": "שם הפריט *",
+      "namePlaceholder": "לדוגמה: פילטר שמן",
+      "sku": "מק״ט",
+      "skuPlaceholder": "EXH-22",
+      "price": "מחיר ליח׳",
+      "keep": "שמור בקטלוג הפריטים",
+      "keepHint": "הפריט ייכנס לקטלוג עם מלאי 0.",
+      "onceHint": "פריט חד־פעמי לעבודה הזו בלבד.",
+      "submit": "צור והוסף לעבודה",
+      "failed": "לא נשמר בקטלוג",
+      "failedBody": "הפריט נוסף לעבודה אך לא נשמר בקטלוג הפריטים: {{message}}"
+    }
+  },
+  "ui": {
+    "backToSearch": "חזרה לחיפוש",
+    "notInList": "לא ברשימה — ייווצר חדש בשם שהוקלד",
+    "openList": "{{label}} — פתח רשימה",
+    "decrease": "הפחת",
+    "increase": "הוסף"
+  }
+}

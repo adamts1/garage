@@ -1,4 +1,4 @@
-import { COLUMNS, VAT, type Status, type Ticket } from '@garage/shared';
+import { COLUMNS, money, VAT, type Status, type Ticket } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
@@ -10,8 +10,6 @@ import { IconCustomers, IconDoc, IconPrint, IconReports, IconTickets } from '../
 import styles from './ReportsPage.module.css';
 import { useCustomerReport, type DocFilter, type ReportRow } from './useCustomerReport';
 
-const money = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const vatPercent = Math.round(VAT * 100);
 

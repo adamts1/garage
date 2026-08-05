@@ -1,4 +1,6 @@
-import { assignableWorkers, modelsFor, VEHICLE_MAKES, type Ticket, type Worker } from '@garage/shared';
+import {
+  assignableWorkers, isBusinessCustomer, modelsFor, shekel, VEHICLE_MAKES, type Ticket, type Worker,
+} from '@garage/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -8,7 +10,6 @@ import { IconCar, IconCustomers, IconDoc } from '../../icons';
 import styles from './NewTicketPage.module.css';
 import { useNewTicket, YEARS, type RequiredField } from './useNewTicket';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 /** i18n keys for the fields a ticket cannot be saved without, so the footer can
  *  name them in the same words the labels use. */
@@ -122,7 +123,9 @@ export default function NewTicketPage({
                       <span className={styles.suggestName}>{c.name}</span>
                       <span className={styles.suggestMeta}>
                         {[c.phone, c.city].filter(Boolean).join(' · ')}
-                        {c.kind === 'עסקי' && <span className={styles.suggestTag}>{c.kind}</span>}
+                        {isBusinessCustomer(c.kind) && (
+                          <span className={styles.suggestTag}>{t('customers.kinds.business')}</span>
+                        )}
                       </span>
                     </button>
                   </li>

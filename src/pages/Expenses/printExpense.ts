@@ -1,8 +1,6 @@
-import { garageName, type SupplierExpense } from '@garage/shared';
+import { garageName, money, type SupplierExpense } from '@garage/shared';
 import { esc, printDocument, row, warnIfBlocked } from '../../lib/print';
 
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('he-IL');
 
 /* Printed from our own stored record. iCount issues no printable document for
@@ -33,9 +31,9 @@ export const printExpense = (e: SupplierExpense) =>
       ${e.providerExpenseId ? row('אסמכתא iCount', '#' + e.providerExpenseId) : ''}
     </table>
     <table class="totals">
-      ${row('סכום לפני מע״מ', shekel(e.subtotal))}
-      ${row('מע״מ', shekel(e.vat))}
-      <tr class="grand"><th>סה״כ</th><td>${esc(shekel(e.total))}</td></tr>
+      ${row('סכום לפני מע״מ', money(e.subtotal))}
+      ${row('מע״מ', money(e.vat))}
+      <tr class="grand"><th>סה״כ</th><td>${esc(money(e.total))}</td></tr>
     </table>`,
     }),
   );

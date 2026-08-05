@@ -8,15 +8,9 @@
 import { useWindowDimensions } from 'react-native';
 
 /** Android's own tablet cutoff (smallestWidth 600dp); iPads sit well above it. */
-export const TABLET_MIN = 600;
-
-export type DeviceType = 'phone' | 'tablet';
-
-export function useDeviceType(): DeviceType {
-  const { width, height } = useWindowDimensions();
-  return Math.min(width, height) >= TABLET_MIN ? 'tablet' : 'phone';
-}
+const TABLET_MIN = 600;
 
 export function useIsTablet(): boolean {
-  return useDeviceType() === 'tablet';
+  const { width, height } = useWindowDimensions();
+  return Math.min(width, height) >= TABLET_MIN;
 }

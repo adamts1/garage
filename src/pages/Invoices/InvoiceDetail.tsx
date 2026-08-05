@@ -1,3 +1,4 @@
+import { money } from '@garage/shared';
 import type { Invoice } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -7,8 +8,6 @@ import { IconCard, IconCustomers, IconDoc, IconPrint, IconWrench } from '../../i
 import { printInvoice, warnIfBlocked } from '../../lib/print';
 import styles from './InvoicesPage.module.css';
 
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('he-IL') : '-');
 
 type Line = Invoice['lines'][number];
@@ -29,8 +28,8 @@ export default function InvoiceDetail({
   const lineColumns: Column<Line>[] = [
     { key: 'desc', header: 'invoices.lines.desc', render: (l) => l.desc },
     { key: 'qty', header: 'invoices.lines.qty', width: 80, cellClassName: styles.muted, render: (l) => l.qty },
-    { key: 'unit', header: 'invoices.lines.unit', width: 110, cellClassName: styles.muted, render: (l) => shekel(l.unit_price) },
-    { key: 'total', header: 'invoices.lines.total', width: 120, render: (l) => <strong>{shekel(l.line_total)}</strong> },
+    { key: 'unit', header: 'invoices.lines.unit', width: 110, cellClassName: styles.muted, render: (l) => money(l.unit_price) },
+    { key: 'total', header: 'invoices.lines.total', width: 120, render: (l) => <strong>{money(l.line_total)}</strong> },
   ];
 
   return (
@@ -70,15 +69,15 @@ export default function InvoiceDetail({
         <div className={styles.sum}>
           <div>
             <span>{t('invoices.detail.subtotal')}</span>
-            <b>{shekel(invoice.subtotal)}</b>
+            <b>{money(invoice.subtotal)}</b>
           </div>
           <div>
             <span>{t('invoices.detail.vat', { percent: Math.round(invoice.vatRate * 100) })}</span>
-            <b>{shekel(invoice.vat)}</b>
+            <b>{money(invoice.vat)}</b>
           </div>
           <div className={styles.grand}>
             <span>{t('invoices.detail.total')}</span>
-            <b>{shekel(invoice.total)}</b>
+            <b>{money(invoice.total)}</b>
           </div>
         </div>
       </div>

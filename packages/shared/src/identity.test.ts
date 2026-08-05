@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CUSTOMER_MATCH_LIMIT, customerByPhone, isUsablePhone, matchCustomers, phoneConflict,
-  phoneDigits, ticketCustomerKey,
-  type CustomerIdentity,
-} from './identity';
+import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
 import type { Ticket } from './types';
 
 const cust = (over: Partial<CustomerIdentity>): CustomerIdentity => ({
@@ -154,5 +150,28 @@ describe('ticketCustomerKey', () => {
   it('cannot collide a name key with a phone key', () => {
     expect(ticketCustomerKey(ticket({ customer: '0521112233', phone: undefined })))
       .not.toBe(ticketCustomerKey(ticket({ customer: 'מישהו', phone: '0521112233' })));
+  });
+});
+
+describe('customerKind', () => {
+  it('passes a code through', () => {
+    expect(customerKind('private')).toBe('private');
+    expect(customerKind('business')).toBe('business');
+  });
+
+  /* The migration that rewrites the column and the deploy that ships this code
+     are separate events, and a row read in between still has to render. */
+  it('maps the Hebrew the column held before the migration', () => {
+    expect(customerKind('פרטי')).toBe('private');
+    expect(customerKind('עסקי')).toBe('business');
+    expect(isBusinessCustomer('עסקי')).toBe(true);
+  });
+
+  it('falls back to private rather than rendering a missing label at somebody', () => {
+    expect(customerKind(null)).toBe('private');
+    expect(customerKind(undefined)).toBe('private');
+    expect(customerKind('')).toBe('private');
+    expect(customerKind('something else')).toBe('private');
+    expect(isBusinessCustomer('something else')).toBe(false);
   });
 });

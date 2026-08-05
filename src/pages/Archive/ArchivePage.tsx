@@ -1,4 +1,4 @@
-import { workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Filter, FilterBar } from '../../components/FilterBar';
@@ -17,7 +17,6 @@ export interface ArchivePageProps {
   onOpenTicket: (k: string) => void;
 }
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 
 export default function ArchivePage({ tickets, workerChips, onOpenTicket }: ArchivePageProps) {
@@ -58,7 +57,7 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         const epic = epicChip(ticket.epic);
         return (
           <>
-            <div className={styles.title}>{ticket.title}</div>
+            <div className={styles.title}>{ticket.title || t('common.untitled')}</div>
             <span className={styles.epic} style={{ background: epic.bg, color: epic.c }}>
               {epic.t}
             </span>

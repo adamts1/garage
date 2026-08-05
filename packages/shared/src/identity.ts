@@ -165,3 +165,38 @@ export const ticketCustomerKey = (t: Ticket): string => {
   const d = phoneDigits(t.phone);
   return d.length >= PHONE_MIN_DIGITS ? `phone:${d}` : `name:${(t.customer ?? '').trim()}`;
 };
+
+/* The two kinds a garage bills.
+
+   Codes rather than the Hebrew words `customers.kind` used to hold. The column
+   was the label: the Customers table rendered it straight out of the row, so
+   rewording the screen meant rewriting data, and the phone app compared against
+   its own copy of the same literal. Each app now translates the code.
+
+   `customerKind` exists because the migration that rewrote the column and the
+   deploy that ships this code are two separate events. It maps the legacy
+   values too, so a row read before the migration lands still resolves — and
+   anything unrecognised falls back to private rather than rendering a missing
+   translation key at somebody. See
+   supabase/migrations/20260805010000_language_neutral_vocabulary.sql. */
+export const CUSTOMER_KINDS = ['private', 'business'] as const;
+
+export type CustomerKind = (typeof CUSTOMER_KINDS)[number];
+
+export const PRIVATE_CUSTOMER: CustomerKind = 'private';
+export const BUSINESS_CUSTOMER: CustomerKind = 'business';
+
+/** The Hebrew the column held before the migration. Read-only: nothing writes these. */
+const LEGACY_KINDS: Record<string, CustomerKind> = {
+  'פרטי': PRIVATE_CUSTOMER,
+  'עסקי': BUSINESS_CUSTOMER,
+};
+
+/** Whatever the row says → a code this app can translate. */
+export function customerKind(raw: string | null | undefined): CustomerKind {
+  if (raw === PRIVATE_CUSTOMER || raw === BUSINESS_CUSTOMER) return raw;
+  return LEGACY_KINDS[(raw ?? '').trim()] ?? PRIVATE_CUSTOMER;
+}
+
+export const isBusinessCustomer = (raw: string | null | undefined): boolean =>
+  customerKind(raw) === BUSINESS_CUSTOMER;

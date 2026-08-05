@@ -1,4 +1,4 @@
-import { toCatalogCode, type PartDef, type PartRow, type WorkDef } from '@garage/shared';
+import { shekel, toCatalogCode, type PartDef, type PartRow, type WorkDef } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -12,7 +12,6 @@ import { useCatalog } from '../catalog/CatalogProvider';
 import { usePickPart } from './usePickers';
 import styles from './pickers.module.css';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 const norm = (s: string) => s.trim().toLowerCase();
 
 /** Reached through `usePickWork()`. Resolves the chosen work, or null. */

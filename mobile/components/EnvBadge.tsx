@@ -13,23 +13,31 @@
    Silent in production — a badge that is always there stops being read. */
 
 import { Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { appVariant, isEnvMismatch, isProductionDb } from '../lib/env';
 import { projectRef } from '../lib/supabase';
+import { C } from '../lib/theme';
 
 export default function EnvBadge() {
+  const { t } = useTranslation();
+
   // The one case worth shouting about: the build's label and the database it
   // reached disagree, so neither can be trusted without looking.
   if (isEnvMismatch) {
     return (
-      <Strip color="#a5544b">
-        {`⚠ אי-התאמה: בילד ${appVariant === 'production' ? 'פרודקשן' : 'סטיג׳ינג'} מחובר ל־${projectRef || '—'}`}
+      <Strip color={C.danger}>
+        {t('env.mismatch', {
+          variant:
+            appVariant === 'production' ? t('env.variant.production') : t('env.variant.staging'),
+          project: projectRef || '—',
+        })}
       </Strip>
     );
   }
 
   if (isProductionDb) return null;
 
-  return <Strip color="#8a6d1f">{`STAGING · ${projectRef || 'לא מוגדר'}`}</Strip>;
+  return <Strip color={C.staging}>{t('env.staging', { project: projectRef || t('env.unset') })}</Strip>;
 }
 
 function Strip({ color, children }: { color: string; children: string }) {
@@ -46,7 +54,7 @@ function Strip({ color, children }: { color: string; children: string }) {
         alignItems: 'center',
       }}
     >
-      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
+      <Text style={{ color: C.onInk, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
         {children}
       </Text>
     </View>

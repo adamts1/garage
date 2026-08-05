@@ -1,8 +1,5 @@
 import {
-  cancelInvoice, customerHoldingIdNumber, idNumberConflict, issueInvoice, listCustomers,
-  listInvoices, listTicketPhotos, normalizeIdNumber, phoneDigits, subscribeToInvoices,
-  subscribeToTable, subscribeToTicketPhotos, updateCustomer,
-  type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  cancelInvoice, customerHoldingIdNumber, idNumberConflict, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -14,8 +11,6 @@ import {
   showError, showErrorKey, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
 } from '../../store';
 
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export interface UseTicketPageOptions {
   ticket: Ticket;
@@ -260,7 +255,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     }
 
     const ok = await openModal('issueInvoice', {
-      amount: shekel(totals.total),
+      amount: money(totals.total),
       customer: ticket.customer,
     });
     if (!ok) return;
@@ -269,7 +264,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     try {
       const inv = await issueInvoice(ticket.k);
       setInvoice(inv);
-      dispatch(showSuccess('invoiceIssue.issued', { docnum: inv.docnum, total: shekel(inv.total) }));
+      dispatch(showSuccess('invoiceIssue.issued', { docnum: inv.docnum, total: money(inv.total) }));
     } catch (e) {
       dispatch(showError(e));
     } finally {
@@ -340,9 +335,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
       dispatch(
         result.paid
           ? showSuccess('ticket.paymentTaken', {
-              method: result.method, total: shekel(totals.total), doc: result.doc,
+              method: result.method, total: money(totals.total), doc: result.doc,
             })
-          : showErrorKey('ticket.closedWithBalance', { total: shekel(totals.total) }),
+          : showErrorKey('ticket.closedWithBalance', { total: money(totals.total) }),
       );
     },
     [dispatch, draft, openCloseDrawer, save, totals.total],

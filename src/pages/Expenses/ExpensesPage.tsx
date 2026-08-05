@@ -1,3 +1,4 @@
+import { money } from '@garage/shared';
 import type { SupplierExpense } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,8 +15,6 @@ import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
 import { blankExpense, previewTotals, useExpenses, type ExpenseDraft } from './useExpenses';
 
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('he-IL');
 
 export default function ExpensesPage() {
@@ -99,19 +98,19 @@ export default function ExpensesPage() {
       key: 'subtotal',
       header: 'expenses.fields.subtotal',
       sortValue: (e) => e.subtotal,
-      render: (e) => shekel(e.subtotal),
+      render: (e) => money(e.subtotal),
     },
     {
       key: 'vat',
       header: 'expenses.fields.vat',
       cellClassName: styles.muted,
-      render: (e) => shekel(e.vat),
+      render: (e) => money(e.vat),
     },
     {
       key: 'total',
       header: 'expenses.fields.total',
       sortValue: (e) => e.total,
-      render: (e) => <strong>{shekel(e.total)}</strong>,
+      render: (e) => <strong>{money(e.total)}</strong>,
     },
     {
       key: 'paid',
@@ -171,8 +170,8 @@ export default function ExpensesPage() {
       )}
 
       <KpiRow>
-        <KpiCard label="expenses.kpi.total" value={shekel(totals.total)} tone="navy" icon={<IconCard />} />
-        <KpiCard label="expenses.kpi.unpaid" value={shekel(totals.unpaid)} tone="warn" icon={<IconCard />} />
+        <KpiCard label="expenses.kpi.total" value={money(totals.total)} tone="navy" icon={<IconCard />} />
+        <KpiCard label="expenses.kpi.unpaid" value={money(totals.unpaid)} tone="warn" icon={<IconCard />} />
         <KpiCard label="expenses.kpi.unsynced" value={String(totals.unsynced)} tone="danger" icon={<IconDoc />} />
       </KpiRow>
 
@@ -183,8 +182,8 @@ export default function ExpensesPage() {
             <>
               <span className={styles.preview}>
                 {t('expenses.preview', {
-                  vat: shekel(preview.vat),
-                  total: shekel(preview.total),
+                  vat: money(preview.vat),
+                  total: money(preview.total),
                 })}
               </span>
               <Button variant="primary" type="submit" disabled={busy || !canSave}>

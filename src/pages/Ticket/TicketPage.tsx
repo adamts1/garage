@@ -1,5 +1,5 @@
 import {
-  assignableWorkers, COLUMNS, VAT, workerChip,
+  assignableWorkers, COLUMNS, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
 import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
@@ -12,10 +12,6 @@ import {
 } from '../../icons';
 import { printInvoice, printTicket, warnIfBlocked } from '../../lib/print';
 import { useTicketPage } from './useTicketPage';
-import { waMessage, waNumber } from './waMessage';
-
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export interface TicketPageProps {
   ticket: Ticket;
@@ -302,23 +298,23 @@ export default function TicketPage({
             <div className="sum">
               <div>
                 <span>{t('ticket.worksTotal')} <i className="sum-n">{works.length}</i></span>
-                <b>{shekel(totals.labour)}</b>
+                <b>{money(totals.labour)}</b>
               </div>
               <div>
                 <span>{t('ticket.partsTotal')} <i className="sum-n">{itemCount}</i></span>
-                <b>{shekel(totals.items)}</b>
+                <b>{money(totals.items)}</b>
               </div>
               <div className="sum-sub">
                 <span>{t('ticket.subtotal')}</span>
-                <b>{shekel(totals.labour + totals.items)}</b>
+                <b>{money(totals.labour + totals.items)}</b>
               </div>
               <div>
                 <span>{t('ticket.vat', { percent: Math.round(VAT * 100) })}</span>
-                <b>{shekel(totals.vat)}</b>
+                <b>{money(totals.vat)}</b>
               </div>
               <div className="grand">
                 <span>{t('ticket.grandTotal')}</span>
-                <b>{shekel(totals.total)}</b>
+                <b>{money(totals.total)}</b>
               </div>
             </div>
           </section>
@@ -402,7 +398,7 @@ export default function TicketPage({
               wa ? (
                 <a
                   className="btn whatsapp block"
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage(draft, totals.total, photos))}`}
+                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage({ ticket: draft, closed, total: totals.total, photos }))}`}
                   target="_blank"
                   rel="noreferrer"
                 >

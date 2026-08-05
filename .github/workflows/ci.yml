@@ -38,7 +38,7 @@ jobs:
       - run: npm run build
 
   mobile:
-    name: mobile — typecheck
+    name: mobile — typecheck + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -56,6 +56,10 @@ jobs:
       - run: npm ci
         working-directory: mobile
       - run: npm run typecheck
+        working-directory: mobile
+      # Includes lib/i18n.test.ts, which fails if a Hebrew string is written
+      # inline in a component instead of going through he.json.
+      - run: npm test
         working-directory: mobile
 
   migrations:

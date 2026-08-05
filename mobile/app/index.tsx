@@ -1,25 +1,32 @@
 /* The home screen. One list, two layouts:
 
-   - Phone: the list fills the screen; a card pushes the editor route and "+" pushes
-     the create route (app/ticket/[key].tsx, app/new.tsx).
-   - Tablet: master–detail. The list is a fixed-width left pane; the right pane shows
-     the selected ticket or the new-ticket form inline, so the list stays in view.
+   - Phone: the list fills the screen; a card pushes the editor route and "+"
+     pushes the create route (app/ticket/[key].tsx, app/new.tsx).
+   - Tablet: master–detail. The list is a fixed-width left pane; the right pane
+     shows the selected ticket or the new-ticket form inline, so the list stays
+     in view.
 
-   The editor and create form are the same components either way (TicketEditor /
-   TicketCreate) — only how they're reached differs. */
+   The editor and the create form are the same components either way — only how
+   they are reached differs. */
 
 import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useTicketsStore } from '../lib/TicketsProvider';
+import { useTranslation } from 'react-i18next';
+import SetupNotice from '../components/SetupNotice';
+import TicketCreate from '../components/tickets/TicketCreate';
+import TicketEditor from '../components/tickets/TicketEditor';
+import TicketList from '../components/tickets/TicketList';
 import { isConfigured } from '../lib/supabase';
-import { useIsTablet } from '../lib/useDeviceType';
-import TicketListPane from '../components/TicketListPane';
-import TicketEditor from '../components/TicketEditor';
-import TicketCreate from '../components/TicketCreate';
 import { C, s } from '../lib/theme';
+import { useTicketsStore } from '../lib/TicketsProvider';
+import { useIsTablet } from '../lib/useDeviceType';
+
+/** The width the list keeps on a tablet, leaving the rest to the detail pane. */
+const LIST_PANE_WIDTH = 340;
 
 export default function Home() {
+  const { t } = useTranslation();
   const isTablet = useIsTablet();
   const { loading } = useTicketsStore();
 
@@ -27,9 +34,9 @@ export default function Home() {
 
   if (loading) {
     return (
-      <View style={[s.screen, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[s.screen, s.centred]}>
         <ActivityIndicator size="large" color={C.ink} />
-        <Text style={[s.dim, { marginTop: 12 }]}>טוען קריאות…</Text>
+        <Text style={[s.dim, { marginTop: 12 }]}>{t('tickets.loading')}</Text>
       </View>
     );
   }
@@ -37,18 +44,17 @@ export default function Home() {
   return isTablet ? <TabletHome /> : <PhoneHome />;
 }
 
-/* ---------------- phone: list fills the screen, everything else is a route ---------------- */
+/* ---------------- phone: the list fills the screen, everything else is a route ---------------- */
+
 function PhoneHome() {
   const router = useRouter();
   return (
-    <TicketListPane
-      onSelect={(key) => router.push(`/ticket/${key}`)}
-      onNew={() => router.push('/new')}
-    />
+    <TicketList onSelect={(key) => router.push(`/ticket/${key}`)} onNew={() => router.push('/new')} />
   );
 }
 
-/* ---------------- tablet: list beside a detail pane ---------------- */
+/* ---------------- tablet: the list beside a detail pane ---------------- */
+
 type Selection = { mode: 'ticket'; key: string } | { mode: 'new' } | null;
 
 function TabletHome() {
@@ -57,16 +63,15 @@ function TabletHome() {
 
   return (
     <View style={{ flex: 1, flexDirection: 'row-reverse', backgroundColor: C.bg }}>
-      {/* list — fixed width on the right (RTL leading edge) */}
-      <View style={{ width: 340, borderLeftWidth: 1, borderLeftColor: C.line }}>
-        <TicketListPane
+      {/* the list — fixed width on the right (the RTL leading edge) */}
+      <View style={{ width: LIST_PANE_WIDTH, borderLeftWidth: 1, borderLeftColor: C.line }}>
+        <TicketList
           onSelect={(key) => setSelection({ mode: 'ticket', key })}
           onNew={() => setSelection({ mode: 'new' })}
           selectedKey={selectedKey}
         />
       </View>
 
-      {/* detail */}
       <View style={{ flex: 1 }}>
         {selection?.mode === 'new' ? (
           <TicketCreate
@@ -76,7 +81,7 @@ function TabletHome() {
           />
         ) : selection?.mode === 'ticket' ? (
           <TicketEditor
-            key={selection.key}   /* remount when the chosen ticket changes, so its draft resets */
+            key={selection.key} /* remount when the chosen ticket changes, so its draft resets */
             embedded
             ticketKey={selection.key}
             onClose={() => setSelection(null)}
@@ -90,32 +95,12 @@ function TabletHome() {
 }
 
 function DetailPlaceholder() {
+  const { t } = useTranslation();
   return (
-    <View style={[s.screen, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+    <View style={[s.screen, s.centred, { padding: 24 }]}>
       <Text style={{ fontSize: 40, marginBottom: 12 }}>🚗</Text>
-      <Text style={s.h2}>בחר קריאה מהרשימה</Text>
-      <Text style={[s.dim, { marginTop: 6, textAlign: 'center' }]}>
-        או הקש + כדי לפתוח כרטיס עבודה חדש
-      </Text>
-    </View>
-  );
-}
-
-function SetupNotice() {
-  return (
-    <View style={[s.screen, { padding: 24, justifyContent: 'center', gap: 12 }]}>
-      <Text style={s.h1}>חסרה הגדרת Supabase</Text>
-      <Text style={s.body}>
-        צור קובץ <Text style={{ fontWeight: '700' }}>mobile/.env</Text> לפי{' '}
-        <Text style={{ fontWeight: '700' }}>.env.example</Text>, עם הכתובת והמפתח של אותו פרויקט
-        Supabase שהאתר משתמש בו:
-      </Text>
-      <View style={[s.card, { backgroundColor: C.ink }]}>
-        <Text style={{ color: C.sand, fontFamily: 'Courier', fontSize: 12 }}>
-          EXPO_PUBLIC_SUPABASE_URL=…{'\n'}EXPO_PUBLIC_SUPABASE_ANON_KEY=…
-        </Text>
-      </View>
-      <Text style={s.dim}>אחרי השמירה יש להפעיל מחדש: npx expo start -c</Text>
+      <Text style={s.h2}>{t('tickets.detail.title')}</Text>
+      <Text style={[s.dim, { marginTop: 6, textAlign: 'center' }]}>{t('tickets.detail.hint')}</Text>
     </View>
   );
 }
