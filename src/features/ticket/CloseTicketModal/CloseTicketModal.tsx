@@ -1,3 +1,4 @@
+import { money } from '@garage/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
@@ -6,9 +7,6 @@ import type { ModalComponentProps } from '../../../components/Modal/types';
 import { IconCard, IconCheck } from '../../../icons';
 import { settleModal } from '../../../store/useModalResult';
 import styles from './CloseTicketModal.module.css';
-
-const shekel = (n: number) =>
-  n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₪';
 
 export interface CloseResult {
   paid: boolean;
@@ -107,7 +105,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
               <span className={styles.tick}><IconCheck /></span>
             </div>
             <h3>{t(method.paid ? 'close.successPaid' : 'close.successClosed')}</h3>
-            <p className={styles.amount}>{shekel(total)}</p>
+            <p className={styles.amount}>{money(total)}</p>
             <p className={styles.docLine}>
               {method.paid
                 ? t('close.paidWith', { method: t(method.label) })
@@ -167,7 +165,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 </div>
                 <div className={styles.total}>
                   <span className={styles.key}>{t('close.amountDue')}</span>
-                  <b>{shekel(total)}</b>
+                  <b>{money(total)}</b>
                 </div>
               </div>
 
@@ -210,7 +208,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
 
               <div className={styles.payAmount}>
                 <span>{t('close.amountToCollect')}</span>
-                <b>{shekel(total)}</b>
+                <b>{money(total)}</b>
               </div>
 
               {method.ref && (
@@ -245,7 +243,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 <dt>{t('close.method')}</dt><dd>{method.icon} {t(method.label)}</dd>
                 {reference && method.ref && (<><dt>{t(method.ref)}</dt><dd>{reference}</dd></>)}
                 <dt>{t('close.documentToIssue')}</dt><dd>{doc}</dd>
-                <dt>{t('close.total')}</dt><dd><b className={styles.big}>{shekel(total)}</b></dd>
+                <dt>{t('close.total')}</dt><dd><b className={styles.big}>{money(total)}</b></dd>
               </dl>
 
               <div className={`${styles.info}${method.paid ? ` ${styles.ok}` : ''}`}>
@@ -275,7 +273,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
             {state === 'charging' ? (
               <><span className={styles.spinner} /> {t('close.charging')}</>
             ) : step === 3 ? (
-              method?.paid ? t('close.collectAmount', { amount: shekel(total) }) : t('close.closeTicket')
+              method?.paid ? t('close.collectAmount', { amount: money(total) }) : t('close.closeTicket')
             ) : (
               t('close.next')
             )}

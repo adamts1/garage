@@ -1,3 +1,4 @@
+import { money, shekelRounded } from '@garage/shared';
 import type { Invoice } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
@@ -11,9 +12,6 @@ import InvoiceDetail from './InvoiceDetail';
 import styles from './InvoicesPage.module.css';
 import { useInvoices, type DocTypeFilter, type StatusFilter } from './useInvoices';
 
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const shekelRound = (n: number) => '₪' + Math.round(n).toLocaleString('he-IL');
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('he-IL') : '-');
 
 export interface InvoicesPageProps {
@@ -69,7 +67,7 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
       header: 'invoices.fields.total',
       width: 120,
       sortValue: (i) => i.total,
-      render: (i) => <strong>{shekel(i.total)}</strong>,
+      render: (i) => <strong>{money(i.total)}</strong>,
     },
     {
       key: 'status',
@@ -118,7 +116,7 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
           footer={
             <span className={styles.footRow}>
               <span>{t(inv.filtered ? 'invoices.netFiltered' : 'invoices.net')}</span>
-              <strong>{shekel(inv.shownNet)}</strong>
+              <strong>{money(inv.shownNet)}</strong>
               <span className={styles.muted}>
                 {t('invoices.showing', { shown: inv.shown.length, total: inv.invoices.length })}
               </span>
@@ -137,7 +135,7 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
       <KpiRow>
         <KpiCard
           label="invoices.kpi.issued"
-          value={shekelRound(inv.totals.issued)}
+          value={shekelRounded(inv.totals.issued)}
           sub="invoices.kpi.issuedSub"
           subValues={{ count: inv.totals.issuedCount }}
           tone="navy"

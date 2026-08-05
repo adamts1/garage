@@ -1,4 +1,5 @@
 import {
+  CUSTOMER_KINDS, PRIVATE_CUSTOMER,
   createCustomer, deleteCustomer, idNumberConflict, listCustomers, listVehicles,
   subscribeToTable, updateCustomer,
   type Customer, type Vehicle,
@@ -8,12 +9,13 @@ import { showError, showErrorKey, showSuccess, useAppDispatch, useConfirm } from
 
 export type CustomerDraft = Omit<Customer, 'id'>;
 
-/** The two kinds a garage bills. Stored as the Hebrew word itself, which is why
- *  they are not translation keys: the value is in the database. */
-export const CUSTOMER_KINDS = ['פרטי', 'עסקי'] as const;
+/* Re-exported so this page's own imports do not have to know where the value
+   lives; the definition is in @garage/shared, beside the rest of the stored
+   vocabulary the phone app shares. */
+export { CUSTOMER_KINDS };
 
 export const blankCustomer: CustomerDraft = {
-  name: '', phone: '', email: '', address: '', city: '', kind: 'פרטי', id_number: '',
+  name: '', phone: '', email: '', address: '', city: '', kind: PRIVATE_CUSTOMER, id_number: '',
 };
 
 export const toDraft = (c: Customer): CustomerDraft => ({

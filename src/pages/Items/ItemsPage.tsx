@@ -1,4 +1,4 @@
-import { toCatalogCode, type Item } from '@garage/shared';
+import { shekel, toCatalogCode, type Item } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -9,7 +9,6 @@ import { CellInput, RowActions, Table, type Column } from '../../components/Tabl
 import styles from './ItemsPage.module.css';
 import { blankItem, toDraft, useItems, type ItemDraft } from './useItems';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 export default function ItemsPage() {
   const { t } = useTranslation();

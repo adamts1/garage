@@ -147,6 +147,47 @@ runtime precisely because nothing else does.
 Saving is optimistic: the screen updates immediately, then the write goes out. If it
 fails, the error shows on the list and the state resyncs from the server.
 
+## Code layout
+
+```
+app/                 routes only — expo-router files, each a thin wrapper
+components/
+  ui/                generic: knows how the app looks, nothing about what it is for
+  tickets/           the product: tickets, works, parts, customers, vehicles
+    tabs/            one file per tab of the ticket editor
+  auth/              login, the auth gate, the account sheet
+lib/                 client, session, store, theme, i18n, formatting
+```
+
+**The one rule:** nothing in `components/ui/` may import from `components/tickets/`,
+`components/auth/` or `@garage/shared`. If a component needs to know what a ticket or
+a work order is, it is a product component and belongs beside the screen that uses it.
+That rule is what keeps `ui/` reusable and the domain folders readable. (`ui/` does
+reach for `lib/i18n` — a `Sheet` has a close button, and those words are the same
+everywhere.)
+
+Logic worth being sure about is pulled out of its component and tested:
+`newTicket.ts` (what a saved ticket contains) and `useTicketPhotos.ts` (the upload
+flow). What the *customer* receives is built by `@garage/shared`'s `waMessage`, so
+the counter and the phone send one message rather than two.
+
+### Text
+
+Every string the app shows lives in `lib/locales/he.json` and is reached through
+`t('a.b.c')` — same library and same call as the web app in `../src/i18n`. The locale
+file is this app's own: the phone shows a subset of the product with its own wording,
+and strings that must agree across the two (status titles, priorities) already come
+from `@garage/shared`.
+
+`lib/i18n.test.ts` guards it three ways: every key used in the source exists, the check
+cannot pass vacuously, and no Hebrew literal is left in the code — with no exemptions.
+
+Hebrew that is **data rather than copy** lives in `@garage/shared` instead: a ticket's
+flags and default title (`intake.ts`), the customer kinds (`identity.ts`), and the
+WhatsApp message (`waMessage.ts`). Those are written into rows the web board reads back,
+or sent to a customer — so translating a label must never change them, and the two apps
+must never hold separate copies.
+
 ## How it relates to the web app
 
 The data layer and types live in `../packages/shared` and are imported by both apps —
@@ -155,7 +196,7 @@ order to reach outside `mobile/` for that package, and why mobile is deliberatel
 an npm workspace.
 
 Auth is shared too: `@garage/shared`'s `resolveAuth` decides what a session means, so
-web and mobile cannot disagree. `components/AuthGate.tsx` renders the four states.
+web and mobile cannot disagree. `components/auth/AuthGate.tsx` renders the four states.
 The native build hands the shared package its own Supabase client (`app/_layout.tsx`),
 because that one carries the AsyncStorage session config the browser does not need.
 

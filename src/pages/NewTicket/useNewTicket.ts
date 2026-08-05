@@ -1,7 +1,8 @@
 import {
-  EPICS, TYPES, idNumberConflict, isUsablePhone, listCustomers, listVehicles, matchCustomers,
+  EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, idNumberConflict,
+  intakeFlags, isUsablePhone, listCustomers, listVehicles, matchCustomers, nextTicketNumbers,
   phoneConflict,
-  subscribeToTable, worksSummary,
+  subscribeToTable, subtasksFromWorks, titleFromWorks, worksSummary,
   type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
@@ -263,30 +264,29 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     setAttempted(true);
     if (!canSave) return false;
 
-    const maxKey = tickets.reduce((max, t) => Math.max(max, Number(t.k.split('-')[1]) || 0), 0);
-    const maxJob = tickets.reduce((max, t) => Math.max(max, Number(t.job.split('-')[1]) || 0), 0);
+    const { key, job } = nextTicketNumbers(tickets);
 
     const ticket: Ticket = {
-      k: `GAR-${maxKey + 1}`,
+      k: key,
       st: 'todo',
       type: form.type,
       epic: form.epic,
       prio: form.priority,
       pts: form.points,
       who: form.technician,
-      job: `W-${maxJob + 1}`,
+      job,
       // The works are what the ticket is about.
-      title: works.length ? works.map((w) => w.name).join(' + ') : 'כרטיס חדש',
-      plate: form.licensePlate || '-',
-      car: [form.manufacturer, form.model, form.year].filter(Boolean).join(' ') || '-',
-      customer: form.customerName || 'לקוח מזדמן',
+      title: titleFromWorks(works),
+      plate: form.licensePlate || EMPTY_FIELD,
+      car: carLabel(form),
+      customer: form.customerName,
       amount: totals.total,
       done: 0,
       // Each chosen work becomes a subtask, so the card's progress bar tracks
       // real work rather than a guess.
-      subtasks: works.map((w) => w.name),
+      subtasks: subtasksFromWorks(works),
       due: toDueDate(form.targetDate),
-      flags: [...(form.keyReceived ? ['מפתח התקבל'] : []), 'חדש'],
+      flags: intakeFlags(form.keyReceived),
       works,
       phone: form.customerPhone,
       // Both in transit to the customer record rather than to a ticket column:
@@ -294,7 +294,7 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
       customerId: form.customerId,
       idNumber: form.idNumber,
       email: form.email,
-      address: [form.address, form.city].filter(Boolean).join(', '),
+      address: addressLabel(form),
       km: form.km,
       year: form.year,
       // In transit to the vehicles table, so the next ticket for this customer

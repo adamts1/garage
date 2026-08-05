@@ -1,4 +1,4 @@
-import { toCatalogCode, type WorkDef } from '@garage/shared';
+import { shekel, toCatalogCode, type WorkDef } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -9,7 +9,6 @@ import { CellInput, RowActions, Table, type Column } from '../../components/Tabl
 import styles from './WorksPage.module.css';
 import { blankWorkDef, toDraft, useWorks, type WorkDefDraft } from './useWorks';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 /* The garage's catalog of works — the definitions a ticket copies from, not the
    works on any ticket. Editing a price here changes what the NEXT ticket picks

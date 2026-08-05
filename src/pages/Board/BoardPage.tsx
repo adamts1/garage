@@ -1,6 +1,5 @@
 import {
-  COLUMNS, assignableWorkers, workerChip,
-  type Status, type Ticket, type Worker, type WorkerMap,
+  assignableWorkers, COLUMNS, shekel, workerChip, type Status, type Ticket, type Worker, type WorkerMap,
 } from '@garage/shared';
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +21,6 @@ export interface BoardPageProps {
   onOpenTicket: (k: string) => void;
 }
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 
 const PRIO_RANK: Record<string, number> = { urgent: 0, high: 1, med: 2, low: 3 };
 
@@ -70,7 +68,7 @@ export default function BoardPage({
         const epic = epicChip(ticket.epic);
         return (
           <>
-            <div className={styles.tblTitle}>{ticket.title}</div>
+            <div className={styles.tblTitle}>{ticket.title || t('common.untitled')}</div>
             <span className={styles.epic} style={{ background: epic.bg, color: epic.c }}>
               {epic.t}
             </span>

@@ -1,4 +1,4 @@
-import { toCatalogCode, type PartDef } from '@garage/shared';
+import { shekel, toCatalogCode, type PartDef } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -10,7 +10,6 @@ import { settleModal } from '../../store/useModalResult';
 import { useCatalog } from '../catalog/CatalogProvider';
 import styles from './pickers.module.css';
 
-const shekel = (n: number) => '₪' + n.toLocaleString('he-IL');
 const norm = (s: string) => s.trim().toLowerCase();
 
 /** Reached through `usePickPart()`. Resolves the chosen part, or null. */

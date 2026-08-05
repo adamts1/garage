@@ -1,4 +1,4 @@
-import type { Customer } from '@garage/shared';
+import { customerKind, type Customer } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -13,6 +13,10 @@ import {
 
 export default function CustomersPage() {
   const { t } = useTranslation();
+
+  /* A customer's kind is stored as a code; this is where it becomes a word.
+     The code is shared with the phone app, the Hebrew for it is this app's. */
+  const kindLabel = (kind: string) => t(`customers.kinds.${customerKind(kind)}`);
   const { rows, vehiclesByCustomer, create, update, remove } = useCustomers();
 
   /* One open panel at a time. Several would turn the table into a list of
@@ -83,14 +87,18 @@ export default function CustomersPage() {
     {
       key: 'kind',
       header: 'customers.fields.kind',
-      sortValue: (c) => c.kind,
+      // Sorted by the label, not the code: 'business' before 'private' would put
+      // the rows in an order that means nothing to anyone reading Hebrew.
+      sortValue: (c) => kindLabel(c.kind),
       render: (c) =>
         editingId === c.id ? (
           <CellSelect {...editProps('kind')}>
-            {CUSTOMER_KINDS.map((k) => <option key={k}>{k}</option>)}
+            {CUSTOMER_KINDS.map((k) => (
+              <option key={k} value={k}>{kindLabel(k)}</option>
+            ))}
           </CellSelect>
         ) : (
-          <span className={styles.kind}>{c.kind}</span>
+          <span className={styles.kind}>{kindLabel(c.kind)}</span>
         ),
     },
     {
@@ -178,7 +186,9 @@ export default function CustomersPage() {
           <TextField label="customers.fields.id_number" inputMode="numeric" {...draftField('id_number')} />
           <TextField label="customers.fields.city" {...draftField('city')} />
           <SelectField label="customers.fields.kind" {...draftField('kind')}>
-            {CUSTOMER_KINDS.map((k) => <option key={k}>{k}</option>)}
+            {CUSTOMER_KINDS.map((k) => (
+              <option key={k} value={k}>{kindLabel(k)}</option>
+            ))}
           </SelectField>
         </CrudForm>
       )}

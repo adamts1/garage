@@ -1,5 +1,5 @@
 import {
-  isGarageAdmin, toCatalogCode, workTotal, type PartRow, type TicketWork,
+  isGarageAdmin, money, toCatalogCode, workTotal, type PartRow, type TicketWork,
 } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -12,8 +12,6 @@ import { useWorksStep } from './useWorksStep';
 
 /* Same format as the summary rail — a row reading ₪150 next to a total reading
    ₪150.00 looks like a bug. */
-const shekel = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /* The note, typed locally and committed when you leave the field.
  *
@@ -132,7 +130,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
             onChange={(e) => step.patchWork(w.uid, { labor: Number(e.target.value) || 0 })}
           />
         ) : (
-          <span className={styles.locked} title={t('works.adminOnly')}>{shekel(w.labor)}</span>
+          <span className={styles.locked} title={t('works.adminOnly')}>{money(w.labor)}</span>
         ),
     },
     {
@@ -146,7 +144,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       key: 'total',
       header: 'works.fields.total',
       width: 96,
-      render: (w) => <strong>{shekel(workTotal(w))}</strong>,
+      render: (w) => <strong>{money(workTotal(w))}</strong>,
     },
     {
       key: 'actions',
@@ -203,7 +201,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       key: 'total',
       header: 'works.fields.total',
       width: 96,
-      render: (i) => <strong>{shekel(i.qty * i.price)}</strong>,
+      render: (i) => <strong>{money(i.qty * i.price)}</strong>,
     },
     {
       key: 'actions',
@@ -280,7 +278,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                    subtotal — not to the summary's labour-only figure. */
                 footer={
                   <span className={styles.foot}>
-                    {t('works.worksAndParts')} <strong>{shekel(worksTotal)}</strong>
+                    {t('works.worksAndParts')} <strong>{money(worksTotal)}</strong>
                   </span>
                 }
               />
@@ -336,7 +334,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                    figure is every work's parts together. */
                 footer={
                   <span className={styles.foot}>
-                    {t('works.partsOfThisWork')} <strong>{shekel(partsTotal)}</strong>
+                    {t('works.partsOfThisWork')} <strong>{money(partsTotal)}</strong>
                   </span>
                 }
               />

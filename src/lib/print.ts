@@ -10,12 +10,9 @@
    version of this inline and now uses it too. */
 
 import {
-  COLUMNS, PRIORITIES, VAT, garageName, partsTotal,
-  type Invoice, type Ticket,
+  COLUMNS, garageName, money, partsTotal, PRIORITIES, VAT, type Invoice, type Ticket,
 } from '@garage/shared';
 
-const money = (n: number) =>
-  '₪' + n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
