@@ -232,8 +232,13 @@ export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth
 
 /* Supabase rejects with a PostgrestError — a plain object with a `message`,
    not an Error instance. `String(e)` on one yields "[object Object]", which is
-   what reaches Sentry and, in the app, the operator on the phone. */
-const errorMessage = (e: unknown): string => {
+   what reaches Sentry and, in the app, the operator on the phone.
+
+   Exported because every catch block in both apps faces the same shape, and
+   each one that reimplemented the check got it slightly wrong or not at all:
+   the toast that reports a failed save was printing "[object Object]" for
+   every database error it was handed. */
+export const errorMessage = (e: unknown): string => {
   if (e instanceof Error) return e.message;
   if (typeof e === 'object' && e !== null && 'message' in e) {
     return String((e as { message: unknown }).message);

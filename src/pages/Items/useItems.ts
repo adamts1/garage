@@ -1,4 +1,6 @@
-import { createItem, deleteItem, listItems, subscribeToTable, updateItem, type Item } from '@garage/shared';
+import {
+  createItem, deleteItem, listItems, subscribeToTable, toCatalogCode, updateItem, type Item,
+} from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useConfirm } from '../../store';
 
@@ -36,9 +38,15 @@ export function useItems() {
     );
   }, [rows, query]);
 
+  /* Uppercase Latin, whoever is calling. The screens normalise as you type;
+     this is the same rule at the write, so a code cannot arrive in Hebrew from
+     a caller that forgot — the pickers used to invent exactly that. */
+  const clean = (draft: ItemDraft): ItemDraft => ({ ...draft, sku: toCatalogCode(draft.sku) });
+
   const create = useCallback(
-    async (draft: ItemDraft) => {
-      if (!draft.sku.trim() || !draft.name.trim()) return false;
+    async (raw: ItemDraft) => {
+      const draft = clean(raw);
+      if (!draft.sku || !draft.name.trim()) return false;
       try {
         await createItem(draft);
         dispatch(showSuccess('items.created'));
@@ -53,7 +61,9 @@ export function useItems() {
   );
 
   const update = useCallback(
-    async (id: string, draft: ItemDraft) => {
+    async (id: string, raw: ItemDraft) => {
+      const draft = clean(raw);
+      if (!draft.sku) return false;
       try {
         await updateItem(id, draft);
         dispatch(showSuccess('items.updated'));

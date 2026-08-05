@@ -1,4 +1,4 @@
-import type { WorkDef } from '@garage/shared';
+import { toCatalogCode, type WorkDef } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -25,10 +25,16 @@ export default function WorksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<WorkDefDraft>(blankWorkDef);
 
+  /* The code is uppercase Latin and is normalised under the cursor: lowercase
+     rises, Hebrew never appears. The name beside it is free text — it is the
+     half a customer reads. */
   const text = (key: 'code' | 'name') => ({
     value: draft[key],
     onChange: (e: { target: { value: string } }) =>
-      setDraft((prev) => ({ ...prev, [key]: e.target.value })),
+      setDraft((prev) => ({
+        ...prev,
+        [key]: key === 'code' ? toCatalogCode(e.target.value) : e.target.value,
+      })),
   });
 
   const num = (key: 'labor' | 'hours') => ({
@@ -43,7 +49,10 @@ export default function WorksPage() {
     value: edit[key],
     'aria-label': t(`works.fields.${key}`),
     onChange: (e: { target: { value: string } }) =>
-      setEdit((prev) => ({ ...prev, [key]: e.target.value })),
+      setEdit((prev) => ({
+        ...prev,
+        [key]: key === 'code' ? toCatalogCode(e.target.value) : e.target.value,
+      })),
   });
 
   const editNum = (key: 'labor' | 'hours') => ({
@@ -184,7 +193,13 @@ export default function WorksPage() {
             </Button>
           }
         >
-          <TextField label="works.fields.code" required autoFocus {...text('code')} />
+          <TextField
+            label="works.fields.code"
+            required
+            autoFocus
+            hint="works.codeFormat"
+            {...text('code')}
+          />
           <TextField label="works.fields.name" required {...text('name')} />
           <TextField label="works.fields.labor" {...num('labor')} />
           <TextField label="works.fields.hours" {...num('hours')} />

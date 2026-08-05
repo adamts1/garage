@@ -12,7 +12,10 @@ const updateWorkDef = vi.fn();
 const deleteWorkDef = vi.fn();
 const subscribeToTable = vi.fn(() => () => {});
 
-vi.mock('@garage/shared', () => ({
+/* The CRUD calls are stubs; toCatalogCode is the real one — it decides what is
+   written, so a fake would be testing the fake. */
+vi.mock('@garage/shared', async (importActual) => ({
+  ...(await importActual<typeof import('@garage/shared')>()),
   listWorkDefs, createWorkDef, updateWorkDef, deleteWorkDef, subscribeToTable,
 }));
 

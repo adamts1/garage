@@ -25,6 +25,9 @@ vi.mock('@garage/shared', async (importActual) => {
     listItems: vi.fn(async () => []),
     listInvoices: vi.fn(async () => []),
     subscribeToInvoices: vi.fn(() => () => {}),
+    listCustomers: vi.fn(async () => []),
+    updateCustomer: vi.fn(async () => {}),
+    subscribeToTable: vi.fn(() => () => {}),
   };
 });
 
@@ -76,6 +79,11 @@ const renderPage = async (t: Ticket = ticket()) => {
 
   const picker = screen.getByLabelText('שיוך העובד האחראי') as HTMLSelectElement;
 
+  /** Nothing on this page writes until somebody presses save. */
+  const pressSave = async () => {
+    await act(async () => { screen.getByText('שמור').click(); });
+  };
+
   /** The ticket as it stands after the picker's write — setTickets is handed an
    *  updater, so this applies it the way useTickets would. */
   const written = (): Ticket => {
@@ -84,7 +92,7 @@ const renderPage = async (t: Ticket = ticket()) => {
     return update([t])[0];
   };
 
-  return { picker, setTickets, written };
+  return { picker, setTickets, written, pressSave };
 };
 
 afterEach(cleanup);
@@ -97,18 +105,29 @@ describe('assigning a ticket', () => {
     expect(options).toEqual(['ללא עובד אחראי', 'דני כהן', 'נועה שמש']);
   });
 
-  it('writes the worker code, not the name', async () => {
-    const { picker, written } = await renderPage();
+  it('changes nothing until the ticket is saved', async () => {
+    const { picker, setTickets } = await renderPage();
     await act(async () => { fireEvent.change(picker, { target: { value: 'noa' } }); });
+
+    // Picked, shown, and not yet written: the page holds a draft now.
+    expect(picker.value).toBe('noa');
+    expect(setTickets).not.toHaveBeenCalled();
+  });
+
+  it('writes the worker code, not the name', async () => {
+    const { picker, written, pressSave } = await renderPage();
+    await act(async () => { fireEvent.change(picker, { target: { value: 'noa' } }); });
+    await pressSave();
 
     expect(written().who).toBe('noa');
   });
 
   it('takes the ticket off everybody as null, never as an empty code', async () => {
-    const { picker, written } = await renderPage(ticket({ who: 'dani' }));
+    const { picker, written, pressSave } = await renderPage(ticket({ who: 'dani' }));
     expect(picker.value).toBe('dani');
 
     await act(async () => { fireEvent.change(picker, { target: { value: '' } }); });
+    await pressSave();
 
     expect(written().who).toBeNull();
   });

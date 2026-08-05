@@ -1,5 +1,6 @@
 import {
-  EPICS, TYPES, isUsablePhone, listCustomers, listVehicles, matchCustomers, phoneConflict,
+  EPICS, TYPES, idNumberConflict, isUsablePhone, listCustomers, listVehicles, matchCustomers,
+  phoneConflict,
   subscribeToTable, worksSummary,
   type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
@@ -54,7 +55,19 @@ export const emptyForm: TicketForm = {
   points: 3,
 };
 
-export const YEARS = Array.from({ length: 22 }, (_, i) => 2026 - i);
+/* Model years, newest first. It was a 22-long window ending in 2005, which is
+   not how long cars last: a garage sees 1990s Transits and 1980s pickups, and
+   an advisor who cannot pick the year types nothing, which is what makes a
+   service history unreadable later.
+
+   Counted from the current year rather than from a literal, so the list does
+   not need editing every January. */
+export const FIRST_MODEL_YEAR = 1985;
+
+export const YEARS = (() => {
+  const latest = new Date().getFullYear();
+  return Array.from({ length: latest - FIRST_MODEL_YEAR + 1 }, (_, i) => latest - i);
+})();
 
 /** Editing one of these means the form no longer describes the customer that
  *  was picked out of the search box, so the picked id is dropped. */
@@ -220,6 +233,21 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     [customers, form.customerPhone, form.customerName, form.customerId],
   );
 
+  /* The ת״ז is not the identity, but it is unique per garage, and the intake
+     form is where a mistyped one is born. create_ticket refuses to move a
+     number off the customer who holds it — see 20260802020000, which chose that
+     over letting a constraint take the whole ticket down — so without this the
+     number is simply, silently, not saved. The migration says as much: "the
+     mismatch is the intake form's problem to raise". This raises it. */
+  const idConflict: PhoneConflict<Customer> | null = useMemo(
+    () => idNumberConflict(customers, {
+      idNumber: form.idNumber,
+      name: form.customerName,
+      ownerId: form.customerId,
+    }),
+    [customers, form.idNumber, form.customerName, form.customerId],
+  );
+
   /** "This is the same customer" — adopt the record that holds the number, the
    *  same way picking it out of the search box would. */
   const adoptConflict = useCallback(() => {
@@ -287,6 +315,6 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     form, set, works, setWorks,
     matches, showMatches, setShowMatches,
     vehicleChoices, pickCustomer, pickVehicle,
-    totals, canSave, missing, invalid, touch, conflict, adoptConflict, submit,
+    totals, canSave, missing, invalid, touch, conflict, idConflict, adoptConflict, submit,
   };
 }

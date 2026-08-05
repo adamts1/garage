@@ -1,4 +1,4 @@
-import type { Item } from '@garage/shared';
+import { toCatalogCode, type Item } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -20,10 +20,16 @@ export default function ItemsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<ItemDraft>(blankItem);
 
+  /* The code is uppercase Latin and is normalised under the cursor: lowercase
+     rises, Hebrew never appears. The name beside it is free text — it is the
+     half a customer reads. */
   const text = (key: 'sku' | 'name') => ({
     value: draft[key],
     onChange: (e: { target: { value: string } }) =>
-      setDraft((prev) => ({ ...prev, [key]: e.target.value })),
+      setDraft((prev) => ({
+        ...prev,
+        [key]: key === 'sku' ? toCatalogCode(e.target.value) : e.target.value,
+      })),
   });
 
   const num = (key: 'price' | 'stock') => ({
@@ -38,7 +44,10 @@ export default function ItemsPage() {
     value: edit[key],
     'aria-label': t(`items.fields.${key}`),
     onChange: (e: { target: { value: string } }) =>
-      setEdit((prev) => ({ ...prev, [key]: e.target.value })),
+      setEdit((prev) => ({
+        ...prev,
+        [key]: key === 'sku' ? toCatalogCode(e.target.value) : e.target.value,
+      })),
   });
 
   const editNum = (key: 'price' | 'stock') => ({
@@ -167,7 +176,13 @@ export default function ItemsPage() {
             </Button>
           }
         >
-          <TextField label="items.fields.sku" required autoFocus {...text('sku')} />
+          <TextField
+            label="items.fields.sku"
+            required
+            autoFocus
+            hint="works.codeFormat"
+            {...text('sku')}
+          />
           <TextField label="items.fields.name" required {...text('name')} />
           <TextField label="items.fields.price" {...num('price')} />
           <TextField label="items.fields.stock" {...num('stock')} />

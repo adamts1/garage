@@ -30,6 +30,9 @@ const ticket: Ticket = {
   plate: '12-345-67', car: 'מאזדה 3', customer: 'יוסי לוי',
   amount: 590, done: 1, subtasks: ['פירוק', 'החלפה'], due: '15/08/2026', flags: [],
   phone: '050-1234567',
+  year: '1998',
+  km: '180000',
+  vehicleCode: 'MZ3-2005',
   works: [{
     uid: 'w1', code: 'BRK-01', name: 'החלפת רפידות', labor: 300,
     items: [{ sku: 'P-1', name: 'רפידות קדמיות', qty: 2, price: 100 }],
@@ -47,6 +50,18 @@ describe('printTicket', () => {
     expect(html).toContain('12-345-67');
     expect(html).toContain('החלפת רפידות');
     expect(html).toContain('רפידות קדמיות');
+  });
+
+  /* The one field on the intake form actually labelled "קוד". It is a column on
+     tickets and was written from the day the form existed — but nothing read it
+     back, so it never reached the sheet the garage looks it up on. */
+  it('prints the vehicle code, and the work and part codes', () => {
+    printTicket(ticket, totals);
+    const html = doc();
+    expect(html).toContain('קוד רכב');
+    expect(html).toContain('MZ3-2005');
+    expect(html).toContain('BRK-01');
+    expect(html).toContain('P-1');
   });
 
   it('prints the totals it was handed, not ones it recomputed', () => {

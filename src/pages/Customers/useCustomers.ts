@@ -1,10 +1,10 @@
 import {
-  createCustomer, deleteCustomer, listCustomers, listVehicles, subscribeToTable,
-  updateCustomer,
+  createCustomer, deleteCustomer, idNumberConflict, listCustomers, listVehicles,
+  subscribeToTable, updateCustomer,
   type Customer, type Vehicle,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { showError, showSuccess, useAppDispatch, useConfirm } from '../../store';
+import { showError, showErrorKey, showSuccess, useAppDispatch, useConfirm } from '../../store';
 
 export type CustomerDraft = Omit<Customer, 'id'>;
 
@@ -65,9 +65,30 @@ export function useCustomers() {
     return map;
   }, [vehicles]);
 
+  /* A ת״ז is unique per garage — `customers_garage_id_number_key`. Left to the
+     database, a second holder comes back as a constraint name, which says
+     nothing about which customer to go and look at. Caught here, it names them.
+
+     The list this checks is the one on screen, and it is kept live by the
+     subscription above; the database still has the last word, and showError
+     turns that constraint into a sentence if this is ever raced. */
+  const idTaken = useCallback(
+    (draft: CustomerDraft, ownerId?: string) => {
+      const clash = idNumberConflict(rows, {
+        idNumber: draft.id_number ?? '',
+        name: draft.name,
+        ownerId,
+      });
+      if (clash) dispatch(showErrorKey('customers.idTaken', { name: clash.customer.name }));
+      return Boolean(clash);
+    },
+    [dispatch, rows],
+  );
+
   const create = useCallback(
     async (draft: CustomerDraft) => {
       if (!draft.name.trim()) return false;
+      if (idTaken(draft)) return false;
       try {
         await createCustomer(draft);
         dispatch(showSuccess('customers.created'));
@@ -78,11 +99,12 @@ export function useCustomers() {
         return false;
       }
     },
-    [dispatch, load],
+    [dispatch, idTaken, load],
   );
 
   const update = useCallback(
     async (id: string, draft: CustomerDraft) => {
+      if (idTaken(draft, id)) return false;
       try {
         await updateCustomer(id, draft);
         dispatch(showSuccess('customers.updated'));
@@ -93,7 +115,7 @@ export function useCustomers() {
         return false;
       }
     },
-    [dispatch, load],
+    [dispatch, idTaken, load],
   );
 
   const remove = useCallback(

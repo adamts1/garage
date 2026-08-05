@@ -1,5 +1,5 @@
 import {
-  createWorkDef, deleteWorkDef, listWorkDefs, subscribeToTable, updateWorkDef,
+  createWorkDef, deleteWorkDef, listWorkDefs, subscribeToTable, toCatalogCode, updateWorkDef,
   type WorkDef,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -58,9 +58,15 @@ export function useWorks() {
     [dispatch],
   );
 
+  /* Uppercase Latin, whoever is calling. The screens normalise as you type;
+     this is the same rule at the write, so a code cannot arrive in Hebrew from
+     a caller that forgot — the pickers used to invent exactly that. */
+  const clean = (draft: WorkDefDraft): WorkDefDraft => ({ ...draft, code: toCatalogCode(draft.code) });
+
   const create = useCallback(
-    async (draft: WorkDefDraft) => {
-      if (!draft.code.trim() || !draft.name.trim()) return false;
+    async (raw: WorkDefDraft) => {
+      const draft = clean(raw);
+      if (!draft.code || !draft.name.trim()) return false;
       try {
         await createWorkDef(draft);
         dispatch(showSuccess('works.created'));
@@ -74,7 +80,9 @@ export function useWorks() {
   );
 
   const update = useCallback(
-    async (id: string, draft: WorkDefDraft) => {
+    async (id: string, raw: WorkDefDraft) => {
+      const draft = clean(raw);
+      if (!draft.code) return false;
       try {
         await updateWorkDef(id, draft);
         dispatch(showSuccess('works.updated'));

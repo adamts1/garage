@@ -164,7 +164,17 @@ export default function NewTicketPage({
           <div className={styles.row3}>
             <TextField dense label="customers.fields.name" {...field('customerName')} {...required('customerName')} />
             <TextField dense label="customers.fields.phone" type="tel" {...field('customerPhone')} {...required('customerPhone')} />
-            <TextField dense label="customers.fields.id_number" inputMode="numeric" {...field('idNumber')} />
+            <TextField
+              dense
+              label="customers.fields.id_number"
+              inputMode="numeric"
+              error={
+                form.idConflict
+                  ? t('newTicket.idTaken', { name: form.idConflict.customer.name })
+                  : undefined
+              }
+              {...field('idNumber')}
+            />
           </div>
 
           {/* The number is already on file. Said out loud rather than resolved

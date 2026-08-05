@@ -1,4 +1,4 @@
-import type { PartDef } from '@garage/shared';
+import { toCatalogCode, type PartDef } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -43,16 +43,20 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
    *  else is a name. */
   const startCreate = (typed: string) => {
     const looksLikeSku = /^[A-Za-z0-9\-_]+$/.test(typed);
-    setSku(looksLikeSku ? typed.toUpperCase() : '');
+    setSku(looksLikeSku ? toCatalogCode(typed) : '');
     setName(looksLikeSku ? '' : typed);
     setPrice('');
     setMode('create');
   };
 
+  /* Uppercase Latin, like a work's code — and asked for rather than derived
+     from the name, which for a Hebrew part produced a Hebrew מק״ט. */
+  const cleanSku = toCatalogCode(sku);
+
   const submit = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !cleanSku) return;
     const part: PartDef = {
-      sku: (sku.trim() || name.trim().slice(0, 6)).toUpperCase(),
+      sku: cleanSku,
       name: name.trim(),
       price: Number(price) || 0,
     };
@@ -97,14 +101,20 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
       actions={
         <>
           <Button onClick={() => setMode('search')}>→ {t('picker.backToSearch')}</Button>
-          <Button variant="primary" disabled={!name.trim()} onClick={submit}>
+          <Button variant="primary" disabled={!name.trim() || !cleanSku} onClick={submit}>
             {t('picker.part.submit')}
           </Button>
         </>
       }
     >
       <div className={styles.form}>
-        <TextField label="items.fields.sku" value={sku} onChange={(e) => setSku(e.target.value)} />
+        <TextField
+          label="items.fields.sku"
+          required
+          hint="works.codeFormat"
+          value={sku}
+          onChange={(e) => setSku(toCatalogCode(e.target.value))}
+        />
         <TextField
           label="items.fields.name"
           required
