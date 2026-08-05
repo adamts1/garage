@@ -318,7 +318,10 @@
       "status": "סטטוס",
       "payment": "תשלום",
       "document": "מסמך"
-    }
+    },
+    "assignWorker": "שיוך העובד האחראי",
+    "unassigned": "ללא עובד אחראי",
+    "workerRetired": "{{name}} (הושבת)"
   },
   "login": {
     "brand": "מוסך",
@@ -415,8 +418,11 @@
       "km": "קילומטר",
       "vehicleCode": "קוד",
       "keyReceived": "מפתח הרכב התקבל",
-      "details": "פרטים"
-    }
+      "details": "פרטים",
+      "technician": "עובד אחראי"
+    },
+    "unassigned": "ללא עובד אחראי",
+    "technicianHint": "אפשר להקצות עכשיו, או מאוחר יותר מתוך הכרטיס"
   },
   "board": {
     "newTicket": "הוסף כרטיס",
@@ -630,7 +636,9 @@
       "initials": "ראשי תיבות",
       "color": "צבע",
       "status": "סטטוס"
-    }
+    },
+    "you": "אתה",
+    "roleSelfLocked": "אי אפשר לשנות את התפקיד של עצמך. מנהל אחר יכול לעשות זאת."
   },
   "suppliers": {
     "title": "ספקים",

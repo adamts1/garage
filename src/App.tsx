@@ -129,6 +129,7 @@ export default function App() {
                   <NewTicketPage
                     tickets={tickets}
                     setTickets={setTickets}
+                    workers={workers}
                     onDone={() => navigate('/')}
                     onCancel={() => navigate('/')}
                   />
@@ -155,6 +156,7 @@ export default function App() {
                   <TicketRoute
                     tickets={tickets}
                     setTickets={setTickets}
+                    workers={workers}
                     workerChips={workerChips}
                     onBack={() => navigate('/')}
                   />

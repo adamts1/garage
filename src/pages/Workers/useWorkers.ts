@@ -1,9 +1,9 @@
 import {
-  createStaff, listStaff, setStaffRole, subscribeToTable, suggestInitials, updateWorker,
-  type GarageRole, type Staff,
+  createStaff, getCurrentUserId, listStaff, setStaffRole, subscribeToTable, suggestInitials,
+  updateWorker, type GarageRole, type Staff,
 } from '@garage/shared';
 import { useCallback, useEffect, useState } from 'react';
-import { showError, showSuccess, useAppDispatch } from '../../store';
+import { showError, showErrorKey, showSuccess, useAppDispatch } from '../../store';
 
 /* The garage's people. A worker and a user are the same person now: this screen
    creates the account, the membership and the board chip together, through the
@@ -133,10 +133,19 @@ export function useWorkers() {
   );
 
   /** Promote or step down. The function refuses to remove the garage's last
-   *  admin, because nothing in the app could appoint another one. */
+   *  admin, because nothing in the app could appoint another one — and it
+   *  refuses anybody changing their own role at all. */
   const setRole = useCallback(
     async (worker: Staff, role: GarageRole) => {
       if (!worker.userId) return;
+      /* The screen does not offer this control on your own row, so reaching
+         here means something else did. Say why rather than sending a request
+         the function will refuse: the answer is the same either way, and this
+         one arrives without a round trip. */
+      if (worker.userId === getCurrentUserId()) {
+        dispatch(showErrorKey('workers.roleSelfLocked'));
+        return;
+      }
       setBusy(true);
       try {
         await setStaffRole(worker.userId, role);

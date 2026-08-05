@@ -66,6 +66,11 @@ Deno.serve(async (req) => {
     if (!me) return json({ error: 'no garage for this session' }, 403);
     if (me.role !== 'admin') return json({ error: 'only an admin can manage staff' }, 403);
 
+    /* Read from the JWT, not from the body: it is what "myself" has to mean for
+       set_role below to be a rule rather than a suggestion. */
+    const { data: caller } = await userClient.auth.getUser();
+    const callerId = caller?.user?.id ?? null;
+
     const garageId = me.garage_id as string;
     const body = await req.json().catch(() => ({}));
     const action = body.action as string;
@@ -152,6 +157,18 @@ Deno.serve(async (req) => {
       const role = body.role;
       if (!userId) return json({ error: 'user_id required' }, 400);
       if (!isRole(role)) return json({ error: 'role must be admin or member' }, 400);
+
+      /* Nobody changes their own role.
+         Only an admin reaches this line, so the only self-change that could be
+         asked for is a demotion — and an admin who demotes themselves loses the
+         screen they would need to undo it. It is the last-admin rule one step
+         earlier: that one keeps a garage from having no admin at all, this one
+         keeps the person holding the keys from locking themselves out of a
+         garage that still has other admins. Someone else promotes and demotes
+         you; you never do it to yourself. */
+      if (callerId && userId === callerId) {
+        return json({ error: 'you cannot change your own role — ask another admin' }, 403);
+      }
 
       const { data: target } = await admin
         .from('garage_members')
