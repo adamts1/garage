@@ -1,4 +1,6 @@
-import { isGarageAdmin, suggestInitials, type GarageRole, type Staff } from '@garage/shared';
+import {
+  getCurrentUserId, isGarageAdmin, suggestInitials, type GarageRole, type Staff,
+} from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router-dom';
@@ -59,6 +61,10 @@ export default function WorkersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<WorkerEditDraft>(toDraft({} as Staff));
 
+  /* Which row is the person reading the screen. Their own role is shown but not
+     offered: see the role column below. */
+  const meId = getCurrentUserId();
+
   /* A hidden nav item is still a typeable address, and this page reads other
      people's email addresses. The redirect is the boundary; the missing link is
      the courtesy. */
@@ -117,9 +123,21 @@ export default function WorkersPage() {
       width: 150,
       sortValue: (w) => w.role ?? '',
       /* Changed here, but written by the function — which refuses to remove the
-         garage's last admin, because nothing in the app could appoint another. */
+         garage's last admin, because nothing in the app could appoint another.
+
+         Your own row is text, not a menu. The only self-change an admin could
+         make is a demotion, and that is a door that locks behind them: the
+         moment they become a member this page redirects, so they cannot take
+         the role back. Someone else does it, or nobody does. */
       render: (w) =>
-        w.userId && w.role ? (
+        !w.userId || !w.role ? (
+          <span className={styles.muted}>{t('common.none')}</span>
+        ) : w.userId === meId ? (
+          <span className={styles.selfRole} title={t('workers.roleSelfLocked')}>
+            {t(`workers.roles.${w.role}`)}
+            <span className={styles.selfTag}>{t('workers.you')}</span>
+          </span>
+        ) : (
           <CellSelect
             value={w.role}
             disabled={busy}
@@ -129,8 +147,6 @@ export default function WorkersPage() {
             <option value="member">{t('workers.roles.member')}</option>
             <option value="admin">{t('workers.roles.admin')}</option>
           </CellSelect>
-        ) : (
-          <span className={styles.muted}>{t('common.none')}</span>
         ),
     },
     {

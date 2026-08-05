@@ -1,4 +1,7 @@
-import { COLUMNS, VAT, workerChip, type Ticket, type TicketPhoto, type WorkerMap } from '@garage/shared';
+import {
+  assignableWorkers, COLUMNS, VAT, workerChip,
+  type Ticket, type TicketPhoto, type Worker, type WorkerMap,
+} from '@garage/shared';
 import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
@@ -17,6 +20,8 @@ const shekel = (n: number) =>
 export interface TicketPageProps {
   ticket: Ticket;
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** The garage's staff. Only the active ones can be assigned new work. */
+  workers: Worker[];
   /** Code → chip, retired workers included: this page shows history. */
   workerChips: WorkerMap;
   onBack: () => void;
@@ -38,7 +43,9 @@ const Val = ({ children }: { children?: string | number | null }) =>
     ? <span className="kv-empty">-</span>
     : <>{children}</>;
 
-export default function TicketPage({ ticket, setTickets, workerChips, onBack }: TicketPageProps) {
+export default function TicketPage({
+  ticket, setTickets, workers, workerChips, onBack,
+}: TicketPageProps) {
   const { t } = useTranslation();
   const page = useTicketPage({ ticket, setTickets, onBack });
   const { photos, invoice, busy, totals, works } = page;
@@ -52,7 +59,16 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
   const closed = isClosed(ticket);
   const settled = isSettled(ticket);
   const wa = waNumber(ticket.phone);
-  const worker = workerChip(workerChips, ticket.who).n;
+  const chip = workerChip(workerChips, ticket.who);
+  const worker = chip.n;
+
+  /* Who this ticket can be handed to: the active staff, plus — when the person
+     it is already on has since retired — that person, so opening the picker
+     cannot silently rewrite the assignment to somebody else. Choosing them
+     again is not offered anywhere else, and losing them is not an option
+     either: the ticket says what it says until somebody changes it. */
+  const assignable = assignableWorkers(workers);
+  const assigneeGone = Boolean(ticket.who) && !assignable.some((w) => w.code === ticket.who);
 
   return (
     <div className="tp">
@@ -71,7 +87,28 @@ export default function TicketPage({ ticket, setTickets, workerChips, onBack }: 
               <span className="tp-sep">·</span>
               <span>{t('ticket.due')}: <Val>{ticket.due}</Val></span>
               <span className="tp-sep">·</span>
-              <span>{t('ticket.worker')}: {worker}</span>
+              {/* The assignment, and the one place to change it. It was a line
+                  of text — every web-created ticket read "לא הוקצה" and nothing
+                  on this screen could put a name on it. */}
+              <span className="tp-assign">
+                <span className="tp-assign-chip" style={{ background: chip.bg }}>{chip.ini}</span>
+                <select
+                  className="tp-assign-select"
+                  aria-label={t('ticket.assignWorker')}
+                  value={ticket.who ?? ''}
+                  onChange={(e) => page.assign(e.target.value || null)}
+                >
+                  <option value="">{t('ticket.unassigned')}</option>
+                  {assignable.map((w) => (
+                    <option key={w.code} value={w.code}>{w.name}</option>
+                  ))}
+                  {/* Retired, and still on this ticket. Kept selectable so the
+                      control can show the truth; not offered to any other. */}
+                  {assigneeGone && (
+                    <option value={ticket.who ?? ''}>{t('ticket.workerRetired', { name: worker })}</option>
+                  )}
+                </select>
+              </span>
             </div>
           </div>
 

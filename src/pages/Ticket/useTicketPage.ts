@@ -76,6 +76,11 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     [patch],
   );
 
+  /** Hand the ticket to somebody, or take it off everybody. A worker code, or
+   *  null — never '', which the foreign key would reject as a code and which
+   *  would be a second way of saying "nobody". */
+  const assign = useCallback((who: string | null) => patch({ who: who || null }), [patch]);
+
   /** Issuing is guarded by its own dialog, not by the generic confirm: the copy
    *  names the amount and says the document cannot be deleted. */
   const issue = useCallback(async () => {
@@ -163,5 +168,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     [dispatch, openCloseDrawer, patch, ticket, totals.total],
   );
 
-  return { photos, invoice, busy, totals, works, patch, setWorks, issue, cancel, remove, close };
+  return {
+    photos, invoice, busy, totals, works, patch, setWorks, assign, issue, cancel, remove, close,
+  };
 }

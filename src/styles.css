@@ -1062,6 +1062,34 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
 .tp-sub { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .tp-sep { color: var(--border); }
 
+/* the assignee, as a control rather than a caption: the chip that appears on
+   the board, and the picker that changes who holds the ticket */
+.tp-assign { display: inline-flex; align-items: center; gap: 6px; }
+.tp-assign-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.tp-assign-select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 8px;
+  max-width: 190px;
+  cursor: pointer;
+}
+.tp-assign-select:hover { background: var(--surface-2); }
+.tp-assign-select:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+
 /* summary rail pins directly under the header - 116px was shorter than the
    header itself, so it slid underneath */
 /* The rail must pin exactly where it already rests, or it visibly jumps once

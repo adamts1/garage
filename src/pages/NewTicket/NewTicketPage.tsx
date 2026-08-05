@@ -1,4 +1,4 @@
-import { modelsFor, VEHICLE_MAKES, type Ticket } from '@garage/shared';
+import { assignableWorkers, modelsFor, VEHICLE_MAKES, type Ticket, type Worker } from '@garage/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -24,11 +24,16 @@ const REQUIRED_LABELS: Record<RequiredField, string> = {
 export interface NewTicketPageProps {
   tickets: Ticket[];
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** The garage's staff, for the assignee picker. Empty is valid — a garage
+   *  that has entered nobody yet opens tickets unassigned. */
+  workers: Worker[];
   onDone: () => void;
   onCancel: () => void;
 }
 
-export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }: NewTicketPageProps) {
+export default function NewTicketPage({
+  tickets, setTickets, workers, onDone, onCancel,
+}: NewTicketPageProps) {
   const { t } = useTranslation();
   const form = useNewTicket({ tickets, setTickets, onDone });
   const [tab, setTab] = useState<1 | 2>(1);
@@ -268,6 +273,26 @@ export default function NewTicketPage({ tickets, setTickets, onDone, onCancel }:
             <IconDoc /> {t('newTicket.details')}
           </h3>
           <TextAreaField dense label="newTicket.fields.details" {...field('details')} />
+
+          {/* Who the job goes to. The field has been in the form's state since
+              it was written and no control ever rendered it, so every ticket
+              the web app opened arrived on the board unassigned — the same way
+              "מפתח התקבל" was always false. Active workers only, and nobody is
+              the default: a car can come in before anyone is free to take it. */}
+          <div className={styles.row2}>
+            <SelectField
+              dense
+              label="newTicket.fields.technician"
+              hint="newTicket.technicianHint"
+              value={form.form.technician ?? ''}
+              onChange={(e) => form.set('technician', e.target.value || null)}
+            >
+              <option value="">{t('newTicket.unassigned')}</option>
+              {assignableWorkers(workers).map((w) => (
+                <option key={w.code} value={w.code}>{w.name}</option>
+              ))}
+            </SelectField>
+          </div>
         </div>
 
         <div className="form-section span-2 works-wrap" id="sec-works">

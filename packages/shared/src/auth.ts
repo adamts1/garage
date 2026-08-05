@@ -66,6 +66,18 @@ export const setCurrentGarage = (g: Garage | null): void => { currentGarage = g;
 
 export const getCurrentGarage = (): Garage | null => currentGarage;
 
+/* Who is signed in, kept beside the garage above and written by the same
+   resolver, so the two can never describe different people.
+
+   The staff screen is what needs it: it has to recognise the caller's own row
+   in order not to offer them the control that would take their own admin away.
+   Read from a module-level value rather than threaded through props, for the
+   same reason garageName() is — the screens that need it are several levels
+   down from the gate that resolved the session. */
+let currentUserId: string | null = null;
+
+export const getCurrentUserId = (): string | null => currentUserId;
+
 /** Whether the signed-in user may change what a customer is charged.
  *
  *  Read from the same module-level garage as the name above, so it is populated
@@ -190,8 +202,10 @@ export const SIGNED_OUT: ResolvedAuth = {
 export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth> => {
   if (!session) {
     setCurrentGarage(null);
+    currentUserId = null;
     return SIGNED_OUT;
   }
+  currentUserId = session.user?.id ?? null;
   try {
     const garages = await listMyGarages();
     /* The first membership is the garage the apps present as "this garage".

@@ -68,7 +68,13 @@ const renderPage = async (t: Ticket = ticket()) => {
     <StrictMode>
       <Provider store={store}>
         <CatalogProvider>
-          <TicketPage ticket={t} setTickets={() => {}} workerChips={{} as never} onBack={() => {}} />
+          <TicketPage
+            ticket={t}
+            setTickets={() => {}}
+            workers={[]}
+            workerChips={{} as never}
+            onBack={() => {}}
+          />
           {/* The issue dialog and the cancel prompt now come from the registry,
               so the host has to be mounted for either to appear at all. */}
           <ModalHost />
