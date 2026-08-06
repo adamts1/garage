@@ -124,6 +124,30 @@ npx supabase db push
 Staging always goes first. It exists so a migration meets real Supabase
 infrastructure somewhere that does not matter.
 
+### Edge Functions deploy separately
+
+A migration and the function that calls it are two deploys, and nothing ties
+them together — `db push` moves the schema and leaves the functions where they
+were. Name the function; deploying all of them redeploys code you did not touch.
+
+```bash
+npm run functions:push issue-invoice        # staging
+npm run functions:push:prod issue-invoice   # production
+```
+
+These name the project ref outright rather than relying on whatever the repo is
+currently linked to, because `link` is invisible state and the one command you
+must never run against the wrong project is the one that changes production.
+
+Schema before function, always. A function that calls a routine the database
+does not have yet fails on every request until the migration lands; the reverse
+just leaves a new column nobody reads.
+
+There is no `migration list` for functions. `supabase functions list` gives a
+version counter and a deploy timestamp, which say *when* something shipped and
+not *what* — the only real answer is `supabase functions download <name>` and a
+diff against the source.
+
 ### Grants are not policies, and neither is inherited
 
 A **policy** decides which rows a role may see. A **grant** decides whether the
