@@ -14,7 +14,15 @@ import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { listCustomers, listVehicles, money, subscribeToTable, worksSummary } from '@garage/shared';
+import {
+  idNumberConflict,
+  listCustomers,
+  listVehicles,
+  money,
+  phoneConflict,
+  subscribeToTable,
+  worksSummary,
+} from '@garage/shared';
 import type { Customer, TicketWork, Vehicle } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
@@ -99,8 +107,26 @@ export default function TicketCreate({
     setVehicleChoices([]);
   };
 
+  /* The two numbers, checked against everybody on file. The phone may be
+     shared — a couple, a company, a parent paying for a student's car — so a
+     match is an offer to attach the ticket to that customer and nothing more.
+     The ת״ז may not be shared: it is unique per garage, so a match has to be
+     answered before the ticket can be saved, or the ticket would carry a number
+     that belongs to somebody else. Same rule as the web intake form. */
+  const conflict = phoneConflict(customers, {
+    phone: form.customerPhone,
+    name: form.customerName,
+    pickedId: form.customerId,
+  });
+
+  const idConflict = idNumberConflict(customers, {
+    idNumber: form.idNumber,
+    name: form.customerName,
+    ownerId: form.customerId,
+  });
+
   const missing = missingFields(form);
-  const canSave = missing.length === 0;
+  const canSave = missing.length === 0 && !idConflict;
   const total = worksSummary(works).total;
 
   const save = async () => {
@@ -155,6 +181,8 @@ export default function TicketCreate({
           form={form}
           onSet={set}
           customers={customers}
+          conflict={conflict}
+          idConflict={idConflict}
           vehicleChoices={vehicleChoices}
           onPickCustomer={pickCustomer}
           onPickVehicle={pickVehicle}
@@ -197,14 +225,21 @@ export default function TicketCreate({
         <View style={{ flex: 1 }}>
           <Text style={[s.dim, { fontSize: 11 }]}>{t('create.totalLabel')}</Text>
           <Text style={{ fontSize: 18, fontWeight: '800', color: C.ink }}>{money(total)}</Text>
-          {/* Why the button is dimmed, next to the button. */}
-          {missing.length > 0 && (
+          {/* Why the button is dimmed, next to the button. A ת״ז held by
+              somebody else refuses the save just as a blank field does, and is
+              named the same way — the difference is that it is answered up in
+              the customer block rather than by typing here. */}
+          {missing.length > 0 ? (
             <Text style={{ fontSize: 11, fontWeight: '700', color: C.danger }}>
               {t('create.missing', {
                 fields: missing.map((f) => t(`create.required.${f}`)).join(', '),
               })}
             </Text>
-          )}
+          ) : idConflict ? (
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.danger }}>
+              {t('create.idConflict.blocks')}
+            </Text>
+          ) : null}
         </View>
         <Button
           label={t('create.submit')}

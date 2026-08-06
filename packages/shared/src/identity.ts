@@ -1,16 +1,35 @@
 /* Who a customer is.
  *
- * The phone is the identifier. Not the name — two people share one, and one
- * person is typed three ways — and not the ת״ז, which most walk-ins never
- * give. ת״ז rides alongside it and is optional.
+ * `customers.id` — the row's own id, and nothing else. Not the name, not the
+ * phone, not the ת״ז. Each of the other three fails on a real garage:
  *
- * This module exists because that rule has to be the same in four places that
+ *   - the name is typed three ways for one person and shared by two;
+ *   - the phone belongs to a household and to a company. A wife, a husband and
+ *     the fleet manager for eleven vans are separate customers who answer the
+ *     same number;
+ *   - the ת״ז is unique where it is given, and most walk-ins never give one.
+ *
+ * The phone WAS the identifier here, and `create_ticket` resolved by it: a
+ * ticket typed with a number already on file was attached to whoever held it,
+ * whatever name was on the form. That made a second customer on one number
+ * unrepresentable — the garage could not open a ticket for the wife without it
+ * landing on the husband. It is now a hint: the forms say whose number it is
+ * and offer to attach the ticket to them, and going ahead without taking the
+ * offer creates a second customer who shares the number, which is a real thing.
+ *
+ * What is still unique is the ת״ז, where it is present:
+ * `customers_garage_id_number_key` is a partial unique index, so a second
+ * holder is not a judgement call the way a shared phone is — it is a write the
+ * database will refuse. The forms offer to attach the ticket to the holder and
+ * refuse to save until somebody chooses, because the alternative is a ticket
+ * carrying a number that belongs to a different person.
+ *
+ * This module exists because the rule has to be the same in four places that
  * used to each have their own idea: `create_ticket` resolving a ticket to a
- * customer, the two intake forms warning that a number is already taken, and
- * the customer report deciding which tickets belong to one person. When the
- * report groups by a name string and the database groups by a phone, the two
- * disagree about how many customers the garage has — and the report is the
- * number the garage acts on.
+ * customer, the two intake forms, and the customer report deciding which
+ * tickets belong to one person. When the report groups by phone and the
+ * database groups by row id, the two disagree about how many customers the
+ * garage has — and the report is the number the garage acts on.
  *
  * The SQL side is the mirror of this, in create_ticket; keep them in step.
  */
@@ -63,10 +82,12 @@ export interface PhoneConflict<C extends CustomerIdentity = CustomerIdentity> {
   differentName: boolean;
 }
 
-/** The number is taken. Whether that is a returning customer or a mistake is
- *  something only the person at the counter can say, so this reports and does
- *  not decide. `null` when the number is free, too short to judge, or already
- *  belongs to the customer that was explicitly picked. */
+/** The number is on somebody's file. Whether that is a returning customer, a
+ *  second person in the same household, or a mistyped digit is something only
+ *  the person at the counter can say, so this reports and does not decide —
+ *  and, unlike the ת״ז below, a shared number is allowed to stand. `null` when
+ *  the number is free, too short to judge, or already belongs to the customer
+ *  that was explicitly picked. */
 export function phoneConflict<C extends CustomerIdentity>(
   customers: readonly C[],
   { phone, name, pickedId }: { phone: string; name: string; pickedId?: string | null },
@@ -78,16 +99,21 @@ export function phoneConflict<C extends CustomerIdentity>(
   return { customer: holder, differentName: looseName(holder.name) !== looseName(name) };
 }
 
-/* ---------- the ת״ז, which is not the identifier but is unique ----------
+/* ---------- the ת״ז: optional, and nobody's twice ----------
 
-   The phone decides who a customer is; the ת״ז only has to not be two people's.
-   `customers_garage_id_number_key` enforces that in the database — a unique
-   index per garage, where the column is not null — so a second holder is not a
-   judgement call the way a shared phone is: it is a write that will be refused.
+   Blank is a perfectly good ת״ז — most walk-ins never give one, and a garage
+   cannot make somebody produce their teudat zehut to have their brakes done.
+   What it may not be is two people's. `customers_garage_id_number_key`
+   enforces that in the database — a unique index per garage, where the column
+   is not null — so a second holder is not a judgement call the way a shared
+   phone is: it is a write that will be refused.
 
    Which is exactly why it is worth catching in the app. Left to the database it
    surfaces as a 23505 on save, naming a constraint rather than the person who
-   already holds the number. */
+   already holds the number — and the intake form cannot even get that far,
+   because create_ticket drops a ת״ז somebody else holds rather than losing the
+   whole ticket to a constraint. Caught here, the answer is a choice: attach
+   this ticket to the holder, or correct the number. */
 
 /** The minimum for the ת״ז rules. Wider than CustomerIdentity because the
  *  number itself has to be readable, and `Customer` satisfies it structurally. */
@@ -156,12 +182,19 @@ export function matchCustomers<C extends CustomerIdentity>(
 
 /** The key a ticket rolls up under in the customer report.
  *
- *  The phone first, for the same reason the database resolves by it: it is what
- *  survives a name typed two ways. Tickets with no phone — walk-ins, and
- *  everything created before the phone was required — fall back to the name,
- *  which is all they have. The prefix keeps the two kinds of key from ever
- *  colliding. */
+ *  `tickets.customer_id` first — the row the ticket was actually resolved to,
+ *  which is the only thing that means one customer now that a phone may be two
+ *  people's. Rolling up by phone would put a household's tickets on one line
+ *  and bill the wrong person for them; rolling up by name splits one customer
+ *  whose name was typed twice.
+ *
+ *  The two fallbacks are for tickets that carry no id: the ones written before
+ *  create_ticket resolved a customer at all. Those were created under the old
+ *  rule, where one number WAS one customer, so grouping them by phone is what
+ *  they meant at the time; the name is the last resort for a walk-in with
+ *  neither. The prefixes keep the three kinds of key from ever colliding. */
 export const ticketCustomerKey = (t: Ticket): string => {
+  if (t.customerId) return `id:${t.customerId}`;
   const d = phoneDigits(t.phone);
   return d.length >= PHONE_MIN_DIGITS ? `phone:${d}` : `name:${(t.customer ?? '').trim()}`;
 };

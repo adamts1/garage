@@ -129,12 +129,21 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
   /* Which record this ticket belongs to. By the id create_ticket resolved, and
      failing that by the phone — the ticket's `customer` is a denormalised name,
      and two people share one often enough that matching on it would put a ת״ז
-     on a stranger. */
+     on a stranger.
+
+     The phone fallback is for tickets written before the RPC resolved a
+     customer at all, and it now insists on being unambiguous: a number may
+     belong to several customers, and this screen's whole purpose for the record
+     is writing a ת״ז onto it. Picking the first of two people who answer one
+     line and stamping a national ID on them is the exact mistake the name match
+     was rejected for. No single holder, no record — the ticket still reads and
+     saves, only the ת״ז field has nothing to attach to. */
   const customer = useMemo(() => {
     if (ticket.customerId) return customers.find((c) => c.id === ticket.customerId) ?? null;
     const digits = phoneDigits(ticket.phone);
     if (digits.length < 9) return null;
-    return customers.find((c) => phoneDigits(c.phone) === digits) ?? null;
+    const holders = customers.filter((c) => phoneDigits(c.phone) === digits);
+    return holders.length === 1 ? holders[0] : null;
   }, [customers, ticket.customerId, ticket.phone]);
 
   /* The stored ת״ז becomes the field's starting value — and re-becomes it

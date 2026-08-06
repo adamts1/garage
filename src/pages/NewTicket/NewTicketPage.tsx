@@ -180,10 +180,25 @@ export default function NewTicketPage({
             />
           </div>
 
-          {/* The number is already on file. Said out loud rather than resolved
-              quietly: the ticket is about to be attached to whoever holds it,
-              and if that is not who the advisor has in front of them, they are
-              the only one who can tell. */}
+          {/* A ת״ז on somebody else's file. Unlike the phone below this is not
+              an offer to be waved past: the number is unique per garage, so it
+              cannot be saved onto a second person, and a ticket that carries it
+              anyway is one claiming to be about somebody it is not. The form
+              will not save until this is answered — attach the ticket to the
+              holder, or correct the number. */}
+          {form.idConflict && (
+            <div className={`${styles.conflict} ${styles.conflictWarn}`} role="alert">
+              <span>{t('newTicket.idTakenBlocks', { name: form.idConflict.customer.name })}</span>
+              <Button onClick={form.adoptIdConflict}>{t('newTicket.useThatCustomer')}</Button>
+            </div>
+          )}
+
+          {/* The phone is on somebody's file. Said out loud and left to the
+              advisor: one line belongs to a couple, to a company, to a parent
+              paying for a student's car. Taking the offer attaches this ticket
+              to that customer; going ahead without it opens a second customer
+              who shares the number, which is a real thing and used to be
+              impossible. */}
           {form.conflict && (
             <div
               className={`${styles.conflict}${form.conflict.differentName ? ` ${styles.conflictWarn}` : ''}`}

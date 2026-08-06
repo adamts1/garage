@@ -133,14 +133,37 @@ describe('matchCustomers', () => {
 });
 
 describe('ticketCustomerKey', () => {
-  it('keys on the number, so one person typed two ways is one key', () => {
-    expect(ticketCustomerKey(ticket({ customer: 'רונית לוי', phone: '052-111-2233' })))
-      .toBe(ticketCustomerKey(ticket({ customer: 'רונית', phone: '0521112233' })));
+  /* The report is the number a garage acts on, so what it counts as one
+     customer has to be what the database counts as one: the row id. */
+  it('keys on the customer row, so one person typed two ways is one key', () => {
+    expect(ticketCustomerKey(ticket({ customer: 'רונית לוי', customerId: 'c1', phone: '052-111-2233' })))
+      .toBe(ticketCustomerKey(ticket({ customer: 'רונית', customerId: 'c1', phone: '0509999999' })));
+  });
+
+  /* The case the phone key got wrong: a couple, a company line, a parent
+     paying for a student's car. Two customers, one number, two rows on the
+     report — and two people to bill. */
+  it('keeps two customers apart when they share a number', () => {
+    expect(ticketCustomerKey(ticket({ customer: 'דנה', customerId: 'c1', phone: '0521112233' })))
+      .not.toBe(ticketCustomerKey(ticket({ customer: 'עופר', customerId: 'c2', phone: '0521112233' })));
   });
 
   it('keeps a shared name apart when the numbers differ', () => {
     expect(ticketCustomerKey(ticket({ customer: 'משה כהן', phone: '0521112233' })))
       .not.toBe(ticketCustomerKey(ticket({ customer: 'משה כהן', phone: '0549998877' })));
+  });
+
+  /* Tickets written before create_ticket resolved a customer at all carry no
+     id. They were created under the old rule, where one number was one
+     customer, so grouping them by phone is what they meant at the time. */
+  it('falls back to the number for a ticket with no customer row', () => {
+    expect(ticketCustomerKey(ticket({ customer: 'רונית לוי', phone: '052-111-2233' })))
+      .toBe(ticketCustomerKey(ticket({ customer: 'רונית', phone: '0521112233' })));
+  });
+
+  it('prefers the row over the number, so a corrected phone does not split a customer', () => {
+    expect(ticketCustomerKey(ticket({ customerId: 'c1', phone: '0521112233' })))
+      .toBe('id:c1');
   });
 
   it('falls back to the name for a ticket with no number', () => {
