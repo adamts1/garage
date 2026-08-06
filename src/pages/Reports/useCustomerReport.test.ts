@@ -20,6 +20,34 @@ describe('rollUp', () => {
     expect(rows.map((r) => r.name).sort()).toEqual(['דנה', 'יוסי']);
   });
 
+  /* The report is what the garage bills against, so "one customer" here has to
+     mean what it means in the database: the customer row. A couple, a company
+     and a parent paying for a student's car all answer one number — grouping by
+     it put two people's work on one line and one of them got the bill. */
+  it('keeps two customers apart when they share a phone', () => {
+    const rows = rollUp(
+      [
+        ticket({ customer: 'דנה', customerId: 'c1', phone: '052-111-2233', amount: 100 }),
+        ticket({ customer: 'עופר', customerId: 'c2', phone: '052-111-2233', amount: 50 }),
+      ],
+      filters,
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.gross).sort((a, b) => a - b)).toEqual([50, 100]);
+  });
+
+  it('joins one customer’s tickets even when the number on them changed', () => {
+    const rows = rollUp(
+      [
+        ticket({ customer: 'דנה', customerId: 'c1', phone: '052-111-2233', amount: 100 }),
+        ticket({ customer: 'דנה כהן', customerId: 'c1', phone: '054-999-8877', amount: 50 }),
+      ],
+      filters,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].gross).toBe(150);
+  });
+
   it('sums gross per customer', () => {
     const rows = rollUp(
       [ticket({ customer: 'דנה', amount: 100 }), ticket({ customer: 'דנה', amount: 50 })],

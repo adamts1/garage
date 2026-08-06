@@ -198,7 +198,6 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
      resolved by ת״ז then phone, every such ticket minted another copy of the
      same person. See missingRequired for what each of them is for. */
   const missing = useMemo(() => missingRequired(form), [form]);
-  const canSave = missing.length === 0;
 
   /* Which fields have earned the right to be shown as wrong.
      A form that turns red before it has been filled in is telling somebody off
@@ -218,13 +217,15 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     [attempted, missing, touched],
   );
 
-  /* The phone is the customer's identity, so a number already on file means the
-     ticket is about to be attached to somebody — and if the name does not match,
-     to somebody other than the person the advisor thinks they are serving. That
-     used to happen silently: the ticket went onto the existing customer while
-     the card showed the newly typed name, and no record was ever created for it.
-     Reported rather than blocked; only the person at the counter can say whether
-     this is the same customer under a nickname or a number typed wrong. */
+  /* A number already on file. Reported, never acted on: one line legitimately
+     belongs to a couple, to a company and to a parent paying for a student's
+     car, so this is an offer — attach the ticket to the customer who holds the
+     number — and not a decision. Declining it and saving creates a second
+     customer who shares the number, which is what a household is.
+
+     It used to be neither an offer nor a decision but a silent fact: the phone
+     was the identity, create_ticket attached the ticket to the holder, and the
+     card showed the newly typed name of a person no record was ever made for. */
   const conflict: PhoneConflict<Customer> | null = useMemo(
     () => phoneConflict(customers, {
       phone: form.customerPhone,
@@ -234,12 +235,15 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     [customers, form.customerPhone, form.customerName, form.customerId],
   );
 
-  /* The ת״ז is not the identity, but it is unique per garage, and the intake
-     form is where a mistyped one is born. create_ticket refuses to move a
-     number off the customer who holds it — see 20260802020000, which chose that
-     over letting a constraint take the whole ticket down — so without this the
-     number is simply, silently, not saved. The migration says as much: "the
-     mismatch is the intake form's problem to raise". This raises it. */
+  /* The ת״ז is the opposite case, and gets the opposite treatment. It is
+     optional — most walk-ins never give one — but where it exists the database
+     keeps it unique per garage, so a second holder is not something the counter
+     may wave through: it is a write that will be refused. create_ticket sooner
+     drops the number than lose the whole ticket to a constraint (see
+     20260802020000), which means saving anyway does not record what was typed.
+
+     So this one blocks. Two ways out, both the advisor's to choose: attach the
+     ticket to the customer who holds the number, or correct the number. */
   const idConflict: PhoneConflict<Customer> | null = useMemo(
     () => idNumberConflict(customers, {
       idNumber: form.idNumber,
@@ -254,6 +258,17 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
   const adoptConflict = useCallback(() => {
     if (conflict) pickCustomer(conflict.customer);
   }, [conflict, pickCustomer]);
+
+  /** The same move for the ת״ז — and here it is one of only two ways to save. */
+  const adoptIdConflict = useCallback(() => {
+    if (idConflict) pickCustomer(idConflict.customer);
+  }, [idConflict, pickCustomer]);
+
+  /* A missing field and a ת״ז belonging to somebody else are both refusals to
+     save, and are deliberately not the same kind: one is a blank to fill, the
+     other is a claim about who this person is. Kept apart so the form can say
+     which. A phone somebody else holds is on neither list — that is allowed. */
+  const canSave = missing.length === 0 && !idConflict;
 
   /* Returns whether it saved, so the page can move focus to the first field it
      objected to rather than leaving somebody to hunt for the red one. */
@@ -315,6 +330,7 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     form, set, works, setWorks,
     matches, showMatches, setShowMatches,
     vehicleChoices, pickCustomer, pickVehicle,
-    totals, canSave, missing, invalid, touch, conflict, idConflict, adoptConflict, submit,
+    totals, canSave, missing, invalid, touch,
+    conflict, idConflict, adoptConflict, adoptIdConflict, submit,
   };
 }

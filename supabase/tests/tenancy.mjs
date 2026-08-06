@@ -483,7 +483,8 @@ await rpc('create_ticket', a.token, {
 const afterCount = (await (await rest('tickets?select=id', a.token)).json()).length;
 check('a failed create_ticket leaves no orphan ticket', beforeCount === afterCount, `${beforeCount} → ${afterCount}`);
 
-/* 3.6 — customers are identified by ת״ז, then phone, never by name. */
+/* 3.6 — customers are identified by their row, then by ת״ז. Never by name, and
+ * (since 20260806000000) never by phone. */
 await rpc('create_ticket', a.token, { t: { title: 't1', customer_name: 'שם זהה', id_number: 'IDA-1' } });
 await rpc('create_ticket', a.token, { t: { title: 't2', customer_name: 'שם זהה', id_number: 'IDA-2' } });
 const sameName = await (await rest(`customers?name=eq.${encodeURIComponent('שם זהה')}&select=id`, a.token)).json();
@@ -505,8 +506,18 @@ const dupIns = await rest('customers', a.token, {
 });
 check('a duplicate ת״ז insert is rejected by the unique index', dupIns.status >= 400, `got ${dupIns.status}`);
 
-/* The phone is an identity too, and it is matched on digits — the same number
- * typed with hyphens, spaces or neither is one customer, not three. */
+/* The phone is NOT an identity, and this is the assertion that says so.
+ *
+ * It asserted the opposite until 20260806000000: three tickets on one number
+ * had to end up as one customer. That is the rule a household breaks. A couple
+ * shares a line, a company answers for a fleet, a parent gives their number for
+ * a student's car — and while the RPC resolved by phone, the second person's
+ * ticket was attached to the first and no record could be opened for them.
+ *
+ * So three tickets typed with one number, and nothing else to go on, are three
+ * customers. Merging them is not the database's call to make: the intake forms
+ * name the holder and offer to attach the ticket to them, and taking that offer
+ * arrives here as customer_id — which is the case asserted below. */
 for (const phone of ['050-123-4567', '050 1234567', '0501234567']) {
   await rpc('create_ticket', a.token, { t: { title: 'phone', customer_name: 'טלפון זהה', phone } });
 }
@@ -514,9 +525,22 @@ const byPhone = await (await rest(
   `customers?name=eq.${encodeURIComponent('טלפון זהה')}&select=id`, a.token,
 )).json();
 check(
-  'one phone written three ways stays one customer',
-  Array.isArray(byPhone) && byPhone.length === 1,
+  'one number does not merge three customers — a phone is not an identity',
+  Array.isArray(byPhone) && byPhone.length === 3,
   `got ${Array.isArray(byPhone) ? byPhone.length : '?'}`,
+);
+
+/* And the other half of that: a ticket carrying a ת״ז somebody already holds
+ * still resolves to them, however the phone reads. The ת״ז is unique per garage,
+ * so a match is the person rather than a coincidence. */
+await rpc('create_ticket', a.token, {
+  t: { title: 'id-wins', customer_name: 'שם אחר לגמרי', id_number: 'IDA-1', phone: '0509999999' },
+});
+const idHolder = await (await rest('customers?id_number=eq.IDA-1&select=id', a.token)).json();
+check(
+  'a ת״ז already on file resolves the ticket to its holder',
+  Array.isArray(idHolder) && idHolder.length === 1,
+  `got ${Array.isArray(idHolder) ? idHolder.length : '?'}`,
 );
 
 /* A name with neither ת״ז nor phone is not an identity: it creates no customer
@@ -595,22 +619,25 @@ for (const st of ['prog', 'parts', 'diag', 'qa']) {
   check(`a retired status "${st}" is rejected by the check constraint`, res.status >= 400, `got ${res.status}`);
 }
 
-/* The phone is the identifier and a ת״ז may not route around it. Resolution was
- * `if id_number ... elsif phone ...`, so a ticket carrying an unknown ת״ז never
- * consulted the phone and inserted a SECOND customer holding a number the first
- * already had — after which `limit 1` picks between them arbitrarily and the
- * phone identifies nobody. */
+/* Two people on one line, one of them with a ת״ז. This asserted the reverse
+ * until 20260806000000: the phone was the identifier, so a ticket carrying an
+ * unknown ת״ז on a number already on file had to resolve to the number's holder
+ * — the second person was called an impostor and could not be opened.
+ *
+ * They are not an impostor. They are the other half of a couple, or the second
+ * driver on a company line. A ת״ז nobody holds is somebody new, and a shared
+ * number is no reason to refuse them a record of their own. */
 const SHARED = '0523334455';
 await rpc('create_ticket', a.token, { t: { title: 'p1', customer_name: 'בעל הטלפון', phone: SHARED } });
 await rpc('create_ticket', a.token, {
-  t: { title: 'p2', customer_name: 'מתחזה', phone: SHARED, id_number: 'UNKNOWN-ID' },
+  t: { title: 'p2', customer_name: 'בת הזוג', phone: SHARED, id_number: 'UNKNOWN-ID' },
 });
 const holders = await (await rest(
   `customers?phone=eq.${SHARED}&select=id,name`, a.token,
 )).json();
 check(
-  'a ת״ז cannot route around the phone and create a second holder of one number',
-  Array.isArray(holders) && holders.length === 1,
+  'two people who answer one number get one record each',
+  Array.isArray(holders) && holders.length === 2,
   `got ${JSON.stringify(holders)}`,
 );
 

@@ -12,6 +12,12 @@
  * made two more. The RPC no longer does either (migrations 20260802000000 and
  * 20260802010000), but nothing has cleaned up what it already wrote.
  *
+ * Read the phone groups with the current rule in mind: a number is NOT an
+ * identity any more (20260806000000), because a couple, a company and a parent
+ * paying for a student's car all answer one line. Two records on one number are
+ * a question now, not an answer — and where they carry different ת״ז they are
+ * not even a question, so this stops asking it.
+ *
  * The report is the whole point. Merging customers is not reversible — tickets,
  * vehicles and invoices are repointed and the losing rows are deleted — so it
  * happens only for ids named explicitly on the command line, never for a group
@@ -232,10 +238,16 @@ if (mergeIds.length) {
 
 /* ---------- report ---------- */
 
-/* Two groupings, because the two causes leave different fingerprints. The phone
-   groups are near-certain: the same number, differently punctuated. The name
-   groups are only candidates — a garage really can have two Cohens — which is
-   why nothing here merges on its own. */
+/* Two groupings, because the two causes leave different fingerprints — and
+   neither is a verdict, which is why nothing here merges on its own.
+
+   The phone groups used to be described as near-certain. They are not, and were
+   only ever near-certain under the rule that one number meant one customer; a
+   household and a fleet break it honestly. What survives below is "one number,
+   several records" — worth reading, not worth merging unread. Records that hold
+   DIFFERENT ת״ז are dropped from the report outright: the database keeps that
+   number unique per garage, so two of them are two people, and no amount of
+   shared telephone makes them one. */
 const byPhone = new Map();
 const byName = new Map();
 for (const c of customers) {
@@ -254,7 +266,13 @@ for (const c of customers) {
   byName.set(key, [...(byName.get(key) ?? []), c]);
 }
 
-const phoneGroups = [...byPhone.values()].filter((g) => g.length > 1);
+/** Two distinct ת״ז in one group: known-different people, whatever the number. */
+const holdsDifferentIdNumbers = (g) =>
+  new Set(g.map((c) => (c.id_number ?? '').trim()).filter(Boolean)).size > 1;
+
+const phoneCandidates = [...byPhone.values()].filter((g) => g.length > 1);
+const phoneGroups = phoneCandidates.filter((g) => !holdsDifferentIdNumbers(g));
+const sharedNumber = phoneCandidates.length - phoneGroups.length;
 const nameGroups = [...byName.values()].filter((g) => g.length > 1);
 
 const report = (title, groups, note) => {
@@ -270,10 +288,17 @@ const report = (title, groups, note) => {
 };
 
 report(
-  'Same phone, written differently',
+  'Same phone, several records',
   phoneGroups,
-  '  Near-certain duplicates: one number, several records.',
+  '  Candidates only. A number is shared by a couple, a company and a parent\n' +
+  '  paying for a student\'s car — read the tickets before merging anything.',
 );
+if (sharedNumber) {
+  console.log(
+    `  (${sharedNumber} group(s) on one number carry different ת״ז and are not listed:\n` +
+    '   the ת״ז is unique per garage, so those are different people.)\n',
+  );
+}
 report(
   'Same name, no phone on file',
   nameGroups,

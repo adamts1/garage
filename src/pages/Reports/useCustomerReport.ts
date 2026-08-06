@@ -56,12 +56,18 @@ export function rollUp(
     return true;
   });
 
-  /* Grouped by identity, not by the name string. The phone is what identifies
-     a customer — that is how create_ticket resolves one — and grouping by name
-     made the report disagree with the database in both directions: one person
-     whose name was typed two ways became two rows and looked like two
-     customers, while two people who share a name became one row whose total
-     belonged to nobody. See ticketCustomerKey in @garage/shared. */
+  /* Grouped by the customer's own row id — the internal one, which is the only
+     thing that means one customer.
+
+     It grouped by name first, and disagreed with the database in both
+     directions: one person whose name was typed two ways became two rows and
+     looked like two customers, while two people sharing a name became one row
+     whose total belonged to nobody. Then by phone, which was the identity at
+     the time — and stopped being one, because a household, a company and a
+     parent paying for a student's car all answer a single line. Billing a
+     couple's two cars to one row is the same error as the name, with better
+     manners. Tickets predating a resolved customer still fall back to the
+     phone; see ticketCustomerKey in @garage/shared. */
   const byCustomer = new Map<string, Ticket[]>();
   kept.forEach((t) => {
     const key = ticketCustomerKey(t);

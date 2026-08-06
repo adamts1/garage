@@ -432,6 +432,38 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] The rule itself lives in one place — `packages/shared/src/identity.ts` —
       because it has to be the same in four: the RPC, both intake forms and the
       report. The SQL in `create_ticket` is its mirror; keep them in step.
+- [x] **The identity is `customers.id`, not the phone.** Making the phone the
+      identifier closed a duplication hole and imposed a rule a garage cannot
+      live with: one number, one customer. A couple shares a line and brings in
+      two cars; a company answers for a fleet and each driver is billed
+      separately; a parent gives their number for a student's car. Every one of
+      those tickets was attached to whoever held the number first, whatever name
+      had just been typed, and a ticket for the second person could not be
+      opened at all. `create_ticket` now resolves by picked `customer_id` then
+      ת״ז, and by nothing else; the phone stays on the ticket, on the customer
+      and searchable. Both intake forms name the holder of a number already on
+      file and offer to attach the ticket to that customer — declining and
+      saving opens a second customer sharing the number, which is the case the
+      change exists to allow. `20260806000000_customer_id_is_the_identity.sql`
+- [x] **A ת״ז may be blank; it may not be two people's.** Where it is given the
+      partial unique index makes it an identity the database enforces, so it
+      still resolves a ticket to a customer. Where it is somebody else's, both
+      intake forms now **refuse to save** — two ways out, attach the ticket to
+      the holder or correct the number — instead of saving a ticket carrying a
+      number that belongs to a different person. (`create_ticket` drops such a
+      number rather than lose the whole ticket to a constraint, so saving anyway
+      recorded nothing.) The customers screen already refused a duplicate on
+      create and on edit; that is unchanged.
+- [x] The **customer report keys on `tickets.customer_id`**, the internal id —
+      the only thing that means one customer once a number may be two people's.
+      Grouping by phone billed a household's two cars to one row. Tickets
+      written before the RPC resolved a customer carry no id and still fall back
+      to phone, then name: they were created under the old rule, where one
+      number was one customer, so that is what they meant at the time.
+- [x] `scripts/duplicate-customers.mjs` no longer calls a shared number a
+      near-certain duplicate — it is a candidate to read — and drops groups
+      whose records hold **different** ת״ז, which are different people however
+      the phone reads.
 - [x] `scripts/duplicate-customers.mjs` reports the records the old rule already
       wrote — grouped by phone digits, and by name where there is no phone and
       no ת״ז — and merges only ids named explicitly on the command line. There
