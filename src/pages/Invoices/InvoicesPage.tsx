@@ -155,6 +155,17 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
           tone="danger"
           icon={<IconCard />}
         />
+        {/* Money handed back. Beside the takings rather than folded into them:
+            "we billed 40k and refunded 3k" is two facts a garage acts on
+            separately, and the first card already has the second subtracted. */}
+        <KpiCard
+          label="invoices.kpi.credited"
+          value={shekelRounded(inv.totals.credited)}
+          sub="invoices.kpi.creditedSub"
+          subValues={{ count: inv.totals.partiallyCreditedCount }}
+          tone="danger"
+          icon={<IconCard />}
+        />
       </KpiRow>
 
       <FilterBar>
@@ -209,6 +220,10 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
           statusLabel={statusLabel}
           statusTone={statusTone}
           onOpenTicket={onOpenTicket}
+          creditable={inv.selectedCreditable}
+          canCredit={inv.canCredit}
+          onCredit={() => void inv.credit(inv.selected!)}
+          busy={inv.crediting}
         />
       )}
     </>

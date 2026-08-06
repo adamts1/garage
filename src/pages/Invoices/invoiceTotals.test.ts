@@ -71,6 +71,52 @@ describe('headline', () => {
   it('survives an empty ledger', () => {
     expect(headline([])).toEqual({
       issued: 0, issuedCount: 0, receiptCount: 0, cancelledCount: 0,
+      credited: 0, partiallyCreditedCount: 0,
+    });
+  });
+
+  /* The reason this arithmetic changed at all. While a credit note could only
+     cancel an invoice outright, summing live receipts at face value was right:
+     a credited invoice was a cancelled one, and those are excluded. Once part
+     of a bill can be handed back, a live ₪1,000 invoice with ₪300 credited is
+     ₪700 of takings — and the old sum reported the garage's month as ₪300
+     better than it was. */
+  describe('with part of a bill handed back', () => {
+    const invoice = doc({ id: 'inv', total: 1000 });
+    const part = doc({ id: 'note', docType: 'credit_note', total: 300, creditsInvoiceId: 'inv' });
+
+    it('counts what the garage kept, not what it billed', () => {
+      expect(headline([invoice, part]).issued).toBe(700);
+    });
+
+    it('still counts the invoice as one live document', () => {
+      expect(headline([invoice, part]).issuedCount).toBe(1);
+    });
+
+    it('reports the money handed back beside it', () => {
+      expect(headline([invoice, part]).credited).toBe(300);
+      expect(headline([invoice, part]).partiallyCreditedCount).toBe(1);
+    });
+
+    it('takes several credits off the same invoice', () => {
+      const second = doc({ id: 'note2', docType: 'credit_note', total: 150, creditsInvoiceId: 'inv' });
+      expect(headline([invoice, part, second]).issued).toBe(550);
+      expect(headline([invoice, part, second]).credited).toBe(450);
+    });
+
+    /* A note against ANOTHER invoice must not come off this one — that would
+       be a refund taken twice, once from each. */
+    it('only subtracts the notes written against that invoice', () => {
+      const elsewhere = doc({ id: 'x', docType: 'credit_note', total: 900, creditsInvoiceId: 'other' });
+      expect(headline([invoice, elsewhere]).issued).toBe(1000);
+    });
+
+    /* A cancelled invoice is out of the takings already; its note must not be
+       subtracted a second time from what is left. */
+    it('does not double-count a full cancellation', () => {
+      const cancelled = doc({ id: 'c', total: 500, status: 'cancelled' });
+      const note = doc({ id: 'cn', docType: 'credit_note', total: 500, creditsInvoiceId: 'c' });
+      expect(headline([invoice, cancelled, note]).issued).toBe(1000);
     });
   });
 });

@@ -151,24 +151,75 @@ Deno.serve(async (req) => {
       return json({ invoice: inserted });
     }
 
-    // ============================ CANCEL ============================
-    if (action === 'cancel') {
+    /* ======================= CANCEL / CREDIT =======================
+
+       One path, because they are one act: giving money back with a document
+       that says so. 'cancel' is 'credit' for the whole remaining amount, and
+       is kept as its own action so older clients keep working.
+
+       A credit for part of the bill leaves the original ISSUED — it corrects
+       the invoice, it does not void it — and several may be issued against one
+       invoice over time. A credit that takes the last of what is still owed
+       back voids it, which is the case 'cancel' always was. */
+    if (action === 'cancel' || action === 'credit') {
       const invoiceId = body.invoice_id as string;
       const reason = (body.reason as string) || 'ביטול חשבונית';
       if (!invoiceId) return json({ error: 'invoice_id required' }, 400);
 
-      // Caller's JWT -> RLS: they can only cancel their own garage's invoice.
+      /* Money going back to a customer is an admin's call — the same line the
+         database draws around repricing a work (save_ticket_works). Checked
+         here rather than in the UI alone: this function is a URL, and a member
+         who can read their own JWT can call it.
+
+         is_garage_admin() runs under the caller's JWT, so it answers for the
+         garage they are actually in. */
+      const { data: isAdmin, error: roleErr } = await userClient.rpc('is_garage_admin');
+      if (roleErr) return json({ error: roleErr.message }, 400);
+      if (!isAdmin) return json({ error: 'only a garage admin may credit a customer' }, 403);
+
+      // Caller's JWT -> RLS: they can only credit their own garage's invoice.
       const { data: inv, error: rErr } = await userClient.from('invoices').select('*').eq('id', invoiceId).maybeSingle();
       if (rErr) return json({ error: rErr.message }, 400);
       if (!inv) return json({ error: 'invoice not found in your garage' }, 404);
       if (inv.status === 'cancelled') return json({ error: 'invoice is already cancelled' }, 409);
-      if (inv.doc_type !== 'invoice_receipt') return json({ error: 'only an invoice-receipt can be cancelled' }, 400);
+      if (inv.doc_type !== 'invoice_receipt') return json({ error: 'only an invoice-receipt can be credited' }, 400);
 
+      /* What is still creditable, asked of the database rather than computed
+         from what the client is holding: two advisors crediting the same
+         invoice at once must not between them hand back more than was paid. */
+      const { data: creditedSoFar, error: cErr } = await userClient.rpc('invoice_credited_total', { invoice: inv.id });
+      if (cErr) return json({ error: cErr.message }, 400);
+      const remaining = round2(Number(inv.total) - Number(creditedSoFar ?? 0));
+      if (remaining <= 0) return json({ error: 'this invoice has already been credited in full' }, 409);
+
+      /* The amount is what the CUSTOMER gets back — VAT included, the figure on
+         the document they are holding. Absent (or 'cancel'), it is everything
+         still outstanding. */
+      const requested = action === 'cancel' || body.amount == null ? remaining : round2(Number(body.amount));
+      if (!Number.isFinite(requested) || requested <= 0) return json({ error: 'amount must be a positive number' }, 400);
+      if (requested > remaining) {
+        return json({ error: `amount exceeds what is left to credit on this invoice (${remaining})`, remaining }, 400);
+      }
+
+      const full = requested >= remaining;
       const { adapter, credentials } = await billing(inv.garage_id);
+      const vatRate = Number(inv.vat_rate);
 
-      const items: InvoiceItem[] = (inv.lines as Array<{ desc: string; qty: number; unit_price: number }>).map((l) => ({
-        description: l.desc, unitprice: l.unit_price, quantity: l.qty,
-      }));
+      /* A full credit of an untouched invoice copies its own lines, so the two
+         documents are the same money written twice — no rounding to argue
+         about later. Anything else is one line for the amount agreed, with the
+         reason on it, priced pre-VAT the way every other line is: the provider
+         adds VAT, and what the customer gets back is the gross typed in. */
+      const untouched = full && Number(creditedSoFar ?? 0) === 0;
+      const subtotal = untouched ? Number(inv.subtotal) : round2(requested / (1 + vatRate));
+      const vat = untouched ? Number(inv.vat) : round2(subtotal * vatRate);
+      const total = untouched ? Number(inv.total) : round2(subtotal + vat);
+
+      const items: InvoiceItem[] = untouched
+        ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number }>).map((l) => ({
+            description: l.desc, unitprice: l.unit_price, quantity: l.qty,
+          }))
+        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
 
       const doc = await adapter.cancel({
         credentials,
@@ -178,12 +229,13 @@ Deno.serve(async (req) => {
         basedOnDocnum: inv.provider_docnum,
       });
 
-      // Store the credit note as its own immutable row...
+      // Store the credit note as its own immutable row, naming what it credits...
       const { data: note, error: nErr } = await admin.from('invoices').insert({
         garage_id: inv.garage_id,
         ticket_id: inv.ticket_id,
         ticket_key: inv.ticket_key,
         doc_type: 'credit_note',
+        credits_invoice_id: inv.id,
         provider: inv.provider,
         provider_docnum: doc.docnum,
         allocation_number: doc.allocationNumber,
@@ -194,23 +246,27 @@ Deno.serve(async (req) => {
         customer_id_number: inv.customer_id_number,
         customer_address: inv.customer_address,
         customer_phone: inv.customer_phone,
-        lines: inv.lines,
-        subtotal: inv.subtotal,
-        vat_rate: inv.vat_rate,
-        vat: inv.vat,
-        total: inv.total,
+        lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        subtotal,
+        vat_rate: vatRate,
+        vat,
+        total,
         status: 'issued',
       }).select().single();
       if (nErr) return json({ error: `credit note issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
 
-      // ...then mark the original cancelled and link it. The immutability trigger
-      // permits exactly this one transition.
+      /* A partial credit ends here: the original is still a live invoice for
+         what the customer keeps owing us, or kept paying. Only a credit that
+         takes the last of it voids the document — and that is the one update
+         the immutability trigger permits. */
+      if (!full) return json({ credit_note: note, credited: total, remaining: round2(remaining - total) });
+
       const { data: cancelled, error: uErr } = await admin.from('invoices')
         .update({ status: 'cancelled', cancelled_by: note.id })
         .eq('id', inv.id).select().single();
       if (uErr) return json({ error: `credit note stored but original not marked cancelled: ${uErr.message}` }, 500);
 
-      return json({ credit_note: note, cancelled });
+      return json({ credit_note: note, cancelled, credited: total, remaining: 0 });
     }
 
     return json({ error: `unknown action: ${action}` }, 400);

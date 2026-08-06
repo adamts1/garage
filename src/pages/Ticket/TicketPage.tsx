@@ -382,10 +382,28 @@ export default function TicketPage({
                 <button className="btn ghost block" onClick={() => warnIfBlocked(printInvoice(invoice))}>
                   <IconPrint /> {t('ticket.printInvoice')}
                 </button>
-                {invoice.status === 'issued' && (
-                  <button className="btn ghost block" onClick={() => void page.cancel()} disabled={busy}>
-                    {t('ticket.cancelInvoice')}
+                {/* Money back to the customer — part of the bill or the rest of
+                    it, in one place. Cancelling the whole invoice is the same
+                    act with the amount left alone, so it is the same dialog and
+                    not a second button beside it.
+
+                    Offered only while something is left to credit, and only to
+                    an admin: the Edge Function refuses a member outright, and a
+                    button that always fails is worse than no button. */}
+                {page.creditable > 0 && page.canCredit && (
+                  <button className="btn ghost block" onClick={() => void page.credit()} disabled={busy}>
+                    {t('ticket.creditCustomer')}
                   </button>
+                )}
+                {/* Already partly given back — so the number above is not what
+                    the garage kept, and the panel should not imply that it is. */}
+                {invoice.status === 'issued' && page.creditable < invoice.total && (
+                  <p className="muted">
+                    {t('credit.alreadyOnInvoice', {
+                      credited: money(invoice.total - page.creditable),
+                      remaining: money(page.creditable),
+                    })}
+                  </p>
                 )}
               </div>
             ) : settled ? (

@@ -1012,6 +1012,61 @@ const delInv = await rest(`invoices?id=eq.${invSeed?.id}`, a.token, { method: 'D
 const stillThereInv = await (await rest(`invoices?id=eq.${invSeed?.id}&select=id`, a.token)).json();
 check('authenticated cannot DELETE an invoice', Array.isArray(stillThereInv) && stillThereInv.length === 1, `delete got ${delInv.status}`);
 
+/* Partial credits. A credit note is a document of its own with a positive
+ * total, and what is still creditable on an invoice is that invoice minus the
+ * notes against it — arithmetic the server has to own, because a client that
+ * computes it from a list it happens to be holding computes it from a stale
+ * one, and the error hands a customer money twice. */
+const creditSeed = await rest('invoices', SERVICE, {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify([
+    {
+      garage_id: a.garage.id, doc_type: 'credit_note', credits_invoice_id: invSeed?.id,
+      provider: 'icount', provider_docnum: `CN1-${stamp}`,
+      subtotal: 25.42, vat_rate: 0.18, vat: 4.58, total: 30, status: 'issued',
+    },
+    {
+      garage_id: a.garage.id, doc_type: 'credit_note', credits_invoice_id: invSeed?.id,
+      provider: 'icount', provider_docnum: `CN2-${stamp}`,
+      subtotal: 16.95, vat_rate: 0.18, vat: 3.05, total: 20, status: 'issued',
+    },
+  ]),
+});
+check('service_role can store credit notes against an invoice', creditSeed.status === 201, `got ${creditSeed.status}`);
+
+const creditedA = await (await rpc('invoice_credited_total', a.token, { invoice: invSeed?.id })).json();
+check(
+  'several partial credits against one invoice add up',
+  Number(creditedA) === 50,
+  `got ${JSON.stringify(creditedA)} (expected 50 of the 118 invoice)`,
+);
+
+/* The sum is SECURITY DEFINER — it reads past RLS by design — so the garage
+ * check inside it is the only thing standing between B and A's ledger. */
+const creditedB = await (await rpc('invoice_credited_total', b.token, { invoice: invSeed?.id })).json();
+check(
+  "B cannot read what A credited, even through the sum",
+  Number(creditedB) === 0,
+  `got ${JSON.stringify(creditedB)}`,
+);
+
+/* An invoice-receipt credits nothing. Were the column allowed there, the sum
+ * above would count a sale as a refund. */
+const receiptCredits = await rest('invoices', SERVICE, {
+  method: 'POST',
+  body: JSON.stringify({
+    garage_id: a.garage.id, doc_type: 'invoice_receipt', credits_invoice_id: invSeed?.id,
+    provider: 'icount', provider_docnum: `BAD-${stamp}`,
+    subtotal: 1, vat_rate: 0.18, vat: 0, total: 1, status: 'issued',
+  }),
+});
+check(
+  'an invoice-receipt cannot claim to credit another document',
+  receiptCredits.status >= 400,
+  `got ${receiptCredits.status}`,
+);
+
 // The provider credentials are invisible to every client — no grant on the secrets table.
 const secretPeek = await rest('garage_billing_secrets?select=credentials', a.token);
 const secretBody = secretPeek.status === 200 ? await secretPeek.json() : null;
