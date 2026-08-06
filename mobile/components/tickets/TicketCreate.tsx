@@ -173,15 +173,6 @@ export default function TicketCreate({
               onChangeText={(v) => set('details', v)}
             />
           </Field>
-          <Field label={t('create.fields.due')}>
-            <TextInput
-              style={s.input}
-              value={form.due}
-              onChangeText={(v) => set('due', v)}
-              placeholder={t('create.duePlaceholder')}
-              placeholderTextColor={C.dim}
-            />
-          </Field>
         </View>
 
         <WorksSection works={works} onChange={setWorks} />

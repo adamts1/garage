@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { setSupabaseClient } from './client';
-import { createWorkDef, listWorkDefs } from './db';
+import { createWorkDef, isDuplicateCodeError, listWorkDefs } from './db';
 
 /** Records what was asked of the client and replays canned answers. */
 const stub = (handlers: Record<string, any>) => {
@@ -138,5 +138,30 @@ describe('createWorkDef', () => {
     // Otherwise the catalog keeps a work that lost its parts — it looks right
     // in the list and quotes wrong the moment someone picks it.
     expect(calls.some((c) => c.table === 'work_defs' && c.op === 'delete' && c.payload === 'orphan')).toBe(true);
+  });
+});
+
+/* The refusal both apps have to recognise. A catalog code is unique per garage,
+   and every screen that creates one checks the list it is holding first — so
+   this fires only when somebody else took the code in between. Getting it wrong
+   in either direction is a real failure: unrecognised, the operator reads a
+   Postgres index name; over-eager, a network fault claims a code is taken and
+   sends them off to invent another one. */
+describe('isDuplicateCodeError', () => {
+  it('recognises a unique violation as Supabase reports it', () => {
+    expect(
+      isDuplicateCodeError({
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "items_garage_sku_key"',
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves every other failure alone', () => {
+    expect(isDuplicateCodeError({ code: '42501', message: 'permission denied' })).toBe(false);
+    expect(isDuplicateCodeError(new Error('Failed to fetch'))).toBe(false);
+    expect(isDuplicateCodeError('23505')).toBe(false);
+    expect(isDuplicateCodeError(null)).toBe(false);
+    expect(isDuplicateCodeError(undefined)).toBe(false);
   });
 });

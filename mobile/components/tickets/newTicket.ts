@@ -39,7 +39,6 @@ export interface TicketForm {
   model: string;
   year: string;
   km: string;
-  due: string;
   details: string;
   keyReceived: boolean;
 }
@@ -58,7 +57,6 @@ export const EMPTY_FORM: TicketForm = {
   model: '',
   year: '',
   km: '',
-  due: '',
   details: '',
   keyReceived: false,
 };
@@ -147,7 +145,13 @@ export function buildNewTicket({
     amount: worksSummary(works).total,
     done: 0,
     subtasks: subtasksFromWorks(works),
-    due: form.due.trim() || EMPTY_FIELD,
+    /* No target date is asked for on the phone: a garage that promises a car
+       "by Thursday" does it at the counter, and a date nobody at intake could
+       commit to was one more field to skip. The column stays — the web board
+       shows it and the web form still sets it — so what goes in is the dash
+       every other unfilled field writes, not an empty string that would print
+       as a gap. */
+    due: EMPTY_FIELD,
     flags: intakeFlags(form.keyReceived),
     works,
     phone: form.customerPhone,

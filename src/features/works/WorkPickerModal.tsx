@@ -1,5 +1,5 @@
 import { shekel, toCatalogCode, type PartDef, type PartRow, type WorkDef } from '@garage/shared';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/Field';
@@ -22,6 +22,16 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
 
   const resultId = String(props.resultId ?? '');
   const initialQuery = String(props.initialQuery ?? '');
+  /* Codes already on the ticket, comma-joined — see usePickWork. */
+  const taken = useMemo(
+    () => String(props.taken ?? '').split(',').filter(Boolean),
+    [props.taken],
+  );
+
+  /* A work already on the ticket is not offered again: a code names one work,
+     and a second copy of it is two lines a customer cannot tell apart. The part
+     picker leaves out what is already on the work for the same reason. */
+  const available = useMemo(() => works.filter((w) => !taken.includes(w.code)), [works, taken]);
 
   const [mode, setMode] = useState<'search' | 'create'>('search');
   const [code, setCode] = useState('');
@@ -59,8 +69,18 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
      is now asked for rather than invented, and the button below waits for it. */
   const cleanCode = toCatalogCode(code);
 
+  /* Refused here rather than at the insert. `work_defs` is unique on
+     (garage_id, code) so the database would refuse it anyway — but by then the
+     work is on the ticket and the toast is an afterthought. Checked against the
+     ticket too, which no constraint covers. */
+  const clash =
+    !cleanCode ? null
+    : taken.includes(cleanCode) ? t('works.duplicateOnTicket')
+    : works.some((w) => w.code === cleanCode) ? t('works.duplicateCode')
+    : null;
+
   const submit = () => {
-    if (!name.trim() || !cleanCode) return;
+    if (!name.trim() || !cleanCode || clash) return;
     const def: WorkDef = {
       id: `custom-${Date.now()}`,
       code: cleanCode,
@@ -78,7 +98,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
       <PickerModal<WorkDef>
         title="picker.work.title"
         searchPlaceholder="picker.work.search"
-        items={works}
+        items={available}
         itemKey={(w) => w.id}
         match={(w, q) => norm(w.code).includes(norm(q)) || norm(w.name).includes(norm(q))}
         emptyKey="picker.work.empty"
@@ -164,7 +184,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
       actions={
         <>
           <Button onClick={() => setMode('search')}>→ {t('picker.backToSearch')}</Button>
-          <Button variant="primary" disabled={!name.trim() || !cleanCode} onClick={submit}>
+          <Button variant="primary" disabled={!name.trim() || !cleanCode || Boolean(clash)} onClick={submit}>
             {t('picker.work.submit')}
           </Button>
         </>
@@ -175,6 +195,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
           label="picker.work.code"
           required
           hint="works.codeFormat"
+          error={clash ?? undefined}
           value={code}
           /* Normalised as it is typed, so what is on screen is what is stored —
              lowercase becomes uppercase under the cursor and Hebrew simply does

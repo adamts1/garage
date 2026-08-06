@@ -52,8 +52,17 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
      from the name, which for a Hebrew part produced a Hebrew מק״ט. */
   const cleanSku = toCatalogCode(sku);
 
+  /* `items` is unique on (garage_id, sku), and a part already on this work is a
+     quantity to raise rather than a second line. Both refused before the write,
+     for the reasons WorkPickerModal spells out. */
+  const clash =
+    !cleanSku ? null
+    : taken.includes(cleanSku) ? t('picker.part.duplicateOnWork')
+    : parts.some((p) => p.sku === cleanSku) ? t('items.duplicateSku')
+    : null;
+
   const submit = () => {
-    if (!name.trim() || !cleanSku) return;
+    if (!name.trim() || !cleanSku || clash) return;
     const part: PartDef = {
       sku: cleanSku,
       name: name.trim(),
@@ -100,7 +109,7 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
       actions={
         <>
           <Button onClick={() => setMode('search')}>→ {t('picker.backToSearch')}</Button>
-          <Button variant="primary" disabled={!name.trim() || !cleanSku} onClick={submit}>
+          <Button variant="primary" disabled={!name.trim() || !cleanSku || Boolean(clash)} onClick={submit}>
             {t('picker.part.submit')}
           </Button>
         </>
@@ -111,6 +120,7 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
           label="items.fields.sku"
           required
           hint="works.codeFormat"
+          error={clash ?? undefined}
           value={sku}
           onChange={(e) => setSku(toCatalogCode(e.target.value))}
         />

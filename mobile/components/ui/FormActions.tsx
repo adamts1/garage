@@ -8,11 +8,14 @@ import { Button } from './Button';
 
 export function FormActions({
   disabled,
+  busy = false,
   onBack,
   onSubmit,
   submitLabel,
 }: {
   disabled: boolean;
+  /** Submit is waiting on a write — spinner on the button, both presses off. */
+  busy?: boolean;
   onBack: () => void;
   onSubmit: () => void;
   submitLabel: string;
@@ -21,8 +24,16 @@ export function FormActions({
 
   return (
     <View style={[s.row, { gap: 10, marginTop: 4 }]}>
-      <Button label={submitLabel} onPress={onSubmit} disabled={disabled} style={{ flex: 1 }} />
-      <Button label={t('ui.backToSearch')} onPress={onBack} variant="outline" />
+      <Button
+        label={submitLabel}
+        onPress={onSubmit}
+        disabled={disabled}
+        busy={busy}
+        style={{ flex: 1 }}
+      />
+      {/* Going back mid-write would leave the form that owns the request
+          unmounted with the answer still coming. */}
+      <Button label={t('ui.backToSearch')} onPress={onBack} variant="outline" disabled={busy} />
     </View>
   );
 }

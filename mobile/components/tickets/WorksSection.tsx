@@ -4,9 +4,17 @@
    ticket editor and the new-ticket form render the identical block this way. */
 
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { VAT, money, workTotal, worksSummary, type PartRow, type TicketWork } from '@garage/shared';
+import {
+  VAT,
+  isGarageAdmin,
+  money,
+  workTotal,
+  worksSummary,
+  type PartRow,
+  type TicketWork,
+} from '@garage/shared';
 import { C, rtl, s } from '../../lib/theme';
 import { Button, NumberPrompt, SectionHead, Stepper, TotalRow, TrashIcon } from '../ui';
 import { PartPicker } from './PartPicker';
@@ -25,8 +33,18 @@ export function WorksSection({
   const [pickWork, setPickWork] = useState(false);
   const [pickPartFor, setPickPartFor] = useState<string | null>(null); // work uid
   const [pricing, setPricing] = useState<{ uid: string; index: number; part: PartRow } | null>(null);
+  const [laborFor, setLaborFor] = useState<TicketWork | null>(null);
 
   const sum = worksSummary(works);
+
+  /* What a customer is charged is an admin's call. A member still adds works,
+     removes them, edits their parts and writes the note — everything except
+     repricing the labour on a work already on the ticket.
+
+     This only decides what to render. save_ticket_works re-checks the role in
+     the database, because a flag the client reads is a flag the client can
+     lie about. Same rule as the web's WorksStep. */
+  const canPrice = isGarageAdmin();
 
   const addWork = (w: TicketWork) => {
     onChange([...works, w]);
@@ -63,6 +81,11 @@ export function WorksSection({
     setPricing(null);
   };
 
+  const applyLabor = (labor: number) => {
+    if (laborFor) patchWork(laborFor.uid, { labor });
+    setLaborFor(null);
+  };
+
   return (
     <>
       <SectionHead
@@ -77,10 +100,13 @@ export function WorksSection({
           key={`${w.uid}-${wi}`}
           work={w}
           open={openWork === w.uid}
+          canPrice={canPrice}
           onToggle={() => setOpenWork(openWork === w.uid ? null : w.uid)}
           onAddPart={() => setPickPartFor(w.uid)}
           onPatchPart={(i, patch) => patchPart(w.uid, i, patch)}
           onEditPrice={(i, p) => setPricing({ uid: w.uid, index: i, part: p })}
+          onEditLabor={() => setLaborFor(w)}
+          onNotes={(notes) => patchWork(w.uid, { notes })}
           onRemovePart={(i) => removePart(w.uid, i)}
           onRemove={() => removeWork(w.uid)}
         />
@@ -118,9 +144,27 @@ export function WorksSection({
         onSubmit={applyPrice}
       />
 
-      <WorkPicker visible={pickWork} onClose={() => setPickWork(false)} onPick={addWork} />
+      <NumberPrompt
+        visible={Boolean(laborFor)}
+        title={t('works.laborTitle')}
+        subtitle={laborFor?.name}
+        value={laborFor?.labor ?? 0}
+        onCancel={() => setLaborFor(null)}
+        onSubmit={applyLabor}
+      />
+
+      {/* Each picker is told what this ticket already carries, so the same code
+          cannot arrive twice — by being picked out of the catalog or by being
+          created against it. */}
+      <WorkPicker
+        visible={pickWork}
+        taken={works.map((w) => w.code)}
+        onClose={() => setPickWork(false)}
+        onPick={addWork}
+      />
       <PartPicker
         workUid={pickPartFor}
+        taken={works.find((w) => w.uid === pickPartFor)?.items.map((p) => p.sku) ?? []}
         onClose={() => setPickPartFor(null)}
         onPick={(part) => pickPartFor && addPart(pickPartFor, part)}
       />
@@ -132,19 +176,26 @@ export function WorksSection({
 function WorkCard({
   work: w,
   open,
+  canPrice,
   onToggle,
   onAddPart,
   onPatchPart,
   onEditPrice,
+  onEditLabor,
+  onNotes,
   onRemovePart,
   onRemove,
 }: {
   work: TicketWork;
   open: boolean;
+  /** Whether this member may reprice the labour — see WorksSection. */
+  canPrice: boolean;
   onToggle: () => void;
   onAddPart: () => void;
   onPatchPart: (idx: number, patch: Partial<PartRow>) => void;
   onEditPrice: (idx: number, part: PartRow) => void;
+  onEditLabor: () => void;
+  onNotes: (notes: string) => void;
   onRemovePart: (idx: number) => void;
   onRemove: () => void;
 }) {
@@ -166,9 +217,53 @@ function WorkCard({
 
       {!open ? null : (
         <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 6 }}>
-          <View style={[s.rowBetween, { paddingVertical: 6 }]}>
+          {/* The labour line. It used to be a bare word with no figure beside
+              it, so the number the work is mostly made of was the one thing the
+              card did not show. An admin taps it to reprice; everyone else
+              reads it, and is told why it does not open. */}
+          <Pressable
+            onPress={canPrice ? onEditLabor : undefined}
+            disabled={!canPrice}
+            style={[s.rowBetween, { paddingVertical: 6 }]}
+            accessibilityRole={canPrice ? 'button' : undefined}
+            accessibilityLabel={canPrice ? t('works.laborTitle') : undefined}
+          >
             <Text style={[s.body, { fontSize: 13 }]}>{t('works.labor')}</Text>
-          </View>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: '700',
+                color: canPrice ? C.ink : C.dim,
+                ...rtl,
+              }}
+            >
+              {money(w.labor)}
+            </Text>
+          </Pressable>
+          {!canPrice ? (
+            <Text style={[s.dim, { fontSize: 11, paddingBottom: 6 }]}>{t('works.adminOnly')}</Text>
+          ) : null}
+
+          {/* What was actually done, against the work it was done on. Open to
+              everyone: it records labour, it does not price it.
+
+              No label above it — the placeholder says what it is, and a card
+              this narrow reads better without a caption over every control.
+              The name it still needs is the accessibility one.
+
+              Written straight through on every keystroke, unlike the web's
+              commit-on-blur field — here the edit lands in the screen's draft
+              and reaches the database only when somebody taps save, so a
+              sentence is one write and not thirty. */}
+          <TextInput
+            style={[s.input, { minHeight: 56, marginBottom: 12 }]}
+            multiline
+            value={w.notes ?? ''}
+            onChangeText={onNotes}
+            placeholder={t('works.notesPlaceholder')}
+            placeholderTextColor={C.dim}
+            accessibilityLabel={t('works.notes')}
+          />
 
           {/* parts of THIS work — name · quantity · price · delete */}
           {w.items.map((p, i) => (

@@ -19,6 +19,7 @@ export { Field } from './Field';
 export { FormActions } from './FormActions';
 export { MenuIcon, PowerIcon, TrashIcon } from './Icons';
 export { NumberPrompt } from './NumberPrompt';
+export { ReadOnly } from './ReadOnly';
 export { SectionHead } from './SectionHead';
 export { Sheet } from './Sheet';
 export { Stepper } from './Stepper';

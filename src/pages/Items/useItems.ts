@@ -1,5 +1,6 @@
 import {
-  createItem, deleteItem, listItems, subscribeToTable, toCatalogCode, updateItem, type Item,
+  createItem, deleteItem, isDuplicateCodeError, listItems, subscribeToTable, toCatalogCode,
+  updateItem, type Item,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useConfirm } from '../../store';
@@ -43,6 +44,18 @@ export function useItems() {
      a caller that forgot — the pickers used to invent exactly that. */
   const clean = (draft: ItemDraft): ItemDraft => ({ ...draft, sku: toCatalogCode(draft.sku) });
 
+  /* `items` is unique on (garage_id, sku). The refusal used to reach the toast
+     as Postgres wrote it — an index name and the word "constraint" — which
+     tells whoever is standing at the counter nothing about what to do next.
+     Same treatment as the works catalog's duplicate code. */
+  const fail = useCallback(
+    (e: unknown) => {
+      dispatch(showError(isDuplicateCodeError(e) ? 'items.duplicateSku' : e));
+      return false;
+    },
+    [dispatch],
+  );
+
   const create = useCallback(
     async (raw: ItemDraft) => {
       const draft = clean(raw);
@@ -53,11 +66,10 @@ export function useItems() {
         load();
         return true;
       } catch (e) {
-        dispatch(showError(e));
-        return false;
+        return fail(e);
       }
     },
-    [dispatch, load],
+    [dispatch, fail, load],
   );
 
   const update = useCallback(
@@ -70,11 +82,10 @@ export function useItems() {
         load();
         return true;
       } catch (e) {
-        dispatch(showError(e));
-        return false;
+        return fail(e);
       }
     },
-    [dispatch, load],
+    [dispatch, fail, load],
   );
 
   const remove = useCallback(

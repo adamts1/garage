@@ -1,6 +1,6 @@
 import {
-  createWorkDef, deleteWorkDef, listWorkDefs, subscribeToTable, toCatalogCode, updateWorkDef,
-  type WorkDef,
+  createWorkDef, deleteWorkDef, isDuplicateCodeError, listWorkDefs, subscribeToTable,
+  toCatalogCode, updateWorkDef, type WorkDef,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useConfirm } from '../../store';
@@ -14,13 +14,6 @@ export const blankWorkDef: WorkDefDraft = {
 export const toDraft = (w: WorkDef): WorkDefDraft => ({
   code: w.code, name: w.name, labor: w.labor, hours: w.hours, items: w.items,
 });
-
-/** `work_defs` is unique on (garage_id, code), and Postgres says so in a
- *  sentence nobody at a service desk can act on. Turned into one that names the
- *  actual problem. */
-const DUPLICATE_CODE = '23505';
-const isDuplicateCode = (e: unknown): boolean =>
-  typeof e === 'object' && e !== null && (e as { code?: string }).code === DUPLICATE_CODE;
 
 export function useWorks() {
   const dispatch = useAppDispatch();
@@ -52,7 +45,9 @@ export function useWorks() {
 
   const fail = useCallback(
     (e: unknown) => {
-      dispatch(showError(isDuplicateCode(e) ? 'works.duplicateCode' : e));
+      /* The constraint's own words name a Postgres index, not a problem
+         anybody at a service desk can act on. See isDuplicateCodeError. */
+      dispatch(showError(isDuplicateCodeError(e) ? 'works.duplicateCode' : e));
       return false;
     },
     [dispatch],

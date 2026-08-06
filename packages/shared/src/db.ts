@@ -6,6 +6,26 @@ import { getClient, invokeError } from './client';
 import type { Ticket, Worker } from './types';
 import type { PartRow, TicketWork, WorkDef } from './catalog';
 
+/* ---------------- a code that is already taken ----------------
+
+   `items` is unique on (garage_id, sku) and `work_defs` on (garage_id, code) —
+   the catalogs are keyed by the code somebody dictates over a phone, so two
+   rows sharing one is a catalog that cannot answer the question it exists to
+   answer. Postgres refuses the insert and says so in a sentence nobody at a
+   service desk can act on: 'duplicate key value violates unique constraint
+   "items_garage_sku_key"'.
+
+   Here so both apps recognise the same failure. Every screen that creates a
+   catalog row checks the list it already has before writing — but that list
+   was fetched at some point in the past, and between the check and the insert
+   somebody at the counter can create the same code. This is the answer to that
+   race, and it is the only one that is authoritative: the constraint is in the
+   database, not in a list a client is holding. */
+const UNIQUE_VIOLATION = '23505';
+
+export const isDuplicateCodeError = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null && (e as { code?: string }).code === UNIQUE_VIOLATION;
+
 /* ---------------- customers ---------------- */
 
 export interface Customer {

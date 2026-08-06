@@ -41,8 +41,13 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
 
   const addWork = useCallback(
     async (initialQuery = '') => {
-      const def = await pickWork({ initialQuery });
+      // What the ticket already carries, so the picker cannot offer it again
+      // and cannot create a work under a code that is on it.
+      const def = await pickWork({ initialQuery, taken: works.map((w) => w.code) });
       if (!def) return;
+      // The picker filters, but the answer arrives asynchronously — a second
+      // one under the same code must not land while the first is settling.
+      if (def.code && works.some((w) => w.code === def.code)) return;
       const uid = nextUid();
       setWorks([...works, fromCatalog(def, uid)]);   // brings the work's parts with it
       setSelectedUid(uid);
