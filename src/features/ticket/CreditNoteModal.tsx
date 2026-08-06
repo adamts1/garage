@@ -1,4 +1,4 @@
-import { money } from '@garage/shared';
+import { issuableCredit, money } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -44,6 +44,8 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
   /** Set when earlier credits have already come off this invoice. */
   const alreadyCredited = round2(invoiceTotal - remaining);
 
+  const vatRate = Number(props.vatRate ?? 0);
+
   const [amount, setAmount] = useState(String(remaining));
   const [reason, setReason] = useState('');
 
@@ -51,13 +53,27 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
   const valid = Number.isFinite(typed) && typed > 0 && round2(typed) <= remaining;
   const full = valid && round2(typed) >= remaining;
 
+  /* Not every amount can be put on a document: lines are priced before VAT and
+     the provider adds it, so the reachable grosses have gaps — ₪100.00 is one of
+     them. The server snaps to the nearest reachable one either way; showing it
+     here is what keeps the advisor from promising a figure the document will not
+     carry. Undefined when the typed amount is reachable, which is most of them. */
+  const issuable = valid ? issuableCredit(round2(typed), vatRate, remaining) : null;
+  const adjusted = issuable && issuable.total !== round2(typed) ? issuable.total : null;
+  /* What is actually about to be handed back — every figure below is derived
+     from this rather than from what was typed. */
+  const credited = issuable?.total ?? round2(typed);
+
   const answer = (value: CreditNoteAnswer | null) => {
     settleModal(resultId, value);
     onClose();
   };
 
   const submit = () => {
-    if (valid) answer({ amount: round2(typed), reason: reason.trim() });
+    /* The snapped figure, not the typed one, so the amount confirmed on screen
+       is the amount sent. The server snaps again — it does not trust this — and
+       snapping a reachable amount returns it unchanged. */
+    if (valid) answer({ amount: credited, reason: reason.trim() });
   };
 
   return (
@@ -103,9 +119,13 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
       />
 
+      {/* The typed amount cannot be put on a document, so this is what will be.
+          Said before the button, not in a toast afterwards. */}
+      {adjusted !== null && <p>{t('credit.adjusted', { amount: money(adjusted) })}</p>}
+
       {/* What the button is about to do, in the words of what changes: one of
           these leaves a live invoice behind and the other does not. */}
-      {valid && <p>{full ? t('credit.willVoid') : t('credit.willReduce', { left: money(round2(remaining - round2(typed))) })}</p>}
+      {valid && <p>{full ? t('credit.willVoid') : t('credit.willReduce', { left: money(round2(remaining - credited)) })}</p>}
     </Modal>
   );
 }

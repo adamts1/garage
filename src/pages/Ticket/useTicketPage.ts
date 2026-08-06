@@ -317,6 +317,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
       invoiceTotal: invoice.total,
       docnum: invoice.docnum,
       customer: ticket.customer,
+      /* The rate this document was issued at, not today's — a credit is priced
+         by the invoice it corrects. */
+      vatRate: invoice.vatRate,
     }) as { amount: number; reason: string } | null;
     if (!answer) return;
 

@@ -59,6 +59,40 @@ function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/* A line is priced BEFORE VAT and the provider adds the VAT, so the gross a
+   customer sees is never chosen directly — it is whatever subtotal + round(
+   subtotal × rate) lands on. At 18% those grosses step in jumps with gaps
+   between them, and ₪100.00 is a gap: ₪84.75 grosses to ₪100.01, ₪84.74 to
+   ₪99.99, and nothing prices to ₪100.00 exactly.
+
+   Storing the amount asked for while the provider prints another is the one
+   outcome worth ruling out — the row and the document would disagree, and every
+   sum built on the row would be wrong by the difference. So a credit is snapped
+   to a gross that can actually be issued: closest to what was asked, ties to
+   the lower, and never above `cap`. An agora short is a rounding artefact; an
+   agora over is money the garage did not agree to hand back, and on a final
+   credit it is a sum of notes larger than the invoice they credit.
+
+   Mirrored in packages/shared/src/invoices.ts so the dialog can name the real
+   figure. This copy is the authoritative one: it works from the stored invoice,
+   not from an amount a client sent. */
+function issuableCredit(requested: number, vatRate: number, cap: number):
+  { subtotal: number; vat: number; total: number } | null {
+  const start = round2(requested / (1 + vatRate));
+  let best: { subtotal: number; vat: number; total: number } | null = null;
+  for (let step = -2; step <= 2; step++) {
+    const subtotal = round2(start + step / 100);
+    if (subtotal <= 0) continue;
+    const vat = round2(subtotal * vatRate);
+    const total = round2(subtotal + vat);
+    if (total <= 0 || total > cap) continue;
+    if (!best || Math.abs(total - requested) < Math.abs(best.total - requested) - 1e-9) {
+      best = { subtotal, vat, total };
+    }
+  }
+  return best;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -211,9 +245,11 @@ Deno.serve(async (req) => {
          reason on it, priced pre-VAT the way every other line is: the provider
          adds VAT, and what the customer gets back is the gross typed in. */
       const untouched = full && Number(creditedSoFar ?? 0) === 0;
-      const subtotal = untouched ? Number(inv.subtotal) : round2(requested / (1 + vatRate));
-      const vat = untouched ? Number(inv.vat) : round2(subtotal * vatRate);
-      const total = untouched ? Number(inv.total) : round2(subtotal + vat);
+      const priced = untouched
+        ? { subtotal: Number(inv.subtotal), vat: Number(inv.vat), total: Number(inv.total) }
+        : issuableCredit(requested, vatRate, remaining);
+      if (!priced) return json({ error: 'no credit can be issued for that amount' }, 400);
+      const { subtotal, vat, total } = priced;
 
       const items: InvoiceItem[] = untouched
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number }>).map((l) => ({

@@ -54,6 +54,9 @@ export function useInvoices() {
         invoiceTotal: invoice.total,
         docnum: invoice.docnum,
         customer: invoice.customerName ?? '',
+        /* The rate this document was issued at, not today's — a credit is
+           priced by the invoice it corrects. */
+        vatRate: invoice.vatRate,
       });
       if (!answer) return;
 

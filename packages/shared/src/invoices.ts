@@ -175,6 +175,68 @@ export const creditableRemainder = (invoice: Invoice, all: readonly Invoice[]): 
   return Math.max(0, round2(invoice.total - creditedTotal(invoice, all)));
 };
 
+/* ---------- what a credit note can actually be issued for ----------
+
+   Every line on every document is priced BEFORE VAT, and the provider adds the
+   VAT itself. So the gross a customer sees is never chosen directly: it is
+   whatever `subtotal + round(subtotal × rate)` lands on, and at 18% the reachable
+   grosses step in jumps of one or two agorot with gaps between them.
+
+   ₪100.00 is one of the gaps. Divide it out and you get ₪84.75, whose VAT rounds
+   to ₪15.26 and whose gross is ₪100.01 — a document for an agora more than was
+   agreed. ₪84.74 undershoots to ₪99.99. Nothing prices to exactly ₪100.00.
+
+   Storing ₪100.00 while the provider prints ₪100.01 is the worse answer: the
+   ledger and the document in the customer's hand disagree, and every sum built
+   on the row is wrong by the difference. So the amount is snapped to a gross
+   that can actually be issued, and the dialog shows the advisor which one before
+   they confirm.
+
+   Ties go to the lower amount, and `cap` is never exceeded: an agora too little
+   back is a rounding artefact, an agora too much is money the garage did not
+   agree to return — and, on a last credit, a sum of notes larger than the
+   invoice they credit. */
+
+export interface CreditAmounts {
+  /** Pre-VAT, the figure the provider is given. */
+  subtotal: number;
+  vat: number;
+  /** What the customer gets back, and what the document will say. */
+  total: number;
+}
+
+/** The issuable credit closest to `requested`, never above `cap`, or null when
+ *  nothing at or below the cap is worth issuing.
+ *
+ *  Mirrored in supabase/functions/issue-invoice, which is authoritative — it
+ *  re-derives this from the stored invoice rather than trusting the amount a
+ *  client sends. This copy exists so the dialog can name the real figure instead
+ *  of one the server will quietly change. */
+export const issuableCredit = (
+  requested: number,
+  vatRate: number,
+  cap: number,
+): CreditAmounts | null => {
+  const start = round2(requested / (1 + vatRate));
+  let best: CreditAmounts | null = null;
+
+  /* Two agorot either side of the naive answer is more than enough room: one
+     step of subtotal moves the gross by about 1.18 agorot, so the bracket
+     around any reachable gross is at most a step wide. Ascending, so an equal
+     distance never displaces the lower total already held. */
+  for (let step = -2; step <= 2; step++) {
+    const subtotal = round2(start + step / 100);
+    if (subtotal <= 0) continue;
+    const vat = round2(subtotal * vatRate);
+    const total = round2(subtotal + vat);
+    if (total <= 0 || total > cap) continue;
+    if (!best || Math.abs(total - requested) < Math.abs(best.total - requested) - 1e-9) {
+      best = { subtotal, vat, total };
+    }
+  }
+  return best;
+};
+
 /** Money is stored to the agora; JS addition is not. */
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
