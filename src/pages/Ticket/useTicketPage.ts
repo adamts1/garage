@@ -1,5 +1,5 @@
 import {
-  cancelInvoice, customerHoldingIdNumber, idNumberConflict, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -60,7 +60,11 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
   const openCloseDrawer = useCloseTicket();
 
   const [photos, setPhotos] = useState<TicketPhoto[]>([]);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  /* Every document this ticket has produced, not just the live receipt: a
+     credit note is a document of its own, and "how much of this invoice is
+     still creditable" is the invoice minus the notes already written against
+     it. Holding only the receipt made that unanswerable. */
+  const [ticketDocs, setTicketDocs] = useState<Invoice[]>([]);
   const [busy, setBusy] = useState(false);
 
   const [draft, setDraft] = useState<Ticket>(ticket);
@@ -107,12 +111,23 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     let alive = true;
     const load = () =>
       listInvoices()
-        .then((all) => { if (alive) setInvoice(currentInvoice(all, ticket.k)); })
+        .then((all) => { if (alive) setTicketDocs(all.filter((i) => i.ticketKey === ticket.k)); })
         .catch(() => {});   // an absent invoice panel beats a broken page
     load();
     const off = subscribeToInvoices(load);
     return () => { alive = false; off(); };
   }, [ticket.k]);
+
+  /** The receipt the panel is about. Derived rather than stored, so a credit
+   *  note landing over realtime updates the figures beside it too. */
+  const invoice = useMemo(() => currentInvoice(ticketDocs, ticket.k), [ticketDocs, ticket.k]);
+
+  /** What is left to hand back on it: nothing once it is fully credited, which
+   *  is also when the button stops being offered. */
+  const creditable = useMemo(
+    () => (invoice ? creditableRemainder(invoice, ticketDocs) : 0),
+    [invoice, ticketDocs],
+  );
 
   /* The garage's customers: needed to read this ticket's ת״ז, and to say who
      already holds one that is typed in. */
@@ -272,7 +287,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     setBusy(true);
     try {
       const inv = await issueInvoice(ticket.k);
-      setInvoice(inv);
+      setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
       dispatch(showSuccess('invoiceIssue.issued', { docnum: inv.docnum, total: money(inv.total) }));
     } catch (e) {
       dispatch(showError(e));
@@ -281,29 +296,50 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     }
   }, [dirty, dispatch, openModal, ticket.customer, ticket.k, totals.total]);
 
-  const cancel = useCallback(async () => {
-    if (!invoice) return;
+  /* Give the customer money back — all of what is left on the invoice, or part
+     of it. The dialog opens on the whole remaining amount, because that is the
+     common case and typing a total by hand is how a digit goes missing.
 
-    const reason = await prompt({
-      titleKey: 'invoiceCancel.title',
-      labelKey: 'invoiceCancel.reason',
-      defaultValue: '',
-    });
-    /* null is "dismissed" and must not issue a credit note. '' is "left blank
-       on purpose" and falls back to a default — a different answer. */
-    if (reason === null) return;
+     A full credit voids the invoice AND takes the ticket back out of שולם: the
+     money was returned, so a card still reading "paid" is a lie the garage will
+     read as takings. The status goes back to מוכן, which also lifts the ticket
+     out of the archive — a credited job is one somebody still has to deal with.
+     A partial credit changes no status: the ticket was paid, and most of it
+     still is.
+
+     Admin only. The Edge Function refuses a member with a 403 of its own; this
+     just means a mechanic is not shown a button that will fail. */
+  const credit = useCallback(async () => {
+    if (!invoice || creditable <= 0) return;
+
+    const answer = await openModal('creditNote', {
+      remaining: creditable,
+      invoiceTotal: invoice.total,
+      docnum: invoice.docnum,
+      customer: ticket.customer,
+    }) as { amount: number; reason: string } | null;
+    if (!answer) return;
 
     setBusy(true);
     try {
-      await cancelInvoice(invoice.id, reason || 'ביטול חשבונית');
-      setInvoice(currentInvoice(await listInvoices(), ticket.k));
-      dispatch(showSuccess('invoiceCancel.done'));
+      const { cancelled, note } = await creditInvoice(invoice.id, answer.amount, answer.reason);
+      setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
+
+      if (cancelled) {
+        /* Through save(), not setDraft: this has to reach the database and the
+           board, and it is the same write any other status change makes. */
+        await save({ st: 'done', paid: false });
+      }
+      dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
+        docnum: note.docnum,
+        amount: money(note.total),
+      }));
     } catch (e) {
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
-  }, [dispatch, invoice, prompt, ticket.k]);
+  }, [creditable, dispatch, invoice, openModal, save, ticket.customer, ticket.k]);
 
   /** Deleting a ticket had no confirmation at all — less protection than
    *  deleting a supplier, for something that takes the invoices and photos
@@ -371,6 +407,10 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
   return {
     draft, photos, invoice, busy, totals, works, dirty,
     customer, idNumber, setIdNumber, idConflict,
-    patch, setWorks, assign, save, discard, issue, cancel, remove, close, leave,
+    /* What is still creditable, and whether this user may. Both are needed to
+       decide the button: a fully credited invoice offers nothing to anybody,
+       and a member may not credit at all. */
+    creditable, canCredit: isGarageAdmin(),
+    patch, setWorks, assign, save, discard, issue, credit, remove, close, leave,
   };
 }

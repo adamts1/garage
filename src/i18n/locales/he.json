@@ -254,10 +254,21 @@
     "confirm": "הפק חשבונית",
     "issued": "הופקה חשבונית מס-קבלה #{{docnum}} · {{total}}"
   },
-  "invoiceCancel": {
-    "title": "ביטול חשבונית",
-    "reason": "סיבת הביטול (תופק חשבונית זיכוי)",
-    "done": "החשבונית בוטלה · הופקה חשבונית זיכוי"
+  "credit": {
+    "title": "זיכוי לקוח",
+    "body": "חשבונית {{docnum}} על שם {{customer}}, בסך {{total}}.",
+    "alreadyCredited": "כבר זוכו {{credited}} · נותרו {{remaining}} לזיכוי",
+    "amount": "סכום לזיכוי",
+    "amountHint": "כולל מע״מ — הסכום שהלקוח מקבל בחזרה",
+    "reason": "סיבת הזיכוי",
+    "reasonHint": "תודפס על חשבונית הזיכוי שהלקוח מקבל",
+    "tooMuch": "לא ניתן לזכות יותר מ־{{remaining}}",
+    "willVoid": "זיכוי מלא — החשבונית תבוטל והכרטיס יחזור ל״מוכן״",
+    "willReduce": "זיכוי חלקי — החשבונית תישאר פעילה, ויישארו {{left}} לזיכוי",
+    "confirm": "הפק חשבונית זיכוי",
+    "doneFull": "הופקה חשבונית זיכוי {{docnum}} על {{amount}} · החשבונית בוטלה",
+    "donePartial": "הופקה חשבונית זיכוי {{docnum}} על {{amount}}",
+    "alreadyOnInvoice": "זוכו {{credited}} · נותרו {{remaining}}"
   },
   "ticket": {
     "title": "כרטיס עבודה #{{number}}",
@@ -297,7 +308,7 @@
     "issueInvoice": "הפק חשבונית מס-קבלה",
     "viewInvoicePdf": "צפה בחשבונית (PDF)",
     "printInvoice": "הדפס עותק חשבונית",
-    "cancelInvoice": "בטל חשבונית (הפקת זיכוי)",
+    "creditCustomer": "זכה לקוח",
     "messageCustomer": "שלח הודעה ללקוח",
     "noPhone": "אין טלפון ללקוח",
     "noPhoneTitle": "אין מספר טלפון ללקוח",
@@ -497,6 +508,7 @@
     "showing": "{{shown}} מתוך {{total}}",
     "openTicket": "פתח כרטיס עבודה #{{number}}",
     "printCopy": "הדפס עותק",
+    "creditCustomer": "זכה לקוח",
     "officialPdf": "המסמך הרשמי (PDF)",
     "docType": {
       "invoice_receipt": "חשבונית מס-קבלה",
@@ -512,7 +524,9 @@
       "receipts": "חשבוניות מס-קבלה",
       "receiptsSub": "סך המסמכים שהופקו",
       "cancelled": "בוטלו",
-      "cancelledSub": "חשבוניות שבוטלו בזיכוי"
+      "cancelledSub": "חשבוניות שבוטלו בזיכוי",
+      "credited": "זוכה ללקוחות",
+      "creditedSub": "כולל {{count}} חשבוניות בזיכוי חלקי"
     },
     "filters": {
       "search": "חיפוש",
@@ -535,7 +549,8 @@
       "desc": "פירוט",
       "qty": "כמות",
       "unit": "מחיר",
-      "total": "סה״כ"
+      "total": "סה״כ",
+      "credited": "מתוכו זוכה"
     },
     "detail": {
       "customer": "לקוח",
@@ -546,7 +561,8 @@
       "payMethod": "אמצעי תשלום",
       "subtotal": "סכום לפני מע״מ",
       "vat": "מע״מ ({{percent}}%)",
-      "total": "סה״כ"
+      "total": "סה״כ",
+      "credited": "מתוכו זוכה"
     }
   },
   "expenses": {

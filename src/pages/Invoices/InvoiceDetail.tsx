@@ -18,10 +18,17 @@ export interface InvoiceDetailProps {
   statusTone: (s: Invoice['status']) => 'ok' | 'danger';
   statusLabel: (s: Invoice['status']) => string;
   onOpenTicket: (key: string) => void;
+  /** What is still creditable on this document — 0 for a credit note, for a
+   *  cancelled invoice, and for one already given back in full. */
+  creditable: number;
+  /** Whether the signed-in user may hand money back at all. */
+  canCredit: boolean;
+  onCredit: () => void;
+  busy: boolean;
 }
 
 export default function InvoiceDetail({
-  invoice, docLabel, statusTone, statusLabel, onOpenTicket,
+  invoice, docLabel, statusTone, statusLabel, onOpenTicket, creditable, canCredit, onCredit, busy,
 }: InvoiceDetailProps) {
   const { t } = useTranslation();
 
@@ -79,6 +86,16 @@ export default function InvoiceDetail({
             <span>{t('invoices.detail.total')}</span>
             <b>{money(invoice.total)}</b>
           </div>
+          {/* A live invoice with money already handed back: the total above is
+              what was billed, and this is what the garage kept. Both belong on
+              screen — one is the document, the other is the money. */}
+          {invoice.docType === 'invoice_receipt' && invoice.status === 'issued'
+            && creditable < invoice.total && (
+            <div>
+              <span>{t('invoices.detail.credited')}</span>
+              <b>{money(invoice.total - creditable)}</b>
+            </div>
+          )}
         </div>
       </div>
 
@@ -106,6 +123,14 @@ export default function InvoiceDetail({
         <Button onClick={() => warnIfBlocked(printInvoice(invoice))}>
           <IconPrint /> {t('invoices.printCopy')}
         </Button>
+
+        {/* Give the customer money back — some of it or the rest of it. The
+            dialog says which of the two the amount amounts to. */}
+        {canCredit && creditable > 0 && (
+          <Button onClick={onCredit} disabled={busy}>
+            <IconDoc /> {t('invoices.creditCustomer')}
+          </Button>
+        )}
 
         {invoice.pdfUrl && (
           <a className={styles.pdfLink} href={invoice.pdfUrl} target="_blank" rel="noreferrer">

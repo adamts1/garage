@@ -18,8 +18,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
    Written before the refactor, deliberately. */
 
 const issueInvoice = vi.fn();
-const cancelInvoice = vi.fn();
+const creditInvoice = vi.fn();
 const listInvoices = vi.fn();
+/* Crediting is an admin's call, and the page hides the button from anybody
+   else. Admin by default here; the last case below turns it off. */
+const isGarageAdmin = vi.fn(() => true);
 
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
@@ -32,7 +35,8 @@ vi.mock('@garage/shared', async (importActual) => {
     listItems: vi.fn(async () => []),
     listInvoices: (...a: unknown[]) => listInvoices(...a),
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
-    cancelInvoice: (...a: unknown[]) => cancelInvoice(...a),
+    creditInvoice: (...a: unknown[]) => creditInvoice(...a),
+    isGarageAdmin: () => isGarageAdmin(),
     subscribeToInvoices: vi.fn(() => () => {}),
     // The page reads the garage's customers to show (and warn about) the ת״ז.
     listCustomers: vi.fn(async () => []),
@@ -92,8 +96,13 @@ const renderPage = async (t: Ticket = ticket()) => {
 
 beforeEach(() => {
   issueInvoice.mockReset().mockResolvedValue(invoice());
-  cancelInvoice.mockReset().mockResolvedValue(undefined);
+  creditInvoice.mockReset().mockResolvedValue({
+    note: invoice({ id: 'note1', docType: 'credit_note', docnum: '3001', total: 1180 }),
+    cancelled: true,
+    remaining: 0,
+  });
   listInvoices.mockReset().mockResolvedValue([]);
+  isGarageAdmin.mockReturnValue(true);
 });
 
 afterEach(cleanup);
@@ -141,47 +150,101 @@ describe('issuing an invoice', () => {
   });
 });
 
-describe('cancelling an invoice', () => {
+/* Handing money back is the same class of act as issuing: a real document at
+   the provider, against a real customer, with no undo. So the same guard
+   applies — a click on the button must open a dialog and nothing else — plus
+   two rules that are specific to giving money back: never more than is left on
+   the invoice, and only an admin at all. */
+describe('crediting a customer', () => {
   beforeEach(() => { listInvoices.mockResolvedValue([invoice()]); });
 
-  const openCancel = async () => {
+  const openCredit = async () => {
     await renderPage();
-    await act(async () => { screen.getByText(/בטל חשבונית/).click(); });
+    await act(async () => { screen.getByText(/זכה לקוח/).click(); });
     await act(async () => { await Promise.resolve(); });
   };
 
   /* fireEvent, not a raw assignment: React installs its own value setter on the
      input prototype, so setting .value directly leaves its state untouched. */
-  const typeReason = (reason: string) =>
-    fireEvent.change(screen.getByLabelText(/סיבת הביטול/), { target: { value: reason } });
+  const type = (label: RegExp, value: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-  it('asks for a reason and does nothing if the dialog is dismissed', async () => {
-    await openCancel();
+  it('opens a dialog rather than crediting on the click', async () => {
+    await openCredit();
+    expect(creditInvoice).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the dialog is dismissed', async () => {
+    await openCredit();
     await act(async () => { screen.getByText('ביטול').click(); });
 
-    // Dismissing must not issue a credit note.
-    expect(cancelInvoice).not.toHaveBeenCalled();
+    expect(creditInvoice).not.toHaveBeenCalled();
   });
 
-  it('cancels with the reason given', async () => {
-    await openCancel();
-    await act(async () => { typeReason('טעות בסכום'); });
-    await act(async () => { screen.getByText('אישור').click(); });
+  /* The common case, and why the box opens filled in: crediting the whole of
+     what is left is one confirmation, not a total typed by hand. */
+  it('offers the full remaining amount, and credits it as it stands', async () => {
+    await openCredit();
+    await act(async () => { type(/סכום לזיכוי/, '1180'); });
+    await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
 
-    expect(cancelInvoice).toHaveBeenCalledWith('inv1', 'טעות בסכום');
+    expect(creditInvoice).toHaveBeenCalledWith('inv1', 1180, '');
   });
 
-  it('falls back to a default reason when the box is left empty', async () => {
-    await openCancel();
-    await act(async () => { screen.getByText('אישור').click(); });
+  it('credits part of the bill, with the reason typed on it', async () => {
+    await openCredit();
+    await act(async () => {
+      type(/סכום לזיכוי/, '300');
+      type(/סיבת הזיכוי/, 'החלק הוחזר');
+    });
+    await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
 
-    expect(cancelInvoice).toHaveBeenCalledWith('inv1', 'ביטול חשבונית');
+    expect(creditInvoice).toHaveBeenCalledWith('inv1', 300, 'החלק הוחזר');
   });
 
-  it('offers no cancel for an already-cancelled invoice', async () => {
+  /* The server refuses this too — it is the only place the answer is
+     authoritative — but a request that cannot succeed should not be sent. */
+  it('refuses an amount larger than what is left on the invoice', async () => {
+    await openCredit();
+    await act(async () => { type(/סכום לזיכוי/, '5000'); });
+    await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
+
+    expect(creditInvoice).not.toHaveBeenCalled();
+  });
+
+  it('refuses a zero or negative amount', async () => {
+    await openCredit();
+    for (const amount of ['0', '-50']) {
+      await act(async () => { type(/סכום לזיכוי/, amount); });
+      await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
+    }
+    expect(creditInvoice).not.toHaveBeenCalled();
+  });
+
+  it('offers nothing on an invoice that was already cancelled', async () => {
     listInvoices.mockResolvedValue([invoice({ status: 'cancelled' })]);
     await renderPage();
 
-    expect(screen.queryByText(/בטל חשבונית/)).toBeNull();
+    expect(screen.queryByText(/זכה לקוח/)).toBeNull();
+  });
+
+  /* Fully credited across two notes: the invoice is still 'issued' in this
+     fixture, and there is nothing left to give back. */
+  it('offers nothing once the whole invoice has been credited', async () => {
+    listInvoices.mockResolvedValue([
+      invoice(),
+      invoice({ id: 'n1', docType: 'credit_note', total: 900, creditsInvoiceId: 'inv1' }),
+      invoice({ id: 'n2', docType: 'credit_note', total: 280, creditsInvoiceId: 'inv1' }),
+    ]);
+    await renderPage();
+
+    expect(screen.queryByText(/זכה לקוח/)).toBeNull();
+  });
+
+  it('shows a member nothing to click — money back is an admin decision', async () => {
+    isGarageAdmin.mockReturnValue(false);
+    await renderPage();
+
+    expect(screen.queryByText(/זכה לקוח/)).toBeNull();
   });
 });

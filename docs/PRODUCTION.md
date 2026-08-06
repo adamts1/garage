@@ -624,8 +624,32 @@ apps and both go dark. So schema first, then auth, then the flip.
 - [x] **Multi-provider seam** — `_shared/provider.ts` defines the `InvoiceProvider` interface (issue/cancel → normalized `IssuedDoc`); `_shared/icount.ts` is the first adapter. A second accounting service (Green Invoice, Rivhit, …) is **one new adapter module + one registry line** — the invoices table, the UI, and the shared data layer do not change.
 - [x] iCount adapter (`_shared/icount.ts`) — auth + doc shapes verified against a live account (invrec/refund, doc/info for docnum→doc_id + allocation); credentials read from the jsonb bag as `{cid, token}`.
 - [x] Web wiring — explicit "הפק חשבונית מס-קבלה" button (confirm dialog) in the ticket's billing panel; `InvoicesPage` now READS the stored table, no longer recomputes from live tickets (kills §3.1).
-- [x] CI — 7 invoice-isolation checks added to `tenancy.mjs` (read scoping, no client insert/update/delete, token invisible).
-- [ ] Credit-note UX exists (cancel button); soft-delete for invoiced tickets still to confirm.
+- [x] CI — invoice-isolation checks in `tenancy.mjs` (read scoping, no client insert/update/delete, token invisible), plus the credit arithmetic: several partial credits add up, one garage cannot read another's through the SECURITY DEFINER sum, and an invoice-receipt cannot claim to credit a document.
+- [x] **Crediting a customer, in part or in full.** A credit note could only ever
+      undo a whole invoice, so a garage giving back ₪300 of a ₪1,170 bill had to
+      cancel the document and re-issue a smaller one — a lie about what happened,
+      and two documents for the customer to reconcile instead of one correction.
+      A partial credit now leaves the original **issued** and stands beside it;
+      several may be written against one invoice over time, and what is still
+      creditable is the total minus those. A credit that takes the last of it
+      cancels the invoice, which is what the old cancel button always was — so
+      the two are one dialog and one button (`credit.*`), not two that mean the
+      same thing. Reachable from the ticket **and** from the invoices ledger,
+      which is where a bookkeeper works. `20260806010000_partial_credit_notes.sql`
+- [x] **Admin only, at the function and not merely in the UI.** Money going back
+      to a customer is the same line the database already draws around repricing
+      a work: `issue-invoice` calls `is_garage_admin()` under the caller's JWT and
+      answers 403. The button is hidden from a member as well, because one that
+      always fails is worse than none.
+- [x] **A full credit takes the ticket back out of שולם** — to מוכן, unpaid, which
+      also lifts it out of the archive. The money was returned; a card still
+      reading "paid" is a figure the garage would count as takings. A partial
+      credit changes no status: most of the bill still stands.
+- [x] **The KPI arithmetic follows the money, not the document.** `headline().issued`
+      summed live receipts at face value, which was right only while a credited
+      invoice was a cancelled one. A live ₪1,000 invoice with ₪300 handed back is
+      ₪700 of takings, and what was refunded is its own card beside it.
+- [ ] Soft-delete for invoiced tickets still to confirm.
 - [ ] Mobile issuance (web-first shipped; mobile follows).
 - [ ] `PaymentResult` seam, `TerminalPayment` implementation.
 - [ ] **Gate:** accountant signs off on real issued documents in staging (needs an עוסק מורשה/חברה account connected to רשות המסים to see the real מספר הקצאה — the trial returns none).
