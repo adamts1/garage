@@ -1,8 +1,9 @@
 import {
-  createItem, createWorkDef, listItems, listWorkDefs,
+  createItem, createWorkDef, isDuplicateCodeError, listItems, listWorkDefs,
   type PartDef, type WorkDef,
 } from '@garage/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { isConfigured } from '../../lib/supabase';
 import { showError, showErrorKey, useAppDispatch } from '../../store';
 
@@ -19,6 +20,16 @@ export interface CatalogValue {
 
 const CatalogContext = createContext<CatalogValue | null>(null);
 
+/* Why a refused write is reported as a reason rather than as itself: a
+   duplicate code arrives from Postgres as an index name and the word
+   "constraint", and that string used to be interpolated straight into the
+   toast. The pickers refuse a code they can already see, so reaching here at
+   all means somebody else took it in the meantime — which is what to say. */
+const failureReason = (e: unknown, t: (key: string) => string): string =>
+  isDuplicateCodeError(e) ? t('catalog.codeTaken')
+  : e instanceof Error ? e.message
+  : String(e);
+
 /**
  * One copy of the catalogs for the whole app.
  *
@@ -33,6 +44,7 @@ const CatalogContext = createContext<CatalogValue | null>(null);
  */
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch();
+  const { t } = useTranslation();
   const [works, setWorks] = useState<WorkDef[]>([]);
   const [parts, setParts] = useState<PartDef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,12 +76,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         .then((saved) => setWorks((prev) => prev.map((w) => (w.id === def.id ? saved : w))))
         .catch((e) => {
           setWorks((prev) => prev.filter((w) => w.id !== def.id));
-          dispatch(showErrorKey('catalog.workNotSaved', {
-            reason: e instanceof Error ? e.message : String(e),
-          }));
+          dispatch(showErrorKey('catalog.workNotSaved', { reason: failureReason(e, t) }));
         });
     },
-    [dispatch],
+    [dispatch, t],
   );
 
   const addPart = useCallback(
@@ -77,12 +87,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setParts((prev) => [...prev, part]);
       createItem({ sku: part.sku, name: part.name, price: part.price, stock: 0 }).catch((e) => {
         setParts((prev) => prev.filter((p) => p.sku !== part.sku));
-        dispatch(showErrorKey('catalog.partNotSaved', {
-          reason: e instanceof Error ? e.message : String(e),
-        }));
+        dispatch(showErrorKey('catalog.partNotSaved', { reason: failureReason(e, t) }));
       });
     },
-    [dispatch],
+    [dispatch, t],
   );
 
   const value = useMemo<CatalogValue>(

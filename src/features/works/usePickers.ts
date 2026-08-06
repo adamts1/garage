@@ -6,8 +6,14 @@ import { useModalResult } from '../../store';
 export function usePickWork() {
   const open = useModalResult<WorkDef>();
   return useCallback(
-    (options: { initialQuery?: string } = {}) =>
-      open('workPicker', { initialQuery: options.initialQuery ?? '' }),
+    (options: { initialQuery?: string; taken?: string[] } = {}) =>
+      open('workPicker', {
+        initialQuery: options.initialQuery ?? '',
+        /* Codes already on the ticket. Flattened to a string for the same
+           reason the part picker's SKUs are: the store carries flat values,
+           and toCatalogCode leaves no commas in a code. */
+        taken: (options.taken ?? []).join(','),
+      }),
     [open],
   );
 }

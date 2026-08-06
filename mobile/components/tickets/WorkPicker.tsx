@@ -4,7 +4,15 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { createWorkDef, fromCatalog, listWorkDefs, type TicketWork, type WorkDef } from '@garage/shared';
+import {
+  createWorkDef,
+  fromCatalog,
+  isDuplicateCodeError,
+  listWorkDefs,
+  toCatalogCode,
+  type TicketWork,
+  type WorkDef,
+} from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { C, s } from '../../lib/theme';
 import { Checkbox, CreateRow, Field, FormActions, Sheet } from '../ui';
@@ -12,10 +20,14 @@ import { seedFromQuery, workUid } from './catalog';
 
 export function WorkPicker({
   visible,
+  taken,
   onClose,
   onPick,
 }: {
   visible: boolean;
+  /** Codes already on this ticket. A code identifies one work, so the ticket
+   *  cannot carry it twice — see the note on `duplicate` below. */
+  taken: string[];
   onClose: () => void;
   onPick: (w: TicketWork) => void;
 }) {
@@ -34,6 +46,7 @@ export function WorkPicker({
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [keep, setKeep] = useState(true); // also file it in the garage's catalog
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible && !defs) listWorkDefs().then(setDefs).catch(() => setDefs([]));
@@ -52,6 +65,13 @@ export function WorkPicker({
     (d) => !query || d.name.includes(query) || d.code.toLowerCase().includes(query.toLowerCase()),
   );
 
+  /* Both sides normalised before they are compared, so a code stored lowercase
+     by an older build still matches what is typed now. Blanks filtered out:
+     works saved before the code was required carry an empty one, and two of
+     those are not "the same work twice". */
+  const onTicket = new Set(taken.map(toCatalogCode).filter(Boolean));
+  const inCatalog = new Set((defs ?? []).map((d) => toCatalogCode(d.code)).filter(Boolean));
+
   const startCreate = () => {
     const seed = seedFromQuery(q);
     setCode(seed.code);
@@ -61,33 +81,71 @@ export function WorkPicker({
     setMode('create');
   };
 
-  /* The work goes onto the ticket immediately and the catalog write follows.
-     Optimistic on purpose: the sheet closes onto the works list, and a work that
-     appeared only after a round trip reads as one that was lost. If the catalog
-     write fails the entry is rolled back out of the list — but the work stays on
-     the ticket, which is the copy the mechanic actually needs. Same bargain the
-     web makes in App.tsx's addToCatalog. */
-  const submitCreate = () => {
-    if (!name.trim()) return;
-    const def: WorkDef = {
-      id: `custom-${Date.now()}`,
-      code: (code.trim() || name.trim().slice(0, 6)).toUpperCase(),
+  /* Uppercase Latin, always — the same rule the web modal applies, and the same
+     reason: the fallback used to be the first six characters of the name, which
+     for a Hebrew name produced a Hebrew code. The code is now asked for rather
+     than invented, so the submit button waits for one. */
+  const cleanCode = toCatalogCode(code);
+
+  /* A code names exactly one work, so it is refused in both directions before
+     anything is written: against the catalog, which the database enforces
+     anyway, and against this ticket, which nothing else would catch.
+
+     The ticket check applies even to a one-off work that never joins the
+     catalog — two lines on one invoice reading EXH-01 for different work is
+     the problem the code exists to prevent, whether or not either was saved. */
+  const clash =
+    !cleanCode ? null
+    : onTicket.has(cleanCode) ? 'ticket'
+    : inCatalog.has(cleanCode) ? 'catalog'
+    : null;
+
+  /* Filed in the catalog FIRST, then put on the ticket.
+
+     This used to run the other way — onto the ticket, catalog write to follow —
+     so the sheet could close without waiting. That bargain stops paying the
+     moment a duplicate code is refusable: the write is the only place the answer
+     is authoritative, and a work already sitting on the ticket when the answer
+     comes back is a work whose code belongs to something else. One round trip
+     with the button spinning is the price of never showing that state.
+
+     A work that is NOT joining the catalog writes nothing, so it is still
+     instant — which is the case somebody in a hurry picks anyway. */
+  const submitCreate = async () => {
+    if (!name.trim() || !cleanCode || clash || saving) return;
+
+    const draft = {
+      code: cleanCode,
       name: name.trim(),
       labor: Number(price) || 0,
       hours: 0,
-      items: [], // parts are added on the ticket, where the work now lives
+      items: [] as WorkDef['items'], // parts are added on the ticket, where the work now lives
     };
-    onPick(fromCatalog(def, workUid()));
-    setMode('search');
-    if (!keep) return;
 
-    setDefs((prev) => [...(prev ?? []), def]);
-    createWorkDef({ code: def.code, name: def.name, labor: def.labor, hours: def.hours, items: [] })
-      .then((saved) => setDefs((prev) => (prev ?? []).map((d) => (d.id === def.id ? saved : d))))
-      .catch((e: any) => {
-        setDefs((prev) => (prev ?? []).filter((d) => d.id !== def.id));
+    if (!keep) {
+      onPick(fromCatalog({ id: `custom-${Date.now()}`, ...draft }, workUid()));
+      setMode('search');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const saved = await createWorkDef(draft);
+      setDefs((prev) => [...(prev ?? []), saved]);
+      onPick(fromCatalog(saved, workUid()));
+      setMode('search');
+    } catch (e: any) {
+      // Somebody else took the code between the check above and this write.
+      if (isDuplicateCodeError(e)) {
+        // Refetch, so the form's own warning agrees with the alert from here on.
+        listWorkDefs().then(setDefs).catch(() => {});
+        Alert.alert(t('works.form.duplicateTitle'), t('works.form.duplicateCatalog'));
+      } else {
         Alert.alert(t('works.form.failed'), t('works.form.failedBody', { message: e?.message ?? e }));
-      });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const title = mode === 'create' ? t('works.form.title') : t('works.picker.title');
@@ -110,11 +168,16 @@ export function WorkPicker({
               </Field>
               <View style={s.row}>
                 <Field label={t('works.form.code')} flex>
+                  {/* Normalised as it is typed, so what is on screen is what is
+                      stored — lowercase becomes uppercase under the cursor and
+                      Hebrew simply does not appear, which says the rule better
+                      than a message after the fact would. */}
                   <TextInput
                     style={s.input}
                     value={code}
-                    onChangeText={setCode}
+                    onChangeText={(v) => setCode(toCatalogCode(v))}
                     autoCapitalize="characters"
+                    autoCorrect={false}
                     placeholder={t('works.form.codePlaceholder')}
                     placeholderTextColor={C.dim}
                   />
@@ -130,15 +193,28 @@ export function WorkPicker({
                   />
                 </Field>
               </View>
+              {/* Said where the code is typed, not after the save is refused:
+                  the whole point of catching it here is that nobody fills in
+                  the rest of the form first. */}
+              {clash ? (
+                <Text style={{ ...s.dim, fontSize: 11, color: C.danger, fontWeight: '700' }}>
+                  {clash === 'ticket'
+                    ? t('works.form.duplicateTicket')
+                    : t('works.form.duplicateCatalog')}
+                </Text>
+              ) : (
+                <Text style={[s.dim, { fontSize: 11 }]}>{t('works.form.codeFormat')}</Text>
+              )}
               <Checkbox checked={keep} onChange={setKeep} label={t('works.form.keep')} />
               <Text style={[s.dim, { fontSize: 11 }]}>
                 {keep ? t('works.form.keepHint') : t('works.form.onceHint')}
               </Text>
             </View>
             <FormActions
-              disabled={!name.trim()}
+              disabled={!name.trim() || !cleanCode || Boolean(clash)}
+              busy={saving}
               onBack={() => setMode('search')}
-              onSubmit={submitCreate}
+              onSubmit={() => void submitCreate()}
               submitLabel={t('works.form.submit')}
             />
           </ScrollView>
@@ -174,21 +250,33 @@ export function WorkPicker({
                 onPress={startCreate}
               />
             }
-            renderItem={({ item }) => (
-              <Pressable style={s.card} onPress={() => onPick(fromCatalog(item, workUid()))}>
-                <View style={s.rowBetween}>
-                  <Text style={s.h2}>{item.name}</Text>
-                  <Text style={s.dim}>{item.code}</Text>
-                </View>
-                <Text style={s.dim}>
-                  {t('works.picker.meta', {
-                    labor: item.labor,
-                    hours: item.hours,
-                    parts: item.items.length,
-                  })}
-                </Text>
-              </Pressable>
-            )}
+            renderItem={({ item }) => {
+              /* Already on the ticket: shown, greyed, and not selectable.
+                 Dropping it from the list instead would read as a catalog that
+                 has lost the work somebody is looking straight at. */
+              const already = onTicket.has(toCatalogCode(item.code));
+              return (
+                <Pressable
+                  style={[s.card, already && { opacity: 0.55, backgroundColor: C.bg }]}
+                  disabled={already}
+                  onPress={() => onPick(fromCatalog(item, workUid()))}
+                >
+                  <View style={s.rowBetween}>
+                    <Text style={s.h2}>{item.name}</Text>
+                    <Text style={s.dim}>{item.code}</Text>
+                  </View>
+                  <Text style={s.dim}>
+                    {already
+                      ? t('works.picker.taken')
+                      : t('works.picker.meta', {
+                          labor: item.labor,
+                          hours: item.hours,
+                          parts: item.items.length,
+                        })}
+                  </Text>
+                </Pressable>
+              );
+            }}
           />
         </>
       )}

@@ -1,12 +1,12 @@
 /* Everything about the ticket that is not a work, a photo or a note: who the
    customer is, which car, and where the job stands. */
 
-import { TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { COLUMNS, PRIORITIES, assignableWorkers } from '@garage/shared';
-import type { Priority, Status, Ticket, Worker } from '@garage/shared';
+import { COLUMNS, assignableWorkers } from '@garage/shared';
+import type { Status, Ticket, Worker } from '@garage/shared';
 import { C, s } from '../../../lib/theme';
-import { ChipGroup, Field } from '../../ui';
+import { ChipGroup, Field, ReadOnly } from '../../ui';
 
 export function DetailsTab({
   draft,
@@ -33,30 +33,26 @@ export function DetailsTab({
             onChangeText={(v) => onSet('title', v)}
           />
         </Field>
+        {/* The customer is shown here, never edited here.
+
+            Who the customer is was settled at intake, and this screen writes a
+            ticket — the name, phone and address on it are a denormalised copy
+            of a customer record it does not own. Correcting the copy on one
+            ticket left the record and every other ticket saying something else,
+            which is how the same person ends up under two phone numbers. The
+            customer record is the place to fix it. */}
         <View style={s.row}>
           <Field label={t('ticket.fields.customer')} flex>
-            <TextInput
-              style={s.input}
-              value={draft.customer}
-              onChangeText={(v) => onSet('customer', v)}
-            />
+            <ReadOnly value={draft.customer} />
           </Field>
           <Field label={t('ticket.fields.phone')} flex>
-            <TextInput
-              style={s.input}
-              keyboardType="phone-pad"
-              value={draft.phone ?? ''}
-              onChangeText={(v) => onSet('phone', v)}
-            />
+            <ReadOnly value={draft.phone} />
           </Field>
         </View>
         <Field label={t('ticket.fields.address')}>
-          <TextInput
-            style={s.input}
-            value={draft.address ?? ''}
-            onChangeText={(v) => onSet('address', v)}
-          />
+          <ReadOnly value={draft.address} />
         </Field>
+        <Text style={[s.dim, { fontSize: 11 }]}>{t('ticket.customerLocked')}</Text>
         <View style={s.row}>
           <Field label={t('ticket.fields.car')} flex>
             <TextInput style={s.input} value={draft.car} onChangeText={(v) => onSet('car', v)} />
@@ -82,29 +78,25 @@ export function DetailsTab({
               onChangeText={(v) => onSet('year', v)}
             />
           </Field>
-          <Field label={t('ticket.fields.due')} flex>
-            <TextInput style={s.input} value={draft.due} onChangeText={(v) => onSet('due', v)} />
-          </Field>
         </View>
       </View>
 
       <View style={[s.card, { gap: 10 }]}>
         <Field label={t('ticket.fields.status')}>
+          {/* שולם is not on offer from the phone. Marking a ticket paid is a
+              claim that money was taken, and the phone has no till, no invoice
+              and no payment screen behind it — so the only way to reach it here
+              was a mechanic's thumb. It stays visible on a ticket that already
+              is paid, because hiding the state a ticket is in tells a worse lie
+              than showing one that cannot be chosen. */}
           <ChipGroup
-            options={COLUMNS.map((c) => ({ id: c.id, label: c.title, color: c.dot }))}
+            options={COLUMNS.filter((c) => c.id !== 'paid' || draft.st === 'paid').map((c) => ({
+              id: c.id,
+              label: c.title,
+              color: c.dot,
+            }))}
             value={draft.st}
             onChange={(v) => onStatus(v as Status)}
-          />
-        </Field>
-        <Field label={t('ticket.fields.priority')}>
-          <ChipGroup
-            options={(Object.keys(PRIORITIES) as Priority[]).map((p) => ({
-              id: p,
-              label: PRIORITIES[p].t,
-              color: PRIORITIES[p].c,
-            }))}
-            value={draft.prio}
-            onChange={(v) => onSet('prio', v as Priority)}
           />
         </Field>
         <Field label={t('ticket.fields.assignee')}>

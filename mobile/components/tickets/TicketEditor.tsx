@@ -108,14 +108,13 @@ export default function TicketEditor({
   const changeStatus = (st: Status) =>
     setDraft((d) => {
       if (!d) return d;
-      // Landing in done/paid ticks everything off — same rule as the web board.
-      const finished = st === 'done' || st === 'paid';
-      return {
-        ...d,
-        st,
-        done: finished ? d.subtasks.length : d.done,
-        paid: st === 'paid' ? true : d.paid,
-      };
+      /* The phone never moves a ticket into שולם. The picker does not offer it
+         (see DetailsTab), and this refuses it too: the money is taken on the
+         web, where the invoice and the payment are, and a status that says paid
+         without either is a claim nobody can back up. */
+      if (st === 'paid') return d;
+      // Landing in done ticks everything off — same rule as the web board.
+      return { ...d, st, done: st === 'done' ? d.subtasks.length : d.done };
     });
 
   const saveWith = async (over?: Partial<Ticket>) => {
