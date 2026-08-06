@@ -619,22 +619,25 @@ for (const st of ['prog', 'parts', 'diag', 'qa']) {
   check(`a retired status "${st}" is rejected by the check constraint`, res.status >= 400, `got ${res.status}`);
 }
 
-/* The phone is the identifier and a ת״ז may not route around it. Resolution was
- * `if id_number ... elsif phone ...`, so a ticket carrying an unknown ת״ז never
- * consulted the phone and inserted a SECOND customer holding a number the first
- * already had — after which `limit 1` picks between them arbitrarily and the
- * phone identifies nobody. */
+/* Two people on one line, one of them with a ת״ז. This asserted the reverse
+ * until 20260806000000: the phone was the identifier, so a ticket carrying an
+ * unknown ת״ז on a number already on file had to resolve to the number's holder
+ * — the second person was called an impostor and could not be opened.
+ *
+ * They are not an impostor. They are the other half of a couple, or the second
+ * driver on a company line. A ת״ז nobody holds is somebody new, and a shared
+ * number is no reason to refuse them a record of their own. */
 const SHARED = '0523334455';
 await rpc('create_ticket', a.token, { t: { title: 'p1', customer_name: 'בעל הטלפון', phone: SHARED } });
 await rpc('create_ticket', a.token, {
-  t: { title: 'p2', customer_name: 'מתחזה', phone: SHARED, id_number: 'UNKNOWN-ID' },
+  t: { title: 'p2', customer_name: 'בת הזוג', phone: SHARED, id_number: 'UNKNOWN-ID' },
 });
 const holders = await (await rest(
   `customers?phone=eq.${SHARED}&select=id,name`, a.token,
 )).json();
 check(
-  'a ת״ז cannot route around the phone and create a second holder of one number',
-  Array.isArray(holders) && holders.length === 1,
+  'two people who answer one number get one record each',
+  Array.isArray(holders) && holders.length === 2,
   `got ${JSON.stringify(holders)}`,
 );
 
