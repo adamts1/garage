@@ -87,6 +87,15 @@ export interface SupplierExpense {
   vat: number;
   total: number;
   paid: boolean;
+  /** When the supplier is owed. Null means on receipt, so the expense date is
+   *  the due date — that fallback lives in dueOn() rather than in the column,
+   *  because a blank here is "nobody said" and not "today". */
+  dueDate: string | null;        // YYYY-MM-DD
+  chequeNumber: string | null;
+  /** The date ON the cheque. For a post-dated one this is neither the day it
+   *  was written nor the day the bill was due — it is the day the money leaves
+   *  the account, which is the only date a cash-flow question cares about. */
+  chequeDate: string | null;     // YYYY-MM-DD
   provider: string;
   providerExpenseId: string | null;
   syncStatus: ExpenseSyncStatus;
@@ -107,6 +116,9 @@ const rowToExpense = (r: any): SupplierExpense => ({
   vat: Number(r.vat),
   total: Number(r.total),
   paid: r.paid ?? false,
+  dueDate: r.due_date ?? null,
+  chequeNumber: r.cheque_number ?? null,
+  chequeDate: r.cheque_date ?? null,
   provider: r.provider,
   providerExpenseId: r.provider_expense_id ?? null,
   syncStatus: r.sync_status,
@@ -134,7 +146,17 @@ export interface ExpenseInput {
   subtotal: number;
   vatRate: number;   // e.g. 0.18; 0 for a VAT-free expense
   paid?: boolean;
+  dueDate?: string | null;
+  chequeNumber?: string | null;
+  chequeDate?: string | null;
 }
+
+/** When this bill is owed. A blank due date means on receipt — which is the
+ *  common case, and the reason the column is nullable rather than defaulted:
+ *  "nobody said" and "the day it was written" are the same date here but not
+ *  the same fact, and a later migration adding payment terms needs to tell them
+ *  apart. Everything that ages an unpaid bill goes through this. */
+export const dueOn = (e: SupplierExpense): string => e.dueDate ?? e.date;
 
 /** Insert the expense natively (garage_id fills from current_garage_id()). VAT
  *  and total are derived from subtotal + rate so the stored figures are
@@ -155,6 +177,9 @@ export const createExpense = async (e: ExpenseInput): Promise<SupplierExpense> =
       vat,
       total,
       paid: e.paid ?? false,
+      due_date: e.dueDate ?? null,
+      cheque_number: e.chequeNumber ?? null,
+      cheque_date: e.chequeDate ?? null,
     })
     .select('*, suppliers(name)')
     .single();
@@ -178,6 +203,9 @@ export const updateExpense = async (id: string, e: ExpenseInput) => {
       vat,
       total,
       paid: e.paid ?? false,
+      due_date: e.dueDate ?? null,
+      cheque_number: e.chequeNumber ?? null,
+      cheque_date: e.chequeDate ?? null,
     })
     .eq('id', id);
   if (error) throw error;

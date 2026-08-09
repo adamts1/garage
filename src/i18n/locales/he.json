@@ -101,6 +101,128 @@
       "gross": "סה״כ כולל מע״מ",
       "balance": "יתרה פתוחה",
       "avg": "תשלום ממוצע"
+    },
+    "tabs": {
+      "income": "הכנסות",
+      "obligo": "אובליגו",
+      "aging": "גיול חובות",
+      "customers": "לקוחות"
+    },
+    "subtitles": {
+      "income": "מה חויב, לפי סוג מסמך ותקופה",
+      "obligo": "מה המוסך מחויב לשלם, ומתי",
+      "aging": "כמה זמן החוב קיים — לשני הכיוונים",
+      "customers": "סיכום פעילות כספית לפי לקוחות בטווח הנבחר"
+    },
+    "income": {
+      "breakdown": "פירוט לפי סוג מסמך",
+      "empty": "לא הופקו מסמכים בתקופה הזו",
+      "filters": {
+        "period": "תקופה",
+        "from": "מתאריך",
+        "to": "עד תאריך"
+      },
+      "periods": {
+        "thisMonth": "החודש",
+        "lastMonth": "החודש שעבר",
+        "thisVatPeriod": "תקופת הדיווח",
+        "thisYear": "השנה",
+        "all": "הכל",
+        "custom": "טווח מותאם"
+      },
+      "fields": {
+        "docType": "סוג מסמך",
+        "count": "כמות",
+        "net": "לפני מע״מ",
+        "vat": "מע״מ",
+        "gross": "כולל מע״מ"
+      },
+      "kpi": {
+        "billed": "סך חיוב",
+        "billedSub": "חשבוניות בניכוי זיכויים",
+        "net": "לפני מע״מ",
+        "netSub": "הבסיס לחישוב",
+        "vat": "מע״מ",
+        "vatSub": "לדיווח",
+        "collected": "נגבה",
+        "collectedSub": "קבלות שהופקו בתקופה",
+        "credited": "זוכה",
+        "creditedSub": "הוחזר ללקוחות"
+      }
+    },
+    "obligo": {
+      "breakdown": {
+        "supplier": "פירוט לפי ספק",
+        "month": "פירוט לפי חודש"
+      },
+      "emptySupplier": "אין חשבוניות ספק פתוחות",
+      "emptyMonth": "אין תשלומים מתוכננים",
+      "filters": {
+        "grouping": "קיבוץ"
+      },
+      "groupings": {
+        "supplier": "לפי ספק",
+        "month": "לפי חודש"
+      },
+      "fields": {
+        "supplier": "ספק",
+        "month": "חודש",
+        "bills": "חשבוניות",
+        "oldestDue": "הוותיק ביותר",
+        "overdue": "באיחור",
+        "onCheques": "בצ׳קים",
+        "total": "סך הכל"
+      },
+      "kpi": {
+        "outstanding": "סך התחייבות",
+        "outstandingSub": "חשבוניות ספק שטרם שולמו",
+        "overdue": "באיחור",
+        "overdueSub": "עבר מועד התשלום",
+        "cheques": "בצ׳קים דחויים",
+        "chequesSub": "טרם ירדו מהחשבון",
+        "suppliers": "ספקים",
+        "suppliersSub": "עם יתרה פתוחה"
+      }
+    },
+    "aging": {
+      "breakdown": {
+        "customers": "{{count}} לקוחות עם חוב פתוח",
+        "suppliers": "{{count}} ספקים עם יתרה"
+      },
+      "emptyCustomers": "אין חובות פתוחים של לקוחות",
+      "emptySuppliers": "אין יתרות פתוחות לספקים",
+      "days": "{{count}} ימים",
+      "filters": {
+        "side": "צד"
+      },
+      "sides": {
+        "customers": "לקוחות — מה שחייבים לך",
+        "suppliers": "ספקים — מה שאתה חייב"
+      },
+      "buckets": {
+        "current": "עד 30 יום",
+        "thirty": "31—60",
+        "sixty": "61—90",
+        "ninety": "מעל 90"
+      },
+      "fields": {
+        "customer": "לקוח",
+        "supplier": "ספק",
+        "total": "סך הכל",
+        "oldest": "החוב הוותיק"
+      },
+      "kpi": {
+        "owedToUs": "חייבים לך",
+        "owedByUs": "אתה חייב",
+        "totalSub": "סך החוב הפתוח",
+        "overNinety": "מעל 90 יום",
+        "overNinetySub": "החלק שדורש טיפול",
+        "current": "עד 30 יום",
+        "currentSub": "במסגרת הרגילה",
+        "customers": "לקוחות",
+        "suppliers": "ספקים",
+        "countSub": "עם יתרה פתוחה"
+      }
     }
   },
   "works": {
@@ -618,8 +740,13 @@
       "vatRate": "שיעור מע״מ",
       "total": "סה״כ",
       "paid": "שולם",
-      "sync": "סנכרון"
-    }
+      "sync": "סנכרון",
+      "dueDate": "מועד תשלום",
+      "chequeNumber": "מספר צ׳ק",
+      "chequeDate": "תאריך על הצ׳ק"
+    },
+    "dueDateHint": "ריק — לתשלום עם קבלת החשבונית",
+    "chequeDateHint": "היום שבו הכסף יורד מהחשבון"
   },
   "customers": {
     "title": "רשימת לקוחות",

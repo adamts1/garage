@@ -99,6 +99,13 @@ export interface Ticket {
    *  that can archive somebody else's ticket. What ages a ticket off the
    *  board — see isArchived. */
   paidAt?: string | null;
+  /** ISO timestamp of when the work was finished — the ticket first reached
+   *  'done' or 'paid'. Written by the database, never sent by a client.
+   *
+   *  This is what ages an unpaid debt. NOT `due`, which is free text a garage
+   *  writes notes like "צפי 23/07" and "ממתין אישור" into, and not createdAt,
+   *  which is when the car arrived. See 20260809010000_closed_at.sql. */
+  closedAt?: string | null;
   payMethod?: string;
   doc?: string;
   reference?: string;

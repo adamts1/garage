@@ -421,6 +421,7 @@ const rowToTicket = (r: any): Ticket => ({
   paid: r.paid ?? undefined,
   // Written by the tickets_stamp_paid_at trigger, never by ticketToRow.
   paidAt: r.paid_at ?? null,
+  closedAt: r.closed_at ?? null,
   payMethod: r.pay_method ?? undefined,
   doc: r.doc ?? undefined,
   reference: r.reference ?? undefined,

@@ -244,4 +244,25 @@ INSERT INTO "public"."work_items" ("id", "work_id", "sku", "name", "qty", "price
 
 -- \unrestrict GZBFG5E7FnR3GiJM41e5TbZytYfk8BzOeANdWrUCgr5HqvhudMJ3bWwQre1ak4R
 
+/* The seed loads with session_replication_role = replica, so no trigger fires
+   for any of it — which is what makes the dump land verbatim, and which means
+   the stamps the database normally keeps are missing from every seeded row.
+
+   closed_at is the one that shows. Without it the aging report is empty on a
+   fresh local database, and an empty report reads as "no debts" rather than "no
+   stamps" — so nobody looks at it again. Staged over the past few months rather
+   than all set to today, because a report where every row is in the same bucket
+   demonstrates nothing.
+
+   Real rows get this from the trigger, and rows that predate the column get it
+   from the backfill in 20260809010000.
+
+   Before RESET ALL on purpose: the seeded tickets carry assignee codes with no
+   worker row behind them, and re-enabling foreign keys first makes this UPDATE
+   re-validate a constraint the seed spent the whole file bypassing. */
+UPDATE "public"."tickets"
+   SET "closed_at" = COALESCE("paid_at", "created_at") - (("ctid"::text::point)[1]::int % 5) * interval '24 days'
+ WHERE "status" IN ('done', 'paid')
+   AND "closed_at" IS NULL;
+
 RESET ALL;
