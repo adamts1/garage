@@ -20,6 +20,9 @@ export default function IssueInvoiceModal({ props, isTop, stacked, onClose }: Mo
   const resultId = String(props.resultId ?? '');
   const amount = String(props.amount ?? '');
   const customer = String(props.customer ?? '');
+  /* Which bill is about to exist. The copy differs in the one way that matters:
+     a מס-קבלה says money changed hands, a חשבונית מס says it has not yet. */
+  const docType = props.docType === 'tax_invoice' ? 'tax_invoice' : 'invoice_receipt';
 
   const answer = (value: boolean) => {
     settleModal(resultId, value);
@@ -28,7 +31,7 @@ export default function IssueInvoiceModal({ props, isTop, stacked, onClose }: Mo
 
   return (
     <Modal
-      title="invoiceIssue.title"
+      title={`invoiceIssue.title_${docType}`}
       size="sm"
       isTop={isTop}
       stacked={stacked}
@@ -44,7 +47,7 @@ export default function IssueInvoiceModal({ props, isTop, stacked, onClose }: Mo
         </>
       }
     >
-      <p>{t('invoiceIssue.body', { amount, customer })}</p>
+      <p>{t(`invoiceIssue.body_${docType}`, { amount, customer })}</p>
       <p>{t('invoiceIssue.warning')}</p>
     </Modal>
   );

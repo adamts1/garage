@@ -130,7 +130,7 @@ describe('issuing an invoice', () => {
     await act(async () => { screen.getByText('הפק חשבונית').click(); });
 
     expect(issueInvoice).toHaveBeenCalledTimes(1);
-    expect(issueInvoice).toHaveBeenCalledWith('GAR-7');
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'invoice_receipt');
   });
 
   it('issues nothing when the dialog is cancelled', async () => {
@@ -145,8 +145,37 @@ describe('issuing an invoice', () => {
   it('offers nothing to issue while the ticket is unpaid', async () => {
     await renderPage(ticket({ st: 'done', paid: false }));
 
-    // Finished is not settled: an unpaid ticket has no invoice button at all.
+    // Finished is not settled: no מס-קבלה, which would claim money that has
+    // not arrived.
     expect(screen.queryByText(/הפק חשבונית מס-קבלה/)).toBeNull();
+  });
+
+  /* The other bill. A ticket whose work is finished but which nobody has paid
+     for is exactly what a חשבונית מס is: billed now, collected later. The two
+     buttons are mutually exclusive, because the two documents say opposite
+     things about whether the money arrived. */
+  it('offers a tax invoice on finished work that is not paid for', async () => {
+    await renderPage(ticket({ st: 'done', paid: false }));
+
+    expect(screen.queryByText(/הפק חשבונית מס$/)).toBeTruthy();
+  });
+
+  it('does not offer a tax invoice once the ticket is settled', async () => {
+    await renderPage();
+
+    expect(screen.queryByText(/הפק חשבונית מס$/)).toBeNull();
+  });
+
+  it('issues a tax invoice as a tax invoice, from its own dialog', async () => {
+    await renderPage(ticket({ st: 'done', paid: false }));
+    await act(async () => { screen.getByText(/הפק חשבונית מס$/).click(); });
+
+    // The dialog says the money has NOT arrived — the one thing that separates
+    // this document from the other one.
+    expect(screen.getByText(/ללא תשלום/)).toBeTruthy();
+
+    await act(async () => { screen.getByText('הפק חשבונית').click(); });
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'tax_invoice');
   });
 });
 

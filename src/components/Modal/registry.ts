@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { CloseTicketModal } from '../../features/ticket/CloseTicketModal';
+import CollectPaymentModal from '../../features/ticket/CollectPaymentModal';
 import CreditNoteModal from '../../features/ticket/CreditNoteModal';
 import IssueInvoiceModal from '../../features/ticket/IssueInvoiceModal';
 import ItemPickerModal from '../../features/works/ItemPickerModal';
@@ -23,6 +24,7 @@ export const MODAL_REGISTRY: Record<string, ComponentType<ModalComponentProps>> 
   prompt: PromptModal,
   issueInvoice: IssueInvoiceModal,
   creditNote: CreditNoteModal,
+  collectPayment: CollectPaymentModal,
   closeTicket: CloseTicketModal,
   workPicker: WorkPickerModal,
   partPicker: ItemPickerModal,

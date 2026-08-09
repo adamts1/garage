@@ -248,11 +248,13 @@
     "label": "ערך"
   },
   "invoiceIssue": {
-    "title": "הפקת חשבונית מס-קבלה",
-    "body": "תופק חשבונית מס-קבלה על סך {{amount}} עבור {{customer}}.",
+    "title_invoice_receipt": "הפקת חשבונית מס-קבלה",
+    "title_tax_invoice": "הפקת חשבונית מס",
+    "body_invoice_receipt": "תופק חשבונית מס-קבלה על סך {{amount}} עבור {{customer}}.",
+    "body_tax_invoice": "תופק חשבונית מס על סך {{amount}} עבור {{customer}} — ללא תשלום. הקבלה תופק בנפרד כשהכסף יגיע.",
     "warning": "מסמך מס אינו ניתן למחיקה - לאחר ההפקה ניתן רק לבטלו באמצעות חשבונית זיכוי.",
     "confirm": "הפק חשבונית",
-    "issued": "הופקה חשבונית מס-קבלה #{{docnum}} · {{total}}"
+    "issued": "הופקה $t(invoices.docType.{{docType}}) #{{docnum}} · {{total}}"
   },
   "credit": {
     "title": "זיכוי לקוח",
@@ -353,7 +355,9 @@
     "noCustomerRecord": "הכרטיס לא מקושר לכרטיס לקוח, ולכן אי אפשר לשמור עליו ת״ז.",
     "idTakenByOther": "ת״ז זו רשומה אצל {{name}} - לקוח אחר. לא ניתן לשמור אותה על שני לקוחות.",
     "idTakenBySame": "ת״ז זו כבר רשומה אצל {{name}}. בדקו שאין כפילות בכרטיסי הלקוחות.",
-    "idTakenBlocked": "ת״ז זו רשומה אצל {{name}} - הכרטיס לא נשמר."
+    "idTakenBlocked": "ת״ז זו רשומה אצל {{name}} - הכרטיס לא נשמר.",
+    "issueTaxInvoice": "הפק חשבונית מס",
+    "collectOnInvoice": "רשום תשלום"
   },
   "login": {
     "brand": "מוסך",
@@ -513,6 +517,8 @@
     "officialPdf": "המסמך הרשמי (PDF)",
     "docType": {
       "invoice_receipt": "חשבונית מס-קבלה",
+      "tax_invoice": "חשבונית מס",
+      "receipt": "קבלה",
       "credit_note": "חשבונית זיכוי"
     },
     "status": {
@@ -715,5 +721,22 @@
       "address": "כתובת",
       "notes": "הערות"
     }
+  },
+  "collect": {
+    "title": "רישום תשלום",
+    "body": "חשבונית {{docnum}} על שם {{customer}}, בסך {{total}}.",
+    "alreadyPaid": "כבר שולמו {{paid}} · נותרו {{owed}} לתשלום",
+    "outstanding": "נותרו {{owed}} לתשלום",
+    "amount": "סכום שהתקבל",
+    "amountHint": "כולל מע״מ — הסכום שהלקוח שילם",
+    "tooMuch": "לא ניתן לגבות יותר מ־{{owed}}",
+    "payMethod": "אמצעי תשלום",
+    "reference": "אסמכתא",
+    "referenceHint": "מספר צ׳ק, אישור העברה או שובר אשראי",
+    "willSettle": "תשלום מלא — תופק קבלה, החשבונית תיסגר והכרטיס יעבור ל״שולם״",
+    "willReduce": "תשלום חלקי — תופק קבלה, ויישארו {{left}} לתשלום",
+    "confirm": "הפק קבלה",
+    "doneFull": "הופקה קבלה {{docnum}} על {{amount}} · החשבונית שולמה במלואה",
+    "donePartial": "הופקה קבלה {{docnum}} על {{amount}} · נותרו {{left}}"
   }
 }
