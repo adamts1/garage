@@ -220,6 +220,8 @@ export const printTicket = (
 
 const DOC_LABEL: Record<Invoice['docType'], string> = {
   invoice_receipt: 'חשבונית מס-קבלה',
+  tax_invoice: 'חשבונית מס',
+  receipt: 'קבלה',
   credit_note: 'חשבונית זיכוי',
 };
 

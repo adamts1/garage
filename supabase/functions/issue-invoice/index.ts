@@ -21,7 +21,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
-import type { InvoiceProvider, InvoiceItem, ProviderCredentials } from '../_shared/provider.ts';
+import type { BillDocType, InvoiceProvider, InvoiceItem, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
 const ADAPTERS: Record<string, InvoiceProvider> = {
@@ -110,14 +110,20 @@ Deno.serve(async (req) => {
     const action = body.action as string;
 
     // ---- a garage's provider + credentials, service_role only ----
-    async function billing(garageId: string): Promise<{ provider: string; adapter: InvoiceProvider; credentials: ProviderCredentials; vatRate: number }> {
+    async function billing(garageId: string): Promise<{ provider: string; adapter: InvoiceProvider; credentials: ProviderCredentials; vatRate: number; defaultDocType: BillDocType }> {
       const { data: cfg } = await admin.from('garage_billing').select('*').eq('garage_id', garageId).maybeSingle();
       if (!cfg || !cfg.active) throw new Error('invoicing is not configured for this garage');
       const adapter = ADAPTERS[cfg.provider];
       if (!adapter) throw new Error(`unknown invoicing provider: ${cfg.provider}`);
       const { data: sec } = await admin.from('garage_billing_secrets').select('credentials').eq('garage_id', garageId).maybeSingle();
       if (!sec?.credentials) throw new Error('invoicing credentials missing for this garage');
-      return { provider: cfg.provider, adapter, credentials: sec.credentials as ProviderCredentials, vatRate: Number(cfg.vat_rate) };
+      return {
+        provider: cfg.provider,
+        adapter,
+        credentials: sec.credentials as ProviderCredentials,
+        vatRate: Number(cfg.vat_rate),
+        defaultDocType: (cfg.doc_type as BillDocType) ?? 'invoice_receipt',
+      };
     }
 
     // ============================ ISSUE ============================
@@ -134,14 +140,26 @@ Deno.serve(async (req) => {
       if (tErr) return json({ error: tErr.message }, 400);
       if (!ticket) return json({ error: 'ticket not found in your garage' }, 404);
 
-      // Idempotent: if this ticket already has a live invoice, return it.
+      /* Idempotent across BOTH kinds of bill, not just the one being asked for.
+         A ticket has one bill: issuing a חשבונית מס for a ticket that already
+         carries a מס-קבלה is not a second document, it is the same money billed
+         twice, and the second one is the one nobody notices. */
       const { data: existing } = await admin
         .from('invoices').select('*')
-        .eq('ticket_id', ticketId).eq('doc_type', 'invoice_receipt').eq('status', 'issued')
+        .eq('ticket_id', ticketId).eq('status', 'issued')
+        .in('doc_type', ['invoice_receipt', 'tax_invoice'])
         .maybeSingle();
       if (existing) return json({ invoice: existing, reused: true });
 
-      const { provider, adapter, credentials, vatRate } = await billing(ticket.garage_id);
+      const { provider, adapter, credentials, vatRate, defaultDocType } = await billing(ticket.garage_id);
+
+      /* Which document this is, decided by the caller and falling back to the
+         garage's default. Anything else is refused rather than coerced: a
+         receipt or a credit note is not a thing you can bill a ticket with. */
+      const docType = (body.doc_type as BillDocType) ?? defaultDocType;
+      if (docType !== 'invoice_receipt' && docType !== 'tax_invoice') {
+        return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
+      }
 
       const { items, subtotal } = linesFromWorks(ticket.works as unknown as Work[]);
       if (items.length === 0) return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
@@ -150,9 +168,12 @@ Deno.serve(async (req) => {
 
       const doc = await adapter.issue({
         credentials,
+        docType,
         customer: { name: ticket.customer_name || 'לקוח', idNo: ticket.id_number || undefined, address: ticket.address || undefined },
         items,
-        payMethod: ticket.pay_method,
+        /* A tax invoice records no payment, so it carries none — not the pay
+           method sitting on the ticket, which describes how it WILL be paid. */
+        payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
         total,
       });
 
@@ -160,7 +181,7 @@ Deno.serve(async (req) => {
         garage_id: ticket.garage_id,
         ticket_id: ticket.id,
         ticket_key: ticket.key,
-        doc_type: 'invoice_receipt',
+        doc_type: docType,
         provider,
         provider_docnum: doc.docnum,
         allocation_number: doc.allocationNumber,
@@ -176,13 +197,101 @@ Deno.serve(async (req) => {
         vat_rate: vatRate,
         vat,
         total,
-        pay_method: ticket.pay_method,
-        pay_reference: ticket.reference,
+        pay_method: docType === 'invoice_receipt' ? ticket.pay_method : null,
+        pay_reference: docType === 'invoice_receipt' ? ticket.reference : null,
         status: 'issued',
       };
       const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
       return json({ invoice: inserted });
+    }
+
+    /* =========================== COLLECT ===========================
+
+       Money arriving against a חשבונית מס, as its own document — which is what
+       the customer is owed when they pay, and what turns an open bill into a
+       settled one.
+
+       Not an edit to the invoice: an issued document is never touched. What is
+       still owed is the invoice less the receipts and credits against it, so
+       settling is an insert and nothing else. */
+    if (action === 'collect') {
+      const invoiceId = body.invoice_id as string;
+      if (!invoiceId) return json({ error: 'invoice_id required' }, 400);
+
+      // Caller's JWT -> RLS: their garage's invoice, or nothing.
+      const { data: inv, error: rErr } = await userClient.from('invoices').select('*').eq('id', invoiceId).maybeSingle();
+      if (rErr) return json({ error: rErr.message }, 400);
+      if (!inv) return json({ error: 'invoice not found in your garage' }, 404);
+      if (inv.doc_type !== 'tax_invoice') {
+        return json({ error: 'only a tax invoice is settled by a receipt — an invoice-receipt was already paid when it was issued' }, 400);
+      }
+      if (inv.status === 'cancelled') return json({ error: 'invoice is cancelled' }, 409);
+
+      /* What is still owed, asked of the database: two advisors taking payment
+         at once must not between them collect more than the bill. */
+      const [{ data: paidSoFar, error: pErr }, { data: creditedSoFar, error: cErr }] = await Promise.all([
+        userClient.rpc('invoice_paid_total', { invoice: inv.id }),
+        userClient.rpc('invoice_credited_total', { invoice: inv.id }),
+      ]);
+      if (pErr) return json({ error: pErr.message }, 400);
+      if (cErr) return json({ error: cErr.message }, 400);
+
+      const owed = round2(Number(inv.total) - Number(paidSoFar ?? 0) - Number(creditedSoFar ?? 0));
+      if (owed <= 0) return json({ error: 'this invoice is already settled' }, 409);
+
+      // Absent, the whole of what is left — paying in full is the common case.
+      const requested = body.amount == null ? owed : round2(Number(body.amount));
+      if (!Number.isFinite(requested) || requested <= 0) return json({ error: 'amount must be a positive number' }, 400);
+      if (requested > owed) {
+        return json({ error: `amount exceeds what is still owed on this invoice (${owed})`, owed }, 400);
+      }
+
+      /* No snapping here, unlike a credit note. A receipt has no lines and no
+         VAT of its own — it records a sum of money that arrived, and any sum of
+         money can arrive. The VAT was settled by the invoice. */
+      const payMethod = (body.pay_method as string) ?? inv.pay_method ?? null;
+      const { provider, adapter, credentials } = await billing(inv.garage_id);
+
+      const doc = await adapter.collect({
+        credentials,
+        customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
+        payMethod,
+        amount: requested,
+        basedOnDocnum: inv.provider_docnum,
+      });
+
+      const { data: receipt, error: nErr } = await admin.from('invoices').insert({
+        garage_id: inv.garage_id,
+        ticket_id: inv.ticket_id,
+        ticket_key: inv.ticket_key,
+        doc_type: 'receipt',
+        pays_invoice_id: inv.id,
+        provider,
+        provider_docnum: doc.docnum,
+        allocation_number: doc.allocationNumber,
+        provider_doc_id: doc.docId,
+        pdf_url: doc.pdfUrl,
+        issued_at: doc.issueDate ? new Date(doc.issueDate).toISOString() : new Date().toISOString(),
+        customer_name: inv.customer_name,
+        customer_id_number: inv.customer_id_number,
+        customer_address: inv.customer_address,
+        customer_phone: inv.customer_phone,
+        /* A receipt prices nothing. The money is the whole document, and
+           splitting it into net and VAT would be inventing a second opinion
+           about tax the invoice already settled. */
+        lines: [],
+        subtotal: requested,
+        vat_rate: Number(inv.vat_rate),
+        vat: 0,
+        total: requested,
+        pay_method: payMethod,
+        pay_reference: (body.reference as string) ?? null,
+        status: 'issued',
+      }).select().single();
+      if (nErr) return json({ error: `receipt issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
+
+      return json({ receipt, collected: requested, owed: round2(owed - requested) });
     }
 
     /* ======================= CANCEL / CREDIT =======================
@@ -216,7 +325,14 @@ Deno.serve(async (req) => {
       if (rErr) return json({ error: rErr.message }, 400);
       if (!inv) return json({ error: 'invoice not found in your garage' }, 404);
       if (inv.status === 'cancelled') return json({ error: 'invoice is already cancelled' }, 409);
-      if (inv.doc_type !== 'invoice_receipt') return json({ error: 'only an invoice-receipt can be credited' }, 400);
+      /* Either kind of bill can be corrected. A credit note against a מס-קבלה
+         hands money back; against a חשבונית מס it reduces what is owed, and if
+         some of it was already collected it hands back the difference. What it
+         cannot credit is a document that is not a bill — a receipt records a
+         payment, and a credit note is not how you undo one. */
+      if (inv.doc_type !== 'invoice_receipt' && inv.doc_type !== 'tax_invoice') {
+        return json({ error: 'only a bill can be credited, not a ' + inv.doc_type }, 400);
+      }
 
       /* What is still creditable, asked of the database rather than computed
          from what the client is holding: two advisors crediting the same

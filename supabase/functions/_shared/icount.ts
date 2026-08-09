@@ -7,7 +7,7 @@
 // InvoiceProvider shape — nothing here needs to change.
 
 import type {
-  InvoiceProvider, IssueInput, CancelInput, IssuedDoc, ProviderCredentials,
+  InvoiceProvider, IssueInput, CollectInput, CancelInput, IssuedDoc, ProviderCredentials,
   RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 
@@ -40,7 +40,16 @@ async function call(c: IcountCreds, path: string, body: Record<string, unknown>)
   return data;
 }
 
-const DOCTYPE = { invoice_receipt: 'invrec', credit_note: 'refund' } as const;
+/* iCount's names for the four documents. invrec and refund were verified against
+   a live account on 2026-07-27; invoice and receipt are iCount's documented
+   codes for חשבונית מס and קבלה and have NOT been exercised against a real
+   account yet — see docs/PRODUCTION.md. */
+const DOCTYPE = {
+  invoice_receipt: 'invrec',
+  tax_invoice: 'invoice',
+  receipt: 'receipt',
+  credit_note: 'refund',
+} as const;
 
 /** iCount rejects an invrec whose payments don't total the document. Only one
  *  payment key is set; cash is verified, the rest are best-effort. */
@@ -66,20 +75,45 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
 export const icountAdapter: InvoiceProvider = {
   async issue(input: IssueInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
+    const doctype = DOCTYPE[input.docType];
     const data = await call(c, 'doc/create', {
-      doctype: DOCTYPE.invoice_receipt,
+      doctype,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
       client_address: input.customer.address || undefined,
       lang: 'he',
       currency: 'ILS',
       items: input.items,
-      ...paymentBlock(input.payMethod, input.total),
+      /* A payment block only on the document that IS a payment. An invrec is
+         rejected without one; a plain invoice describes money not yet received,
+         and claiming it was paid is the one thing that would make the document
+         a lie. */
+      ...(input.docType === 'invoice_receipt' ? paymentBlock(input.payMethod, input.total) : {}),
       email_to_client: false,
       send_email: false,
     });
     const docnum = String(data.docnum);
-    const info = await docInfo(c, DOCTYPE.invoice_receipt, docnum).catch(() => null);
+    const info = await docInfo(c, doctype, docnum).catch(() => null);
+    return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
+  },
+
+  // A receipt has no lines: it says money arrived, and names the invoice it
+  // arrived against. The payment block is the whole content of the document.
+  async collect(input: CollectInput): Promise<IssuedDoc> {
+    const c = readCreds(input.credentials);
+    const data = await call(c, 'doc/create', {
+      doctype: DOCTYPE.receipt,
+      client_name: input.customer.name,
+      client_idno: input.customer.idNo || undefined,
+      lang: 'he',
+      currency: 'ILS',
+      ...paymentBlock(input.payMethod, input.amount),
+      based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
+      email_to_client: false,
+      send_email: false,
+    });
+    const docnum = String(data.docnum);
+    const info = await docInfo(c, DOCTYPE.receipt, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
   },
 
