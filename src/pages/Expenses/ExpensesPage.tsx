@@ -210,11 +210,27 @@ export default function ExpensesPage() {
             <option value="0.18">{t('expenses.vat18')}</option>
             <option value="0">{t('expenses.vatNone')}</option>
           </SelectField>
+          {/* When the supplier is owed. Blank is on receipt, which is the common
+              case — so it is left blank rather than pre-filled with today, which
+              would be an answer nobody gave. This is what ages the bill in the
+              obligo and aging reports. */}
+          <TextField label="expenses.fields.dueDate" hint="expenses.dueDateHint" type="date" {...field('dueDate')} />
           <CheckboxField
             label="expenses.fields.paid"
             checked={draft.paid}
             onChange={(e) => setDraft((prev) => ({ ...prev, paid: e.target.checked }))}
           />
+          {/* Only once it has been paid, and only because a cheque is the one
+              payment that lands on a day of its own choosing. Cash and transfers
+              leave the account when they are made; a post-dated cheque is a
+              commitment with a date on it, and that date is the whole subject of
+              the obligo report. */}
+          {draft.paid && (
+            <>
+              <TextField label="expenses.fields.chequeNumber" {...field('chequeNumber')} />
+              <TextField label="expenses.fields.chequeDate" hint="expenses.chequeDateHint" type="date" {...field('chequeDate')} />
+            </>
+          )}
         </CrudForm>
       )}
 

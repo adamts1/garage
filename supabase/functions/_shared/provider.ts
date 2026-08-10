@@ -18,12 +18,30 @@ export interface InvoiceItem {
   quantity: number;
 }
 
+/** The two kinds of bill. A מס-קבלה is billed and settled at once; a חשבונית מס
+ *  is a bill that will be paid later, and is settled by its own receipt. */
+export type BillDocType = 'invoice_receipt' | 'tax_invoice';
+
 export interface IssueInput {
   credentials: ProviderCredentials;
+  docType: BillDocType;
   customer: { name: string; idNo?: string; address?: string };
   items: InvoiceItem[];
+  /** Null on a tax invoice: nothing has been paid, so there is nothing to
+   *  describe. Providers that demand a balancing payment must not be given one. */
   payMethod: string | null;
   total: number; // VAT-inclusive, for providers that need a balancing payment
+}
+
+/** Money arriving against a tax invoice already issued. */
+export interface CollectInput {
+  credentials: ProviderCredentials;
+  customer: { name: string; idNo?: string };
+  payMethod: string | null;
+  /** VAT-inclusive — a receipt records a payment, it does not price anything. */
+  amount: number;
+  /** The tax invoice being settled. */
+  basedOnDocnum: string;
 }
 
 export interface CancelInput {
@@ -72,6 +90,10 @@ export interface RecordedExpense {
 
 export interface InvoiceProvider {
   issue(input: IssueInput): Promise<IssuedDoc>;
+  /** Issue a receipt against a tax invoice. Separate from issue() because it
+   *  produces a different kind of document: it collects money rather than
+   *  billing for anything, so it carries an amount and no lines. */
+  collect(input: CollectInput): Promise<IssuedDoc>;
   cancel(input: CancelInput): Promise<IssuedDoc>;
   recordExpense(input: RecordExpenseInput): Promise<RecordedExpense>;
 }

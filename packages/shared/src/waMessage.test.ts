@@ -83,9 +83,30 @@ describe('waMessage — ready for pickup', () => {
   });
 
   it('thanks the customer and names the method when paid', () => {
-    const text = waMessage(ready({ paid: true, payMethod: 'מזומן' }, 100));
-    expect(text).toContain('שולם במזומן - תודה!');
+    const text = waMessage(ready({ paid: true, payMethod: 'card' }, 100));
+    expect(text).toContain('שולם בכרטיס אשראי - תודה!');
     expect(text).not.toContain('התשלום יתבצע');
+  });
+
+  /* The column is a code, and the customer never sees one. A message reading
+     "שולם בcard" is the failure this is here to catch. */
+  it('never sends the customer the stored code', () => {
+    const text = waMessage(ready({ paid: true, payMethod: 'bank_transfer' }, 100));
+    expect(text).toContain('שולם בהעברה בנקאית - תודה!');
+    expect(text).not.toContain('bank_transfer');
+  });
+
+  /* Rows written before 20260810000000 still hold the Hebrew the screen said. */
+  it('names the method on a row written before the codes', () => {
+    expect(waMessage(ready({ paid: true, payMethod: 'מזומן' }, 100)))
+      .toContain('שולם במזומן - תודה!');
+  });
+
+  /* 'other' is the catch-all, and "שולם באחר" says less than saying nothing. */
+  it('does not name the method when the method is the catch-all', () => {
+    const text = waMessage(ready({ paid: true, payMethod: 'other' }, 100));
+    expect(text).toContain('שולם - תודה!');
+    expect(text).not.toContain('אחר');
   });
 
   /* A ticket can be marked paid without a method recorded. This used to send the

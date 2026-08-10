@@ -15,6 +15,10 @@ export interface ExpenseDraft {
   subtotal: string;
   vatRate: string;
   paid: boolean;
+  /** Blank means on receipt — see dueOn() in @garage/shared. */
+  dueDate: string;
+  chequeNumber: string;
+  chequeDate: string;
 }
 
 export const today = () => new Date().toISOString().slice(0, 10);
@@ -22,6 +26,7 @@ export const today = () => new Date().toISOString().slice(0, 10);
 export const blankExpense = (): ExpenseDraft => ({
   supplierId: '', date: today(), description: '', category: '',
   reference: '', subtotal: '', vatRate: '0.18', paid: false,
+  dueDate: '', chequeNumber: '', chequeDate: '',
 });
 
 /** Rounded to the agora, because that is the unit an invoice is issued in. */
@@ -67,6 +72,11 @@ export function useExpenses() {
           subtotal: Number(draft.subtotal),
           vatRate: Number(draft.vatRate),
           paid: draft.paid,
+          /* Empty strings become nulls: a date input left alone is "nobody
+             said", and storing '' would be a date the database has to reject. */
+          dueDate: draft.dueDate || null,
+          chequeNumber: draft.chequeNumber || null,
+          chequeDate: draft.chequeDate || null,
         });
 
         /* The record exists either way — the sync is a second, separate thing

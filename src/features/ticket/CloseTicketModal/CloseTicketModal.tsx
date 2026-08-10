@@ -1,4 +1,4 @@
-import { money } from '@garage/shared';
+import { money, type PayMethod } from '@garage/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
@@ -10,17 +10,25 @@ import styles from './CloseTicketModal.module.css';
 
 export interface CloseResult {
   paid: boolean;
-  method: string;
+  /** A code, written into `tickets.pay_method`. Null for the open charge, which
+   *  is the absence of a payment rather than one of its kinds — this drawer
+   *  used to store the words "חיוב פתוח" in the column that answers "how were
+   *  we paid", on a ticket nobody had paid. */
+  method: PayMethod | null;
   doc: string;
   reference?: string;
 }
 
 interface Method {
+  /** What gets stored. Null for the open charge; see CloseResult.method. */
+  code: PayMethod | null;
+  /** Identifies the card on screen — the code, except for the one without one. */
   id: string;
-  /** i18n key. */
+  /** i18n key. Shared with every other screen that names a method: the label a
+   *  code carries is one decision, not one per dialog. */
   label: string;
   icon: string;
-  /** i18n key for the one-line explanation. */
+  /** i18n key for the one-line explanation. Drawer-specific, so it stays here. */
   hint: string;
   /** i18n key for what the reference field asks for, if anything. */
   ref?: string;
@@ -28,12 +36,12 @@ interface Method {
 }
 
 const METHODS: Method[] = [
-  { id: 'cash', label: 'close.methods.cash', icon: '💵', hint: 'close.methods.cashHint', paid: true },
-  { id: 'card', label: 'close.methods.card', icon: '💳', hint: 'close.methods.cardHint', ref: 'close.methods.cardRef', paid: true },
-  { id: 'bit', label: 'close.methods.bit', icon: '📱', hint: 'close.methods.bitHint', ref: 'close.methods.reference', paid: true },
-  { id: 'transfer', label: 'close.methods.transfer', icon: '🏦', hint: 'close.methods.transferHint', ref: 'close.methods.reference', paid: true },
-  { id: 'check', label: 'close.methods.check', icon: '🧾', hint: 'close.methods.checkHint', ref: 'close.methods.checkRef', paid: true },
-  { id: 'open', label: 'close.methods.open', icon: '🕓', hint: 'close.methods.openHint', paid: false },
+  { code: 'cash', id: 'cash', label: 'payMethods.cash', icon: '💵', hint: 'close.methods.cashHint', paid: true },
+  { code: 'card', id: 'card', label: 'payMethods.card', icon: '💳', hint: 'close.methods.cardHint', ref: 'close.methods.cardRef', paid: true },
+  { code: 'bit', id: 'bit', label: 'payMethods.bit', icon: '📱', hint: 'close.methods.bitHint', ref: 'close.methods.reference', paid: true },
+  { code: 'bank_transfer', id: 'bank_transfer', label: 'payMethods.bank_transfer', icon: '🏦', hint: 'close.methods.transferHint', ref: 'close.methods.reference', paid: true },
+  { code: 'cheque', id: 'cheque', label: 'payMethods.cheque', icon: '🧾', hint: 'close.methods.checkHint', ref: 'close.methods.checkRef', paid: true },
+  { code: null, id: 'open', label: 'close.methods.open', icon: '🕓', hint: 'close.methods.openHint', paid: false },
 ];
 
 const STEP_KEYS = ['close.steps.method', 'close.steps.collect', 'close.steps.summary'];
@@ -79,7 +87,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
     const timer = setTimeout(() => {
       answerRef.current({
         paid: method.paid,
-        method: t(method.label),
+        method: method.code,
         doc,
         reference: reference || undefined,
       });

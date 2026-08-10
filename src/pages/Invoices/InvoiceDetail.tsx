@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { Pill } from '../../components/Pill';
 import { Table, type Column } from '../../components/Table';
 import { IconCard, IconCustomers, IconDoc, IconPrint, IconWrench } from '../../icons';
+import { payMethodLabel } from '../../lib/payMethodLabel';
 import { printInvoice, warnIfBlocked } from '../../lib/print';
 import styles from './InvoicesPage.module.css';
 
@@ -70,7 +71,7 @@ export default function InvoiceDetail({
           <dd>{invoice.allocationNumber ?? <span className={styles.muted}>-</span>}</dd>
 
           <dt><IconCard /> {t('invoices.detail.payMethod')}</dt>
-          <dd>{invoice.payMethod ?? <span className={styles.muted}>-</span>}</dd>
+          <dd>{payMethodLabel(t, invoice.payMethod) ?? <span className={styles.muted}>-</span>}</dd>
         </dl>
 
         <div className={styles.sum}>

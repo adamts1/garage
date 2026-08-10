@@ -11,8 +11,22 @@
 
 import { getClient, invokeError } from './client';
 
-export type InvoiceDocType = 'invoice_receipt' | 'credit_note';
+/* Four documents, two of which are bills.
+ *
+ *   invoice_receipt  חשבונית מס-קבלה — billed and paid at once
+ *   tax_invoice      חשבונית מס      — billed, to be paid later
+ *   receipt          קבלה            — money arriving against a tax_invoice
+ *   credit_note      חשבונית זיכוי   — a correction to either bill
+ */
+export type InvoiceDocType = 'invoice_receipt' | 'tax_invoice' | 'receipt' | 'credit_note';
 export type InvoiceStatus = 'issued' | 'cancelled';
+
+/** The two documents that bill a ticket. A receipt and a credit note are both
+ *  written against one of these, never on their own. */
+export type BillDocType = 'invoice_receipt' | 'tax_invoice';
+
+export const isBill = (i: Invoice): boolean =>
+  i.docType === 'invoice_receipt' || i.docType === 'tax_invoice';
 
 export interface InvoiceLine {
   desc: string;
@@ -52,6 +66,9 @@ export interface Invoice {
    *  several, because a credit can be for part of the bill. NULL on a receipt,
    *  and on credit notes written before the column existed. */
   creditsInvoiceId: string | null;
+  /** On a receipt: the tax invoice it settles. One invoice may have several,
+   *  because a customer may pay in instalments. NULL on everything else. */
+  paysInvoiceId: string | null;
   createdAt: string;
 }
 
@@ -79,6 +96,7 @@ const rowToInvoice = (r: any): Invoice => ({
   status: r.status,
   cancelledBy: r.cancelled_by ?? null,
   creditsInvoiceId: r.credits_invoice_id ?? null,
+  paysInvoiceId: r.pays_invoice_id ?? null,
   createdAt: r.created_at,
 });
 
@@ -95,16 +113,41 @@ export const listInvoices = async (): Promise<Invoice[]> => {
 /* Issue a חשבונית מס-קבלה for a ticket. Irreversible — the only undo is a
    credit note. The Edge Function is idempotent per ticket, so a double click
    returns the invoice that already exists rather than issuing two. */
-export const issueInvoice = async (ticketKey: string): Promise<Invoice> => {
+export const issueInvoice = async (
+  ticketKey: string,
+  docType: BillDocType = 'invoice_receipt',
+): Promise<Invoice> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
   if (tErr) throw tErr;
 
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
-    body: { action: 'issue', ticket_id: t.id },
+    body: { action: 'issue', ticket_id: t.id, doc_type: docType },
   });
   if (error) throw await invokeError(error);
   return rowToInvoice(data.invoice);
+};
+
+/* Record money arriving against a חשבונית מס, as a קבלה of its own.
+ *
+ * `amount` is what the customer paid, VAT included — a receipt records a sum
+ * that arrived, it does not price anything. Absent, it is everything still
+ * owed, which is how most bills are settled.
+ *
+ * The invoice is not edited: an issued document never is. What is still owed is
+ * the bill less the receipts and credits against it, so this only ever inserts.
+ */
+export const collectInvoice = async (
+  invoiceId: string,
+  amount?: number,
+  payMethod?: string,
+  reference?: string,
+): Promise<{ receipt: Invoice; owed: number }> => {
+  const { data, error } = await getClient().functions.invoke('issue-invoice', {
+    body: { action: 'collect', invoice_id: invoiceId, amount, pay_method: payMethod, reference },
+  });
+  if (error) throw await invokeError(error);
+  return { receipt: rowToInvoice(data.receipt), owed: Number(data.owed ?? 0) };
 };
 
 /* Give a customer back part of what they paid — or all of it.
@@ -171,8 +214,37 @@ export const creditedTotal = (invoice: Invoice, all: readonly Invoice[]): number
  *  checks this again against the database, which is where it is authoritative;
  *  this is what lets the UI offer a sane maximum and refuse before a round trip. */
 export const creditableRemainder = (invoice: Invoice, all: readonly Invoice[]): number => {
-  if (invoice.docType !== 'invoice_receipt' || invoice.status !== 'issued') return 0;
+  if (!isBill(invoice) || invoice.status !== 'issued') return 0;
   return Math.max(0, round2(invoice.total - creditedTotal(invoice, all)));
+};
+
+/* ---------- what an invoice is still owed ----------
+
+   The mirror of the credit arithmetic above, and separate from it on purpose:
+   money handed back and money never collected are different facts about a bill,
+   and a garage acts on them differently. One is a refund it made; the other is a
+   debt somebody owes it.
+
+   A מס-קבלה was paid the moment it was issued, so it is never owed anything —
+   which is why every function here answers zero for one. */
+
+/** The receipts issued against a tax invoice, newest first. */
+export const receiptsFor = (invoice: Invoice, all: readonly Invoice[]): Invoice[] =>
+  all.filter((i) => i.docType === 'receipt' && i.paysInvoiceId === invoice.id);
+
+/** How much of a tax invoice has been collected. */
+export const paidTotal = (invoice: Invoice, all: readonly Invoice[]): number =>
+  round2(receiptsFor(invoice, all).reduce((sum, r) => sum + r.total, 0));
+
+/** What the customer still owes on a bill: its total, less what was collected,
+ *  less what was credited. Zero for anything that is not a live tax invoice.
+ *
+ *  Credits come off because money written off is not money owed — an invoice for
+ *  ₪1,000 with ₪200 credited is settled by ₪800, and a report that says
+ *  otherwise sends somebody chasing a debt that does not exist. */
+export const owedRemainder = (invoice: Invoice, all: readonly Invoice[]): number => {
+  if (invoice.docType !== 'tax_invoice' || invoice.status !== 'issued') return 0;
+  return Math.max(0, round2(invoice.total - paidTotal(invoice, all) - creditedTotal(invoice, all)));
 };
 
 /* ---------- what a credit note can actually be issued for ----------

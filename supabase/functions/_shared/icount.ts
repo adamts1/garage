@@ -7,7 +7,7 @@
 // InvoiceProvider shape — nothing here needs to change.
 
 import type {
-  InvoiceProvider, IssueInput, CancelInput, IssuedDoc, ProviderCredentials,
+  InvoiceProvider, IssueInput, CollectInput, CancelInput, IssuedDoc, ProviderCredentials,
   RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 
@@ -40,15 +40,38 @@ async function call(c: IcountCreds, path: string, body: Record<string, unknown>)
   return data;
 }
 
-const DOCTYPE = { invoice_receipt: 'invrec', credit_note: 'refund' } as const;
+/* iCount's names for the four documents. invrec and refund were verified against
+   a live account on 2026-07-27; invoice and receipt are iCount's documented
+   codes for חשבונית מס and קבלה and have NOT been exercised against a real
+   account yet — see docs/PRODUCTION.md. */
+const DOCTYPE = {
+  invoice_receipt: 'invrec',
+  tax_invoice: 'invoice',
+  receipt: 'receipt',
+  credit_note: 'refund',
+} as const;
 
-/** iCount rejects an invrec whose payments don't total the document. Only one
- *  payment key is set; cash is verified, the rest are best-effort. */
+/* iCount rejects an invrec whose payments don't total the document. Only one
+   payment key is set; cash is verified, the rest are best-effort.
+
+   `pay_method` holds a code — see packages/shared/src/payment.ts, whose
+   vocabulary this mirrors. Edge Functions are Deno and do not import the
+   package, so the list is duplicated rather than shared; the four keys below
+   are iCount's, not ours, so they would not have come from there anyway.
+
+   The Hebrew below is legacy. It matched on substrings because the column was
+   free text and 'אשראי' and 'כרטיס אשראי' were the same payment written twice.
+   Rows written before 20260810000000 still hold those words, and a receipt is
+   collected against an invoice that may be months old, so this stays until
+   those rows are gone. Nothing writes them any more.
+
+   'bit' has no iCount key of its own and lands in cash, which is what an
+   instant transfer settles as in the till. */
 function paymentBlock(method: string | null, total: number): Record<string, unknown> {
-  const m = (method ?? '').toLowerCase();
-  if (m.includes('אשראי') || m.includes('card') || m.includes('credit')) return { cc: { sum: total } };
-  if (m.includes('העברה') || m.includes('transfer') || m.includes('bank')) return { banktransfer: { sum: total } };
-  if (m.includes('צ') || m.includes('cheque') || m.includes('check')) return { cheques: [{ sum: total }] };
+  const m = (method ?? '').trim().toLowerCase();
+  if (m === 'card' || m.includes('אשראי') || m.includes('credit')) return { cc: { sum: total } };
+  if (m === 'bank_transfer' || m.includes('העברה') || m.includes('transfer')) return { banktransfer: { sum: total } };
+  if (m === 'cheque' || m.includes('צ׳ק') || m.includes("צ'ק") || m.includes('check')) return { cheques: [{ sum: total }] };
   return { cash: { sum: total } };
 }
 
@@ -66,20 +89,45 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
 export const icountAdapter: InvoiceProvider = {
   async issue(input: IssueInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
+    const doctype = DOCTYPE[input.docType];
     const data = await call(c, 'doc/create', {
-      doctype: DOCTYPE.invoice_receipt,
+      doctype,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
       client_address: input.customer.address || undefined,
       lang: 'he',
       currency: 'ILS',
       items: input.items,
-      ...paymentBlock(input.payMethod, input.total),
+      /* A payment block only on the document that IS a payment. An invrec is
+         rejected without one; a plain invoice describes money not yet received,
+         and claiming it was paid is the one thing that would make the document
+         a lie. */
+      ...(input.docType === 'invoice_receipt' ? paymentBlock(input.payMethod, input.total) : {}),
       email_to_client: false,
       send_email: false,
     });
     const docnum = String(data.docnum);
-    const info = await docInfo(c, DOCTYPE.invoice_receipt, docnum).catch(() => null);
+    const info = await docInfo(c, doctype, docnum).catch(() => null);
+    return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
+  },
+
+  // A receipt has no lines: it says money arrived, and names the invoice it
+  // arrived against. The payment block is the whole content of the document.
+  async collect(input: CollectInput): Promise<IssuedDoc> {
+    const c = readCreds(input.credentials);
+    const data = await call(c, 'doc/create', {
+      doctype: DOCTYPE.receipt,
+      client_name: input.customer.name,
+      client_idno: input.customer.idNo || undefined,
+      lang: 'he',
+      currency: 'ILS',
+      ...paymentBlock(input.payMethod, input.amount),
+      based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
+      email_to_client: false,
+      send_email: false,
+    });
+    const docnum = String(data.docnum);
+    const info = await docInfo(c, DOCTYPE.receipt, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
   },
 
@@ -153,11 +201,25 @@ export const icountAdapter: InvoiceProvider = {
 
 /** Match an existing iCount supplier by vat_id, or null. iCount enforces vat_id
  *  unique per account, so a supplier already there must be reused, not re-added. */
+interface IcountSupplier {
+  supplier_id: number | string;
+  vat_id?: string;
+}
+
 async function findSupplierByVatId(c: IcountCreds, vatId: string): Promise<string | null> {
   const list = await call(c, 'supplier/get_list', {});
-  const suppliers = (list.suppliers ?? []) as Array<{ supplier_id: number | string; vat_id?: string }>;
-  const arr = Array.isArray(suppliers) ? suppliers : Object.values(suppliers);
-  for (const s of arr) {
+
+  /* iCount hands this back as a list on some accounts and as an object keyed by
+     supplier id on others, so it is typed as the union it actually is. It used
+     to be cast to an array and THEN checked with Array.isArray — which left the
+     non-array branch narrowed to `never`, Object.values() unable to infer an
+     element type from it, and every field access on the loop variable an error.
+     The runtime behaviour was right all along; the cast was describing only
+     half of what the API returns. */
+  const raw = (list.suppliers ?? []) as IcountSupplier[] | Record<string, IcountSupplier>;
+  const suppliers: IcountSupplier[] = Array.isArray(raw) ? raw : Object.values(raw);
+
+  for (const s of suppliers) {
     if (s.vat_id && String(s.vat_id) === String(vatId)) return String(s.supplier_id);
   }
   return null;

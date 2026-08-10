@@ -103,7 +103,7 @@ const invoice: Invoice = {
   id: 'i1', docnum: '1042', docType: 'invoice_receipt', status: 'issued',
   customerName: 'יוסי לוי', customerIdNumber: '123456782',
   issuedAt: '2026-07-30T09:00:00.000Z', allocationNumber: 'A-77',
-  payMethod: 'מזומן', ticketKey: 'GAR-12',
+  payMethod: 'cash', ticketKey: 'GAR-12',
   subtotal: 500, vat: 90, vatRate: 0.18, total: 590,
   lines: [{ desc: 'החלפת רפידות', qty: 1, unit_price: 500, line_total: 500 }],
 } as Invoice;
@@ -126,5 +126,15 @@ describe('printInvoice', () => {
   it('says so when the document was cancelled', () => {
     printInvoice({ ...invoice, status: 'cancelled' });
     expect(doc()).toContain('בוטל');
+  });
+
+  /* A printed document is Hebrew whatever the counter's language is, and
+     `pay_method` is a code. A חשבונית reading "אמצעי תשלום: cash" is the
+     failure this is here to catch. */
+  it('names the payment method in Hebrew, not as the stored code', () => {
+    printInvoice({ ...invoice, payMethod: 'bank_transfer' } as Invoice);
+    const html = doc();
+    expect(html).toContain('העברה בנקאית');
+    expect(html).not.toContain('bank_transfer');
   });
 });

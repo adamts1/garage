@@ -1,0 +1,40 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  /* Four tabs fit; a narrow phone scrolls them rather than wrapping into a
+     second row that pushes the panel down the screen. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+  /* The active underline sits on the element itself rather than on a pseudo
+     element, so switching tabs does not move anything by a pixel. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px 4px 0 0;
+}
+
+.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

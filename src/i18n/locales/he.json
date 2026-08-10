@@ -101,6 +101,128 @@
       "gross": "סה״כ כולל מע״מ",
       "balance": "יתרה פתוחה",
       "avg": "תשלום ממוצע"
+    },
+    "tabs": {
+      "income": "הכנסות",
+      "obligo": "אובליגו",
+      "aging": "גיול חובות",
+      "customers": "לקוחות"
+    },
+    "subtitles": {
+      "income": "מה חויב, לפי סוג מסמך ותקופה",
+      "obligo": "מה המוסך מחויב לשלם, ומתי",
+      "aging": "כמה זמן החוב קיים — לשני הכיוונים",
+      "customers": "סיכום פעילות כספית לפי לקוחות בטווח הנבחר"
+    },
+    "income": {
+      "breakdown": "פירוט לפי סוג מסמך",
+      "empty": "לא הופקו מסמכים בתקופה הזו",
+      "filters": {
+        "period": "תקופה",
+        "from": "מתאריך",
+        "to": "עד תאריך"
+      },
+      "periods": {
+        "thisMonth": "החודש",
+        "lastMonth": "החודש שעבר",
+        "thisVatPeriod": "תקופת הדיווח",
+        "thisYear": "השנה",
+        "all": "הכל",
+        "custom": "טווח מותאם"
+      },
+      "fields": {
+        "docType": "סוג מסמך",
+        "count": "כמות",
+        "net": "לפני מע״מ",
+        "vat": "מע״מ",
+        "gross": "כולל מע״מ"
+      },
+      "kpi": {
+        "billed": "סך חיוב",
+        "billedSub": "חשבוניות בניכוי זיכויים",
+        "net": "לפני מע״מ",
+        "netSub": "הבסיס לחישוב",
+        "vat": "מע״מ",
+        "vatSub": "לדיווח",
+        "collected": "נגבה",
+        "collectedSub": "קבלות שהופקו בתקופה",
+        "credited": "זוכה",
+        "creditedSub": "הוחזר ללקוחות"
+      }
+    },
+    "obligo": {
+      "breakdown": {
+        "supplier": "פירוט לפי ספק",
+        "month": "פירוט לפי חודש"
+      },
+      "emptySupplier": "אין חשבוניות ספק פתוחות",
+      "emptyMonth": "אין תשלומים מתוכננים",
+      "filters": {
+        "grouping": "קיבוץ"
+      },
+      "groupings": {
+        "supplier": "לפי ספק",
+        "month": "לפי חודש"
+      },
+      "fields": {
+        "supplier": "ספק",
+        "month": "חודש",
+        "bills": "חשבוניות",
+        "oldestDue": "הוותיק ביותר",
+        "overdue": "באיחור",
+        "onCheques": "בצ׳קים",
+        "total": "סך הכל"
+      },
+      "kpi": {
+        "outstanding": "סך התחייבות",
+        "outstandingSub": "חשבוניות ספק שטרם שולמו",
+        "overdue": "באיחור",
+        "overdueSub": "עבר מועד התשלום",
+        "cheques": "בצ׳קים דחויים",
+        "chequesSub": "טרם ירדו מהחשבון",
+        "suppliers": "ספקים",
+        "suppliersSub": "עם יתרה פתוחה"
+      }
+    },
+    "aging": {
+      "breakdown": {
+        "customers": "{{count}} לקוחות עם חוב פתוח",
+        "suppliers": "{{count}} ספקים עם יתרה"
+      },
+      "emptyCustomers": "אין חובות פתוחים של לקוחות",
+      "emptySuppliers": "אין יתרות פתוחות לספקים",
+      "days": "{{count}} ימים",
+      "filters": {
+        "side": "צד"
+      },
+      "sides": {
+        "customers": "לקוחות — מה שחייבים לך",
+        "suppliers": "ספקים — מה שאתה חייב"
+      },
+      "buckets": {
+        "current": "עד 30 יום",
+        "thirty": "31—60",
+        "sixty": "61—90",
+        "ninety": "מעל 90"
+      },
+      "fields": {
+        "customer": "לקוח",
+        "supplier": "ספק",
+        "total": "סך הכל",
+        "oldest": "החוב הוותיק"
+      },
+      "kpi": {
+        "owedToUs": "חייבים לך",
+        "owedByUs": "אתה חייב",
+        "totalSub": "סך החוב הפתוח",
+        "overNinety": "מעל 90 יום",
+        "overNinetySub": "החלק שדורש טיפול",
+        "current": "עד 30 יום",
+        "currentSub": "במסגרת הרגילה",
+        "customers": "לקוחות",
+        "suppliers": "ספקים",
+        "countSub": "עם יתרה פתוחה"
+      }
     }
   },
   "works": {
@@ -226,16 +348,11 @@
       "summary": "סיכום"
     },
     "methods": {
-      "cash": "מזומן",
       "cashHint": "תשלום במזומן בקופה",
-      "card": "כרטיס אשראי",
       "cardHint": "סליקה בטרמינל",
       "cardRef": "4 ספרות אחרונות",
-      "bit": "ביט / פייבוקס",
       "bitHint": "העברה מיידית",
-      "transfer": "העברה בנקאית",
       "transferHint": "העברה לחשבון המוסך",
-      "check": "צ׳ק",
       "checkHint": "צ׳ק לפקודת המוסך",
       "checkRef": "מספר צ׳ק",
       "open": "חיוב פתוח",
@@ -243,16 +360,26 @@
       "reference": "מספר אסמכתא"
     }
   },
+  "payMethods": {
+    "cash": "מזומן",
+    "card": "כרטיס אשראי",
+    "bit": "ביט / פייבוקס",
+    "bank_transfer": "העברה בנקאית",
+    "cheque": "צ׳ק",
+    "other": "אחר"
+  },
   "prompt": {
     "title": "הזנת ערך",
     "label": "ערך"
   },
   "invoiceIssue": {
-    "title": "הפקת חשבונית מס-קבלה",
-    "body": "תופק חשבונית מס-קבלה על סך {{amount}} עבור {{customer}}.",
+    "title_invoice_receipt": "הפקת חשבונית מס-קבלה",
+    "title_tax_invoice": "הפקת חשבונית מס",
+    "body_invoice_receipt": "תופק חשבונית מס-קבלה על סך {{amount}} עבור {{customer}}.",
+    "body_tax_invoice": "תופק חשבונית מס על סך {{amount}} עבור {{customer}} — ללא תשלום. הקבלה תופק בנפרד כשהכסף יגיע.",
     "warning": "מסמך מס אינו ניתן למחיקה - לאחר ההפקה ניתן רק לבטלו באמצעות חשבונית זיכוי.",
     "confirm": "הפק חשבונית",
-    "issued": "הופקה חשבונית מס-קבלה #{{docnum}} · {{total}}"
+    "issued": "הופקה $t(invoices.docType.{{docType}}) #{{docnum}} · {{total}}"
   },
   "credit": {
     "title": "זיכוי לקוח",
@@ -353,7 +480,9 @@
     "noCustomerRecord": "הכרטיס לא מקושר לכרטיס לקוח, ולכן אי אפשר לשמור עליו ת״ז.",
     "idTakenByOther": "ת״ז זו רשומה אצל {{name}} - לקוח אחר. לא ניתן לשמור אותה על שני לקוחות.",
     "idTakenBySame": "ת״ז זו כבר רשומה אצל {{name}}. בדקו שאין כפילות בכרטיסי הלקוחות.",
-    "idTakenBlocked": "ת״ז זו רשומה אצל {{name}} - הכרטיס לא נשמר."
+    "idTakenBlocked": "ת״ז זו רשומה אצל {{name}} - הכרטיס לא נשמר.",
+    "issueTaxInvoice": "הפק חשבונית מס",
+    "collectOnInvoice": "רשום תשלום"
   },
   "login": {
     "brand": "מוסך",
@@ -513,6 +642,8 @@
     "officialPdf": "המסמך הרשמי (PDF)",
     "docType": {
       "invoice_receipt": "חשבונית מס-קבלה",
+      "tax_invoice": "חשבונית מס",
+      "receipt": "קבלה",
       "credit_note": "חשבונית זיכוי"
     },
     "status": {
@@ -612,8 +743,13 @@
       "vatRate": "שיעור מע״מ",
       "total": "סה״כ",
       "paid": "שולם",
-      "sync": "סנכרון"
-    }
+      "sync": "סנכרון",
+      "dueDate": "מועד תשלום",
+      "chequeNumber": "מספר צ׳ק",
+      "chequeDate": "תאריך על הצ׳ק"
+    },
+    "dueDateHint": "ריק — לתשלום עם קבלת החשבונית",
+    "chequeDateHint": "היום שבו הכסף יורד מהחשבון"
   },
   "customers": {
     "title": "רשימת לקוחות",
@@ -715,5 +851,22 @@
       "address": "כתובת",
       "notes": "הערות"
     }
+  },
+  "collect": {
+    "title": "רישום תשלום",
+    "body": "חשבונית {{docnum}} על שם {{customer}}, בסך {{total}}.",
+    "alreadyPaid": "כבר שולמו {{paid}} · נותרו {{owed}} לתשלום",
+    "outstanding": "נותרו {{owed}} לתשלום",
+    "amount": "סכום שהתקבל",
+    "amountHint": "כולל מע״מ — הסכום שהלקוח שילם",
+    "tooMuch": "לא ניתן לגבות יותר מ־{{owed}}",
+    "payMethod": "אמצעי תשלום",
+    "reference": "אסמכתא",
+    "referenceHint": "מספר צ׳ק, אישור העברה או שובר אשראי",
+    "willSettle": "תשלום מלא — תופק קבלה, החשבונית תיסגר והכרטיס יעבור ל״שולם״",
+    "willReduce": "תשלום חלקי — תופק קבלה, ויישארו {{left}} לתשלום",
+    "confirm": "הפק קבלה",
+    "doneFull": "הופקה קבלה {{docnum}} על {{amount}} · החשבונית שולמה במלואה",
+    "donePartial": "הופקה קבלה {{docnum}} על {{amount}} · נותרו {{left}}"
   }
 }

@@ -1,12 +1,14 @@
 import {
-  creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  collectInvoice, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, isBill, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCloseTicket, type CloseResult } from '../../features/ticket/CloseTicketModal';
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
+import { payMethodLabel } from '../../lib/payMethodLabel';
 import {
   showError, showErrorKey, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
 } from '../../store';
@@ -20,9 +22,11 @@ export interface UseTicketPageOptions {
 
 /** Of the receipts on a ticket, the live one — else the most recent. A ticket
  *  can hold several over its life: issue, cancel, re-issue. */
+/* The ticket's bill, whichever of the two it was issued as. A ticket has one:
+   the Edge Function refuses to bill a ticket that already carries either. */
 const currentInvoice = (all: readonly Invoice[], ticketKey: string) => {
-  const receipts = all.filter((i) => i.ticketKey === ticketKey && i.docType === 'invoice_receipt');
-  return receipts.find((i) => i.status === 'issued') ?? receipts[0] ?? null;
+  const bills = all.filter((i) => i.ticketKey === ticketKey && isBill(i));
+  return bills.find((i) => i.status === 'issued') ?? bills[0] ?? null;
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -53,6 +57,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
    inside it — otherwise every ticket read back from the server would look
    edited the moment the customer had a number. */
 export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptions) {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -126,6 +131,13 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
    *  is also when the button stops being offered. */
   const creditable = useMemo(
     () => (invoice ? creditableRemainder(invoice, ticketDocs) : 0),
+    [invoice, ticketDocs],
+  );
+
+  /** What the customer still owes on it — zero unless this is a live חשבונית מס
+   *  with money outstanding, which is the only case that can be collected. */
+  const owed = useMemo(
+    () => (invoice ? owedRemainder(invoice, ticketDocs) : 0),
     [invoice, ticketDocs],
   );
 
@@ -269,7 +281,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
 
   /** Issuing is guarded by its own dialog, not by the generic confirm: the copy
    *  names the amount and says the document cannot be deleted. */
-  const issue = useCallback(async () => {
+  const issue = useCallback(async (docType: BillDocType = 'invoice_receipt') => {
     /* The server builds the document from the stored row, so unsaved works
        would be missing from a real tax document. Refuse rather than silently
        invoice a version of the ticket nobody is looking at. */
@@ -281,20 +293,62 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     const ok = await openModal('issueInvoice', {
       amount: money(totals.total),
       customer: ticket.customer,
+      docType,
     });
     if (!ok) return;
 
     setBusy(true);
     try {
-      const inv = await issueInvoice(ticket.k);
+      const inv = await issueInvoice(ticket.k, docType);
       setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
-      dispatch(showSuccess('invoiceIssue.issued', { docnum: inv.docnum, total: money(inv.total) }));
+      dispatch(showSuccess('invoiceIssue.issued', { docType: inv.docType, docnum: inv.docnum, total: money(inv.total) }));
     } catch (e) {
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
   }, [dirty, dispatch, openModal, ticket.customer, ticket.k, totals.total]);
+
+  /* Money arriving against a חשבונית מס, as a קבלה of its own.
+
+     The ticket follows the money: collecting the last of what is owed is the
+     moment the job is actually paid for, so the ticket goes to שולם — the same
+     transition the close-and-charge drawer makes, reached from the other end.
+     A part payment moves nothing: the customer still owes the rest. */
+  const collect = useCallback(async () => {
+    if (!invoice || owed <= 0) return;
+
+    const answer = await openModal('collectPayment', {
+      owed,
+      invoiceTotal: invoice.total,
+      docnum: invoice.docnum,
+      customer: ticket.customer,
+    }) as { amount: number; payMethod: string; reference: string } | null;
+    if (!answer) return;
+
+    setBusy(true);
+    try {
+      const { receipt, owed: left } = await collectInvoice(
+        invoice.id, answer.amount, answer.payMethod, answer.reference,
+      );
+      setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
+
+      if (left <= 0) {
+        /* Through save(), so it reaches the database and the board the way any
+           other status change does. */
+        await save({ st: 'paid', paid: true, payMethod: answer.payMethod });
+      }
+      dispatch(showSuccess(left <= 0 ? 'collect.doneFull' : 'collect.donePartial', {
+        docnum: receipt.docnum,
+        amount: money(receipt.total),
+        left: money(left),
+      }));
+    } catch (e) {
+      dispatch(showError(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [dispatch, invoice, openModal, owed, save, ticket.customer, ticket.k]);
 
   /* Give the customer money back — all of what is left on the invoice, or part
      of it. The dialog opens on the whole remaining amount, because that is the
@@ -374,7 +428,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
         st: result.paid ? 'paid' : 'done',
         done: draft.subtasks.length,
         paid: result.paid,
-        payMethod: result.method,
+        /* A code, or nothing at all — an open charge is not a way of paying,
+           so the column that says how the money arrived stays empty. */
+        payMethod: result.method ?? undefined,
         doc: result.doc,
         reference: result.reference,
       });
@@ -383,12 +439,14 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
       dispatch(
         result.paid
           ? showSuccess('ticket.paymentTaken', {
-              method: result.method, total: money(totals.total), doc: result.doc,
+              method: payMethodLabel(t, result.method) ?? '-',
+              total: money(totals.total),
+              doc: result.doc,
             })
           : showErrorKey('ticket.closedWithBalance', { total: money(totals.total) }),
       );
     },
-    [dispatch, draft, openCloseDrawer, save, totals.total],
+    [dispatch, draft, openCloseDrawer, save, t, totals.total],
   );
 
   /** Leaving with something unsaved asks first. */
@@ -414,6 +472,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
        decide the button: a fully credited invoice offers nothing to anybody,
        and a member may not credit at all. */
     creditable, canCredit: isGarageAdmin(),
-    patch, setWorks, assign, save, discard, issue, credit, remove, close, leave,
+    /** What is still owed on an open חשבונית מס. Zero for every other document,
+     *  which is what decides whether a payment can be recorded at all. */
+    owed,
+    patch, setWorks, assign, save, discard, issue, collect, credit, remove, close, leave,
   };
 }

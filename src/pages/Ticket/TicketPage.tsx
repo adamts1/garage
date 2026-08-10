@@ -10,6 +10,7 @@ import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
 } from '../../icons';
+import { payMethodLabel } from '../../lib/payMethodLabel';
 import { printInvoice, printTicket, warnIfBlocked } from '../../lib/print';
 import { useTicketPage } from './useTicketPage';
 
@@ -334,7 +335,7 @@ export default function TicketPage({
               <dt>{t('ticket.fields.payment')}</dt>
               <dd>
                 {draft.paid
-                  ? t('ticket.paidWith', { method: draft.payMethod })
+                  ? t('ticket.paidWith', { method: payMethodLabel(t, draft.payMethod) ?? '-' })
                   : draft.doc ? t('ticket.openCharge') : '-'}
               </dd>
               <dt>{t('ticket.fields.document')}</dt><dd>{draft.doc ?? '-'}</dd>
@@ -355,7 +356,7 @@ export default function TicketPage({
             {invoice ? (
               <div className="bill-invoice">
                 <dl className="kv">
-                  <dt>{t('invoices.docType.invoice_receipt')}</dt>
+                  <dt>{t(`invoices.docType.${invoice.docType}`)}</dt>
                   <dd>
                     <b>#{invoice.docnum}</b>
                     {invoice.status === 'cancelled' && (
@@ -405,10 +406,29 @@ export default function TicketPage({
                     })}
                   </p>
                 )}
+
+                {/* An open חשבונית מס: what the customer owes, and the button
+                    that records it arriving. Nothing here for a מס-קבלה, which
+                    was paid the moment it was issued. */}
+                {page.owed > 0 && (
+                  <>
+                    <p className="muted">{t('collect.outstanding', { owed: money(page.owed) })}</p>
+                    <button className="btn primary block" onClick={() => void page.collect()} disabled={busy}>
+                      <IconCard /> {t('ticket.collectOnInvoice')}
+                    </button>
+                  </>
+                )}
               </div>
             ) : settled ? (
-              <button className="btn primary block" onClick={() => void page.issue()} disabled={busy}>
+              <button className="btn primary block" onClick={() => void page.issue('invoice_receipt')} disabled={busy}>
                 <IconDoc /> {t('ticket.issueInvoice')}
+              </button>
+            ) : closed ? (
+              /* Work finished, money not in. This is the case a חשבונית מס
+                 exists for: bill the customer now, collect later. A מס-קבלה is
+                 not offered here — it would claim money that has not arrived. */
+              <button className="btn ghost block" onClick={() => void page.issue('tax_invoice')} disabled={busy}>
+                <IconDoc /> {t('ticket.issueTaxInvoice')}
               </button>
             ) : null}
 
