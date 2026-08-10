@@ -143,10 +143,21 @@ Schema before function, always. A function that calls a routine the database
 does not have yet fails on every request until the migration lands; the reverse
 just leaves a new column nobody reads.
 
-There is no `migration list` for functions. `supabase functions list` gives a
-version counter and a deploy timestamp, which say *when* something shipped and
-not *what* — the only real answer is `supabase functions download <name>` and a
-diff against the source.
+To see what is deployed where:
+
+```bash
+npm run functions:status
+```
+
+`functions list` returns an `ezbr_sha256` per function — a hash of the bundle
+actually running — so "are staging and production the same code" has a real
+answer rather than a guess off two timestamps. The script reads both projects
+and says which functions differ and which were never deployed at all.
+
+What the hash cannot tell you is whether either environment matches your
+working tree: it is of a bundle built server-side, and nothing local reproduces
+it. For that, `supabase functions download <name> --project-ref <ref>` and diff.
+The status table is what tells you which function is worth that trouble.
 
 ### Grants are not policies, and neither is inherited
 

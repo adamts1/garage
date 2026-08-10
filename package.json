@@ -13,6 +13,7 @@
     "db:diff": "supabase db diff -f",
     "db:push": "supabase db push",
     "db:lint": "supabase db lint",
+    "functions:status": "node scripts/functions-status.mjs",
     "functions:push": "supabase functions deploy --project-ref poksqsdklnhaumozriqd",
     "functions:push:prod": "supabase functions deploy --project-ref fdztfosbohiwskzfvwaj",
     "test": "vitest run",
