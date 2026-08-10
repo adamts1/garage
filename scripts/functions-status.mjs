@@ -53,19 +53,48 @@ function localFunctions() {
 
 /** The CLI prints JSON on stdout and is prone to trailing noise — a PostHog
  *  shutdown warning, most often. Take the line that parses, not the whole
- *  stream. */
+ *  stream.
+ *
+ *  This THROWS when it cannot get an answer, and that is the important part.
+ *  The first version returned an empty list instead, so a CLI that was not
+ *  logged in, rate-limited or simply having a bad minute rendered as "— not
+ *  deployed" against every function — which is the one wrong answer this tool
+ *  must never give. It reads as "deploy all of these", about functions that are
+ *  already live. Silence and nothing are not the same fact. */
 async function deployed(ref) {
-  const { stdout } = await run('npx', ['supabase', 'functions', 'list', '--project-ref', ref], {
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  let stdout = '';
+  let stderr = '';
+  try {
+    ({ stdout, stderr } = await run('npx', ['supabase', 'functions', 'list', '--project-ref', ref], {
+      maxBuffer: 10 * 1024 * 1024,
+    }));
+  } catch (e) {
+    // A non-zero exit still carries the useful text on one of the two streams.
+    stdout = e.stdout ?? '';
+    stderr = e.stderr ?? e.message ?? '';
+  }
+
   for (const line of stdout.split('\n')) {
     if (!line.trim().startsWith('{')) continue;
+    let parsed;
     try {
-      const parsed = JSON.parse(line);
-      if (Array.isArray(parsed.functions)) return parsed.functions;
-    } catch { /* not the line we want */ }
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (Array.isArray(parsed.functions)) return parsed.functions;
+    /* The CLI reports its own failures as JSON too. Left unrecognised, this
+       line looks exactly like noise, and the loop would fall off the end and
+       call it an empty project. */
+    if (parsed._tag === 'Error') {
+      throw new Error(parsed.error?.message ?? 'the CLI reported an error');
+    }
   }
-  return [];
+
+  throw new Error(
+    (stderr.trim().split('\n')[0] || 'no function list in the reply')
+    + ' — are you logged in? try: npx supabase login',
+  );
 }
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -126,9 +155,20 @@ const main = async () => {
   }
 
   console.log();
-  if (problems.length === 0) {
+
+  /* An environment nobody could read is reported as exactly that, and takes the
+     exit code with it. Anything else invites the table to be read as a deploy
+     list for functions that are already running. */
+  const unreachable = ENVIRONMENTS.filter((e) => !byEnvironment.get(e.name));
+  if (unreachable.length) {
+    console.log(c.red(`Could not read: ${unreachable.map((e) => e.name).join(', ')}.`));
+    console.log(c.red('Those columns say nothing about what is deployed there — see the error above.'));
+    process.exitCode = 1;
+  }
+
+  if (problems.length === 0 && !unreachable.length) {
     console.log(c.green('Every function is deployed everywhere, and the environments agree.'));
-  } else {
+  } else if (problems.length) {
     console.log(c.bold('Worth a look:'));
     for (const p of problems) console.log(`  ${c.yellow('•')} ${p}`);
   }
