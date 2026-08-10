@@ -51,13 +51,27 @@ const DOCTYPE = {
   credit_note: 'refund',
 } as const;
 
-/** iCount rejects an invrec whose payments don't total the document. Only one
- *  payment key is set; cash is verified, the rest are best-effort. */
+/* iCount rejects an invrec whose payments don't total the document. Only one
+   payment key is set; cash is verified, the rest are best-effort.
+
+   `pay_method` holds a code — see packages/shared/src/payment.ts, whose
+   vocabulary this mirrors. Edge Functions are Deno and do not import the
+   package, so the list is duplicated rather than shared; the four keys below
+   are iCount's, not ours, so they would not have come from there anyway.
+
+   The Hebrew below is legacy. It matched on substrings because the column was
+   free text and 'אשראי' and 'כרטיס אשראי' were the same payment written twice.
+   Rows written before 20260810000000 still hold those words, and a receipt is
+   collected against an invoice that may be months old, so this stays until
+   those rows are gone. Nothing writes them any more.
+
+   'bit' has no iCount key of its own and lands in cash, which is what an
+   instant transfer settles as in the till. */
 function paymentBlock(method: string | null, total: number): Record<string, unknown> {
-  const m = (method ?? '').toLowerCase();
-  if (m.includes('אשראי') || m.includes('card') || m.includes('credit')) return { cc: { sum: total } };
-  if (m.includes('העברה') || m.includes('transfer') || m.includes('bank')) return { banktransfer: { sum: total } };
-  if (m.includes('צ') || m.includes('cheque') || m.includes('check')) return { cheques: [{ sum: total }] };
+  const m = (method ?? '').trim().toLowerCase();
+  if (m === 'card' || m.includes('אשראי') || m.includes('credit')) return { cc: { sum: total } };
+  if (m === 'bank_transfer' || m.includes('העברה') || m.includes('transfer')) return { banktransfer: { sum: total } };
+  if (m === 'cheque' || m.includes('צ׳ק') || m.includes("צ'ק") || m.includes('check')) return { cheques: [{ sum: total }] };
   return { cash: { sum: total } };
 }
 

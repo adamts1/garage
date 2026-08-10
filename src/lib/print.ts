@@ -10,7 +10,8 @@
    version of this inline and now uses it too. */
 
 import {
-  COLUMNS, garageName, money, partsTotal, PRIORITIES, VAT, type Invoice, type Ticket,
+  COLUMNS, garageName, money, partsTotal, payMethodHe, PRIORITIES, VAT,
+  type Invoice, type Ticket,
 } from '@garage/shared';
 
 
@@ -175,7 +176,7 @@ export const printTicket = (
       ${row('אחראי', opts.workerName)}
       ${row('נפתח בתאריך', t.createdAt)}
       ${row('תאריך יעד', t.due && t.due !== '-' ? t.due : null)}
-      ${row('תשלום', t.paid ? `שולם${t.payMethod ? ` · ${t.payMethod}` : ''}` : 'טרם שולם')}
+      ${row('תשלום', t.paid ? `שולם${payMethodHe(t.payMethod) ? ` · ${payMethodHe(t.payMethod)}` : ''}` : 'טרם שולם')}
       ${t.doc ? row('מסמך', t.doc) : ''}
     </table>
 
@@ -269,7 +270,7 @@ export const printInvoice = (inv: Invoice): boolean => {
           ${row('סוג מסמך', label)}
           ${row('תאריך הפקה', inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('he-IL') : null)}
           ${row('מספר הקצאה', inv.allocationNumber)}
-          ${row('אמצעי תשלום', inv.payMethod)}
+          ${row('אמצעי תשלום', payMethodHe(inv.payMethod))}
           ${row('כרטיס עבודה', inv.ticketKey)}
         </table>
       </section>

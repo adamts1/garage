@@ -5,8 +5,10 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
   type Dispatch, type SetStateAction,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCloseTicket, type CloseResult } from '../../features/ticket/CloseTicketModal';
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
+import { payMethodLabel } from '../../lib/payMethodLabel';
 import {
   showError, showErrorKey, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
 } from '../../store';
@@ -55,6 +57,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
    inside it — otherwise every ticket read back from the server would look
    edited the moment the customer had a number. */
 export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptions) {
+  const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -425,7 +428,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
         st: result.paid ? 'paid' : 'done',
         done: draft.subtasks.length,
         paid: result.paid,
-        payMethod: result.method,
+        /* A code, or nothing at all — an open charge is not a way of paying,
+           so the column that says how the money arrived stays empty. */
+        payMethod: result.method ?? undefined,
         doc: result.doc,
         reference: result.reference,
       });
@@ -434,12 +439,14 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
       dispatch(
         result.paid
           ? showSuccess('ticket.paymentTaken', {
-              method: result.method, total: money(totals.total), doc: result.doc,
+              method: payMethodLabel(t, result.method) ?? '-',
+              total: money(totals.total),
+              doc: result.doc,
             })
           : showErrorKey('ticket.closedWithBalance', { total: money(totals.total) }),
       );
     },
-    [dispatch, draft, openCloseDrawer, save, totals.total],
+    [dispatch, draft, openCloseDrawer, save, t, totals.total],
   );
 
   /** Leaving with something unsaved asks first. */

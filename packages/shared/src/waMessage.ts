@@ -19,6 +19,7 @@ import { garageName } from './auth';
 import { VAT, workTotal, worksSummary, type TicketWork } from './catalog';
 import type { TicketPhoto } from './db';
 import { money } from './money';
+import { OTHER_PAY_METHOD, payMethod, payMethodHe } from './payment';
 import type { Ticket } from './types';
 
 /** 050-1234567 → 972501234567. wa.me wants digits only, with a country code. */
@@ -102,6 +103,10 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
 }
 
 /** A method is recorded most of the time but not always; saying "שולם ב" and
-    then nothing is worse than not saying how. */
-const paidLine = (method?: string | null): string =>
-  method ? `שולם ב${method} - תודה!` : 'שולם - תודה!';
+    then nothing is worse than not saying how — and so is "שולם באחר", which is
+    what naming the catch-all code would produce. The column holds a code, so
+    the Hebrew comes from the shared vocabulary rather than from the row. */
+const paidLine = (method?: string | null): string => {
+  const label = payMethod(method) === OTHER_PAY_METHOD ? null : payMethodHe(method);
+  return label ? `שולם ב${label} - תודה!` : 'שולם - תודה!';
+};

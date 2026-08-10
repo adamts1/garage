@@ -1,8 +1,8 @@
-import { money } from '@garage/shared';
+import { DEFAULT_PAY_METHOD, money, PAY_METHODS, type PayMethod } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
-import { TextField } from '../../components/Field';
+import { SelectField, TextField } from '../../components/Field';
 import Modal from '../../components/Modal/Modal';
 import type { ModalComponentProps } from '../../components/Modal/types';
 import { IconCard } from '../../icons';
@@ -30,13 +30,9 @@ import { settleModal } from '../../store/useModalResult';
  */
 export interface CollectPaymentAnswer {
   amount: number;
-  payMethod: string;
+  payMethod: PayMethod;
   reference: string;
 }
-
-/** The ways a garage is actually paid. Free text underneath, because there is
- *  always a case nobody listed. */
-const METHODS = ['מזומן', 'אשראי', 'העברה בנקאית', 'צ׳ק'];
 
 export default function CollectPaymentModal({ props, isTop, stacked, onClose }: ModalComponentProps) {
   const { t } = useTranslation();
@@ -50,7 +46,7 @@ export default function CollectPaymentModal({ props, isTop, stacked, onClose }: 
   const alreadyPaid = round2(invoiceTotal - owed);
 
   const [amount, setAmount] = useState(String(owed));
-  const [payMethod, setPayMethod] = useState(METHODS[0]);
+  const [payMethod, setPayMethod] = useState<PayMethod>(DEFAULT_PAY_METHOD);
   const [reference, setReference] = useState('');
 
   const typed = Number(String(amount).replace(',', '.'));
@@ -101,16 +97,19 @@ export default function CollectPaymentModal({ props, isTop, stacked, onClose }: 
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
       />
 
-      <TextField
+      {/* A closed list, because what goes in the column is a code and free text
+          has no code. The case nobody listed is `other`, and the reference
+          field below it is where the detail goes. */}
+      <SelectField
         label="collect.payMethod"
-        list="collect-methods"
         value={payMethod}
-        onChange={(e) => setPayMethod(e.target.value)}
+        onChange={(e) => setPayMethod(e.target.value as PayMethod)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-      />
-      <datalist id="collect-methods">
-        {METHODS.map((m) => <option key={m} value={m} />)}
-      </datalist>
+      >
+        {PAY_METHODS.map((m) => (
+          <option key={m} value={m}>{t(`payMethods.${m}`)}</option>
+        ))}
+      </SelectField>
 
       <TextField
         label="collect.reference"

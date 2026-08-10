@@ -10,6 +10,7 @@ import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
   IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
 } from '../../icons';
+import { payMethodLabel } from '../../lib/payMethodLabel';
 import { printInvoice, printTicket, warnIfBlocked } from '../../lib/print';
 import { useTicketPage } from './useTicketPage';
 
@@ -334,7 +335,7 @@ export default function TicketPage({
               <dt>{t('ticket.fields.payment')}</dt>
               <dd>
                 {draft.paid
-                  ? t('ticket.paidWith', { method: draft.payMethod })
+                  ? t('ticket.paidWith', { method: payMethodLabel(t, draft.payMethod) ?? '-' })
                   : draft.doc ? t('ticket.openCharge') : '-'}
               </dd>
               <dt>{t('ticket.fields.document')}</dt><dd>{draft.doc ?? '-'}</dd>
