@@ -187,11 +187,25 @@ export const icountAdapter: InvoiceProvider = {
 
 /** Match an existing iCount supplier by vat_id, or null. iCount enforces vat_id
  *  unique per account, so a supplier already there must be reused, not re-added. */
+interface IcountSupplier {
+  supplier_id: number | string;
+  vat_id?: string;
+}
+
 async function findSupplierByVatId(c: IcountCreds, vatId: string): Promise<string | null> {
   const list = await call(c, 'supplier/get_list', {});
-  const suppliers = (list.suppliers ?? []) as Array<{ supplier_id: number | string; vat_id?: string }>;
-  const arr = Array.isArray(suppliers) ? suppliers : Object.values(suppliers);
-  for (const s of arr) {
+
+  /* iCount hands this back as a list on some accounts and as an object keyed by
+     supplier id on others, so it is typed as the union it actually is. It used
+     to be cast to an array and THEN checked with Array.isArray — which left the
+     non-array branch narrowed to `never`, Object.values() unable to infer an
+     element type from it, and every field access on the loop variable an error.
+     The runtime behaviour was right all along; the cast was describing only
+     half of what the API returns. */
+  const raw = (list.suppliers ?? []) as IcountSupplier[] | Record<string, IcountSupplier>;
+  const suppliers: IcountSupplier[] = Array.isArray(raw) ? raw : Object.values(raw);
+
+  for (const s of suppliers) {
     if (s.vat_id && String(s.vat_id) === String(vatId)) return String(s.supplier_id);
   }
   return null;
