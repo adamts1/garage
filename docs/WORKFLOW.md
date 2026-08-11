@@ -143,6 +143,15 @@ Schema before function, always. A function that calls a routine the database
 does not have yet fails on every request until the migration lands; the reverse
 just leaves a new column nobody reads.
 
+One of them is public. `photo` carries `verify_jwt = false` in
+`supabase/config.toml` because its caller is a customer tapping a link in
+WhatsApp, and a customer has no account: it takes a ten-character share code and
+redirects to a signed URL it mints on the spot. That setting lives in the config
+file, so it travels with a normal `functions:push` — but check it survived after
+deploying, because a function that quietly starts demanding a JWT breaks every
+photo link a garage has already sent. Every *other* function here requires the
+caller's JWT and must keep doing so.
+
 To see what is deployed where:
 
 ```bash

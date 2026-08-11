@@ -1403,3 +1403,51 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
   font-size: 14px;
   line-height: 1;
 }
+
+/* Who is signed in, in the sidebar footer above sign-out. The footer sits on the
+   dark rail, so these read against it rather than against a white panel. */
+.who {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.who-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  /* Falls back to the palette's mid tone for an account with no worker row —
+     the inline style supplies the person's own colour when there is one. */
+  background: var(--slate, #3e5c76);
+  color: var(--sand, #f0ebd8);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+/* A long name must ellipsize rather than push the rail wider. */
+.who-text { min-width: 0; display: grid; }
+.who-name {
+  color: var(--sand, #f0ebd8);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.who-email {
+  color: var(--steel, #748cab);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In the rail the avatar is the whole thing, and it stacks with the status dot
+   and the power button the footer already centres. */
+.sidebar.is-rail .who-avatar { margin-bottom: 10px; }

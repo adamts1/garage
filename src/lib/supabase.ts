@@ -8,6 +8,11 @@ const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 /** False until .env.local is filled in - the app shows setup instructions instead of a blank page. */
 export const isConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJECT-REF'));
 
+/** The bare project URL, for the one thing that needs it as a string rather than
+ *  as a client: the short photo link a customer opens from WhatsApp. Empty while
+ *  unconfigured, so nothing builds a link onto the placeholder host. */
+export const projectUrl = isConfigured ? url : '';
+
 // A placeholder URL keeps createClient from throwing at import time; nothing calls it while unconfigured.
 export const supabase = createClient(
   isConfigured ? url : 'https://placeholder.supabase.co',

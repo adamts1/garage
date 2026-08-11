@@ -12,7 +12,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { setSupabaseClient } from './client';
-import { garageName, getCurrentGarage, resolveAuth, setCurrentGarage, SIGNED_OUT } from './auth';
+import {
+  garageName, getCurrentGarage, resolveAuth, setCurrentGarage, signedInAs, SIGNED_OUT,
+} from './auth';
+import type { Worker } from './types';
 
 type RpcResult = { data: unknown; error: unknown };
 
@@ -24,6 +27,12 @@ const stubClient = (result: RpcResult | (() => RpcResult)) =>
 
 // Only the fields resolveAuth passes through; a real Session carries far more.
 const session = { user: { id: 'u1' } } as unknown as Session;
+
+const worker = (over: Partial<Worker> = {}): Worker =>
+  ({
+    id: 'w1', code: 'dk', name: 'דני כהן', initials: 'דכ', color: '#3e5c76',
+    position: 1, active: true, userId: 'u1', ...over,
+  }) as Worker;
 
 describe('resolveAuth', () => {
   beforeEach(() => stubClient({ data: [], error: null }));
@@ -111,6 +120,46 @@ describe('resolveAuth', () => {
     const auth = await resolveAuth(session);
     expect(auth.status).toBe('no-garage');
     expect(auth.error).toBeNull();
+  });
+});
+
+/* Who the sidebar says is signed in.
+ *
+ * Two advisors share one counter and one browser, so the answer has to be right
+ * for the account rather than for the device — naming the wrong colleague on a
+ * screen someone trusts is worse than naming nobody. */
+describe('signedInAs', () => {
+  const withEmail = { user: { id: 'u1', email: 'dani@garage.co.il' } } as unknown as Session;
+
+  beforeEach(() => stubClient({ data: [], error: null }));
+
+  it('prefers the staff row for the signed-in account', async () => {
+    await resolveAuth(withEmail);
+    expect(signedInAs([worker({ userId: 'u2', name: 'מישהו אחר' }), worker()])).toEqual({
+      name: 'דני כהן',
+      initials: 'דכ',
+      color: '#3e5c76',
+      email: 'dani@garage.co.il',
+    });
+  });
+
+  it('falls back to the address when no worker row claims the account', async () => {
+    await resolveAuth(withEmail);
+    const me = signedInAs([worker({ userId: 'u2' })]);
+    expect(me).toMatchObject({ name: 'dani', initials: 'DA', email: 'dani@garage.co.il' });
+  });
+
+  it('names nobody once signed out', async () => {
+    await resolveAuth(withEmail);
+    await resolveAuth(null);
+    expect(signedInAs([worker()])).toBeNull();
+  });
+
+  /* A worker row with no account attached must never be mistaken for the caller:
+     every such row has userId null, and so does a session that has not resolved. */
+  it('does not match a worker who has no login', async () => {
+    await resolveAuth(null);
+    expect(signedInAs([worker({ userId: null })])).toBeNull();
   });
 });
 

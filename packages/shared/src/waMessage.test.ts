@@ -31,10 +31,16 @@ const photo = (n: number): TicketPhoto =>
   ({
     id: String(n),
     url: `https://x/${n}.jpg`,
+    shareUrl: `https://x/functions/v1/photo/code${n}`,
     path: `p/${n}.jpg`,
     caption: '',
     createdAt: '',
   }) as TicketPhoto;
+
+/** A build that was never told its project URL — nothing to build a short link
+ *  from, so the message has to fall back to the signed one. */
+const photoWithoutShareLink = (n: number): TicketPhoto =>
+  ({ ...photo(n), shareUrl: '' }) as TicketPhoto;
 
 describe('waNumber', () => {
   it('turns a local mobile number into an international one', () => {
@@ -181,16 +187,36 @@ describe('waMessage — photos', () => {
     expect(waMessage(withPhotos([]))).not.toContain('תמונות מהמוסך');
   });
 
-  it('uses the singular for one photo', () => {
+  it('uses the singular for one photo, and does not number it', () => {
     const text = waMessage(withPhotos([photo(1)]));
     expect(text).toContain('תמונה מהמוסך:');
+    expect(text).toContain('https://x/functions/v1/photo/code1');
+    expect(text).not.toContain('תמונה 1:');
+  });
+
+  it('numbers the links when there is more than one', () => {
+    const text = waMessage(withPhotos([photo(1), photo(2)]));
+    expect(text).toContain('תמונה 1: https://x/functions/v1/photo/code1');
+    expect(text).toContain('תמונה 2: https://x/functions/v1/photo/code2');
+  });
+
+  /* The short link is the whole point — it survives the eight hours the signed
+     one does not. A regression here is invisible until a customer taps a dead
+     link the next morning, which is exactly when nobody is looking. */
+  it('sends the short link, not the signed one', () => {
+    const text = waMessage(withPhotos([photo(1)]));
+    expect(text).not.toContain('https://x/1.jpg');
+  });
+
+  it('falls back to the signed link when there is no short one', () => {
+    const text = waMessage(withPhotos([photoWithoutShareLink(1)]));
     expect(text).toContain('https://x/1.jpg');
   });
 
   it('caps the links and says how many were left out', () => {
     const text = waMessage(withPhotos(Array.from({ length: 7 }, (_, i) => photo(i))));
-    expect(text.match(/https:\/\/x\//g) ?? []).toHaveLength(WA_PHOTO_LIMIT);
-    expect(text).toContain('(ועוד 4 תמונות בכרטיס)');
+    expect(text.match(/functions\/v1\/photo\//g) ?? []).toHaveLength(WA_PHOTO_LIMIT);
+    expect(text).toContain(`(ועוד ${7 - WA_PHOTO_LIMIT} תמונות בכרטיס)`);
   });
 
   it('does not add an "and N more" line when nothing was left out', () => {

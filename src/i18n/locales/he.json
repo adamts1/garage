@@ -228,6 +228,7 @@
   "works": {
     "works": "עבודות ({{count}})",
     "parts": "פריטים לעבודה ({{count}})",
+    "partsDivider": "פריטים / חלקים",
     "addWork": "הוסף עבודה",
     "addPart": "הוסף פריט",
     "removeWork": "הסר עבודה",
@@ -548,6 +549,7 @@
     "open": "פתוח",
     "activeTickets": "{{count}} כרטיסים פעילים",
     "signOut": "התנתקות",
+    "signedInAs": "מחובר: {{name}}",
     "pin": "נעץ את הסרגל פתוח",
     "unpin": "בטל נעיצה - הסרגל יתכווץ"
   },

@@ -2,10 +2,11 @@
    and offers sign-out. It replaced a header button next to the back arrow —
    sign-out is now one deliberate step behind the menu rather than a mistap. */
 
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { signOut } from '@garage/shared';
+import { listWorkers, signedInAs, signOut, type Worker } from '@garage/shared';
 import { useAuth } from '../../lib/useAuth';
 import { C, s } from '../../lib/theme';
 import { PowerIcon } from '../ui';
@@ -15,9 +16,26 @@ export function UserSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const insets = useSafeAreaInsets();
   const auth = useAuth();
 
+  /* The staff list, only to turn the account into a person: the sheet showed
+     "dani@garage.co.il" where every other screen in the app calls them דני כהן.
+     Fetched when the sheet opens rather than held by the app — it is one row's
+     worth of answer, wanted about once a shift. An empty list is fine; the
+     fallback below is the address, which is what this showed before. */
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    listWorkers()
+      .then((team) => { if (live) setWorkers(team); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [open]);
+
   const email = auth.session?.user?.email ?? '';
   const garage = auth.garages[0]?.name ?? '';
-  const initial = (email.trim()[0] ?? '👤').toUpperCase();
+  const me = signedInAs(workers);
+  const title = me?.name || email || t('auth.user');
+  const initial = (me?.initials || email.trim()[0] || '👤').toUpperCase();
 
   const doSignOut = () => {
     onClose();
@@ -72,8 +90,20 @@ export function UserSheet({ open, onClose }: { open: boolean; onClose: () => voi
                 style={{ fontSize: 15, fontWeight: '700', color: C.ink, textAlign: 'right' }}
                 numberOfLines={1}
               >
-                {email || t('auth.user')}
+                {title}
               </Text>
+              {/* The address stays, under the name: a nickname two people answer
+                  to is not what you check when you want to know whose session
+                  this is. Dropped when it IS the title, so it is not printed
+                  twice. */}
+              {!!email && email !== title && (
+                <Text
+                  style={{ fontSize: 12.5, color: C.dim, textAlign: 'right', marginTop: 2 }}
+                  numberOfLines={1}
+                >
+                  {email}
+                </Text>
+              )}
               {!!garage && (
                 <Text
                   style={{ fontSize: 12.5, color: C.dim, textAlign: 'right', marginTop: 2 }}

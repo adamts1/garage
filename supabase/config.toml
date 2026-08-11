@@ -379,6 +379,13 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# The one function called by somebody with no account: a customer tapping a photo
+# link in WhatsApp. Every other function here requires the caller's JWT and must
+# keep doing so. The share code in the path is this one's whole credential — see
+# supabase/functions/photo/index.ts.
+[functions.photo]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

@@ -10,14 +10,14 @@ import { UserSheet } from '../components/auth/UserSheet';
 import EnvBadge from '../components/EnvBadge';
 import { MenuIcon } from '../components/ui';
 import { TicketsProvider } from '../lib/TicketsProvider';
-import { supabase } from '../lib/supabase';
+import { projectUrl, supabase } from '../lib/supabase';
 import { C } from '../lib/theme';
 import '../lib/i18n';
 
 // @garage/shared holds no client of its own. The native build hands it this one,
 // which carries the AsyncStorage session config the browser build does not need.
 // Module scope, so it runs on import — before any screen renders or fetches.
-setSupabaseClient(supabase);
+setSupabaseClient(supabase, projectUrl);
 
 export default function RootLayout() {
   const { t } = useTranslation();

@@ -12,11 +12,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 let client: SupabaseClient | null = null;
+let projectUrl = '';
 
-/** Call once, before anything touches the database. */
-export const setSupabaseClient = (c: SupabaseClient) => {
+/** Call once, before anything touches the database.
+ *
+ *  The URL is the bare project URL — the same string the app handed
+ *  createClient. supabase-js keeps its own copy but does not expose it, and one
+ *  thing here needs it: a customer-facing photo link is built as a URL, not
+ *  fetched through the client. Optional, because a test that injects a stub has
+ *  no project and needs none. */
+export const setSupabaseClient = (c: SupabaseClient, url = '') => {
   client = c;
+  projectUrl = url.replace(/\/+$/, '');
 };
+
+/** Where this build's Supabase project lives. Empty when nobody said. */
+export const getProjectUrl = (): string => projectUrl;
 
 export const getClient = (): SupabaseClient => {
   if (!client) {

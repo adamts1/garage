@@ -1,4 +1,4 @@
-import { garageName, isGarageAdmin, signOut } from '@garage/shared';
+import { garageName, isGarageAdmin, signedInAs, signOut, type Worker } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -33,6 +33,10 @@ export const isNavActive = (path: string, pathname: string) =>
 export interface SidebarProps {
   /** Shown in the footer — the count the garage actually watches. */
   activeCount: number;
+  /* The staff list, only so the footer can name the person at the keyboard.
+     Passed in rather than fetched: the shell already keeps it live for the
+     board's avatars, and a rename on the staff screen has to reach here too. */
+  workers: Worker[];
   /* Both flags live in the shell: its grid is narrow or wide depending on the
      result, so it cannot be told after the fact. */
   expanded: boolean;
@@ -42,10 +46,16 @@ export interface SidebarProps {
 }
 
 export default function Sidebar({
-  activeCount, expanded, pinned, onPinToggle, onHoverChange,
+  activeCount, workers, expanded, pinned, onPinToggle, onHoverChange,
 }: SidebarProps) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+
+  /* Who is signed in. Two people share a counter and one browser more often than
+     anyone admits, and until now the only thing on screen that changed with the
+     account was which links the sidebar drew — so "am I still logged in as
+     Dani?" had no answer short of signing out to find out. */
+  const me = signedInAs(workers);
 
   return (
     <aside
@@ -93,12 +103,46 @@ export default function Sidebar({
       <div className="sidebar-footer">
         {expanded ? (
           <>
+            {me && (
+              /* Above the sign-out button on purpose: the two questions are one
+                 question — who is this, and get me out. */
+              <div className="who">
+                <span
+                  className="who-avatar"
+                  /* Their own colour off the staff palette, so the initials here
+                     match the chip this person leaves on every ticket. */
+                  style={me.color ? { background: me.color } : undefined}
+                  aria-hidden
+                >
+                  {me.initials}
+                </span>
+                <span className="who-text">
+                  <span className="who-name">{me.name}</span>
+                  {/* The name can be a nickname two people answer to; the address
+                      is the account. Both, when the rail is open to hold them. */}
+                  {me.email && me.email !== me.name && (
+                    <span className="who-email" title={me.email}>{me.email}</span>
+                  )}
+                </span>
+              </div>
+            )}
             <div className="status-badge">{t('nav.open')}</div>
             <div className="footer-note">{t('nav.activeTickets', { count: activeCount })}</div>
             <button className="sign-out" onClick={() => void signOut()}>{t('nav.signOut')}</button>
           </>
         ) : (
           <>
+            {/* The rail has room for two letters and a tooltip, which is enough
+                to answer "who am I" without pinning the sidebar open. */}
+            {me && (
+              <span
+                className="who-avatar"
+                style={me.color ? { background: me.color } : undefined}
+                title={t('nav.signedInAs', { name: me.name })}
+              >
+                {me.initials}
+              </span>
+            )}
             <div className="status-dot" title={t('nav.activeTickets', { count: activeCount })} />
             <button
               className="sign-out icon-only"

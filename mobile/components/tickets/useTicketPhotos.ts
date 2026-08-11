@@ -13,11 +13,13 @@ import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
-import { deleteTicketPhoto, listTicketPhotos, uploadTicketPhoto, type TicketPhoto } from '@garage/shared';
+import {
+  deleteTicketPhoto, isPhotoLimitError, listTicketPhotos, PHOTO_LIMIT, uploadTicketPhoto,
+  type TicketPhoto,
+} from '@garage/shared';
 
 /** A photo of a scratched bumper does not need 12MP, and the mechanic is usually on cellular. */
 const QUALITY = 0.7;
-const SELECTION_LIMIT = 10;
 
 export type PhotoSource = 'camera' | 'library';
 
@@ -41,7 +43,19 @@ export function useTicketPhotos(ticketKey: string) {
     };
   }, [ticketKey]);
 
+  /* How many more this ticket will take.
+     A ticket holds at most PHOTO_LIMIT photos — the database enforces it, this
+     is what lets the screen say so before the camera opens rather than after an
+     upload comes back rejected. Never negative: a ticket photographed before the
+     limit existed can be over it, and it simply accepts nothing new. */
+  const remaining = Math.max(0, PHOTO_LIMIT - photos.length);
+
   const add = async (from: PhotoSource) => {
+    if (remaining === 0) {
+      Alert.alert(t('ticket.photos.limitTitle'), t('ticket.photos.limitBody', { count: PHOTO_LIMIT }));
+      return;
+    }
+
     const permission =
       from === 'camera'
         ? await ImagePicker.requestCameraPermissionsAsync()
@@ -62,15 +76,17 @@ export function useTicketPhotos(ticketKey: string) {
             mediaTypes: ['images'],
             quality: QUALITY,
             base64: true,
-            allowsMultipleSelection: true,
-            selectionLimit: SELECTION_LIMIT,
+            allowsMultipleSelection: remaining > 1,
+            // Only as many as the ticket can still take, so the picker refuses a
+            // third rather than the upload doing it one photo too late.
+            selectionLimit: remaining,
           });
     if (result.canceled) return;
 
     setUploading(true);
     try {
-      // Sequential: ten parallel uploads on a garage's wifi is how you get timeouts.
-      for (const asset of result.assets) {
+      // Sequential: parallel uploads on a garage's wifi is how you get timeouts.
+      for (const asset of result.assets.slice(0, remaining)) {
         if (!asset.base64) continue;
         const ext = (asset.fileName?.split('.').pop() ?? asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
         const photo = await uploadTicketPhoto(ticketKey, {
@@ -81,7 +97,14 @@ export function useTicketPhotos(ticketKey: string) {
         setPhotos((prev) => [...prev, photo]); // each one appears as it lands
       }
     } catch (e: any) {
-      Alert.alert(t('ticket.photos.uploadFailed'), e?.message ?? t('ticket.photos.uploadFailedBody'));
+      // The cap refused it — from the count above, or from the trigger when
+      // another device filled the ticket while this one was picking. Not a
+      // failure to report as one.
+      if (isPhotoLimitError(e)) {
+        Alert.alert(t('ticket.photos.limitTitle'), t('ticket.photos.limitBody', { count: PHOTO_LIMIT }));
+      } else {
+        Alert.alert(t('ticket.photos.uploadFailed'), e?.message ?? t('ticket.photos.uploadFailedBody'));
+      }
     } finally {
       setUploading(false);
     }
@@ -106,7 +129,7 @@ export function useTicketPhotos(ticketKey: string) {
       },
     ]);
 
-  return { photos, loading, uploading, add, confirmRemove };
+  return { photos, loading, uploading, remaining, add, confirmRemove };
 }
 
 export type TicketPhotos = ReturnType<typeof useTicketPhotos>;

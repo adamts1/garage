@@ -101,6 +101,7 @@ export default function App() {
     <div className={`app-shell${expanded ? '' : ' rail'}`}>
       <Sidebar
         activeCount={activeTickets.length}
+        workers={workers}
         expanded={expanded}
         pinned={pinned}
         onPinToggle={() => setPinned((v) => !v)}

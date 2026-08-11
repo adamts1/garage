@@ -246,7 +246,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
   return (
     <div className={styles.step}>
       <div className={styles.grid}>
-        <div className={styles.col}>
+        <div className={`${styles.col} ${styles.worksCol}`}>
           <div className={styles.head}>
             <span className={styles.title}>
               <IconWrench /> {t('works.works', { count: works.length })}
@@ -289,7 +289,19 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           )}
         </div>
 
-        <div className={styles.col}>
+        {/* The two tables were reading as one long list: same background, same
+            column widths, and a parts table that changes contents when a row
+            above it is clicked. Stacking them is right — the parts belong to the
+            work directly above — but stacking without a break is what made
+            "which of these am I looking at" a question. This is the break: a
+            titled rule, and a different surface under everything below it. */}
+        <div className={styles.divider} role="separator" aria-hidden>
+          <span className={styles.dividerLabel}>
+            <IconBox /> {t('works.partsDivider')} <IconBox />
+          </span>
+        </div>
+
+        <div className={`${styles.col} ${styles.partsCol}`}>
           <div className={styles.head}>
             <span className={styles.title}>
               <IconBox /> {t('works.parts', { count: current ? current.items.length : 0 })}
