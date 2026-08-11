@@ -32,9 +32,23 @@ export const waNumber = (phone?: string | null): string | null => {
 };
 
 /* wa.me carries text only — there is no attachment parameter — so photos travel
-   as links. The bucket is public, so they open without a login. Capped, because
-   ten URLs would bury the price the customer is meant to be reading. */
-export const WA_PHOTO_LIMIT = 3;
+   as links.
+
+   Which link matters. `photo.url` is the signed URL the app renders from: about
+   330 characters, four wrapped lines in a chat window, and dead eight hours
+   later — so a customer reading the message the next morning taps a broken
+   link. `photo.shareUrl` is the short public one, roughly sixty characters on a
+   single line, and it keeps working because the endpoint behind it signs a fresh
+   URL per visit. The signed URL stays only as the fallback for a build that was
+   never told its project URL; long beats nothing.
+
+   Numbered, because a bare URL says nothing about what is behind it and two
+   bare URLs say nothing about which is which.
+
+   The cap matches the two-photo limit on a ticket. It is not redundant: tickets
+   photographed before that limit existed can still carry more, and the message
+   is where that would show. */
+export const WA_PHOTO_LIMIT = 2;
 
 const photoLines = (photos: readonly TicketPhoto[]): string[] => {
   if (!photos.length) return [];
@@ -43,7 +57,10 @@ const photoLines = (photos: readonly TicketPhoto[]): string[] => {
   return [
     '',
     photos.length > 1 ? 'תמונות מהמוסך:' : 'תמונה מהמוסך:',
-    ...shown.map((p) => p.url),
+    ...shown.map((p, i) =>
+      // A single photo needs no number - "תמונה 1" out of one is noise.
+      shown.length > 1 ? `תמונה ${i + 1}: ${p.shareUrl || p.url}` : (p.shareUrl || p.url),
+    ),
     ...(rest > 0 ? [`(ועוד ${rest} תמונות בכרטיס)`] : []),
   ];
 };

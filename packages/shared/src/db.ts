@@ -2,7 +2,7 @@
    The UI keeps using the `Ticket` shape it always had - everything below
    maps between that shape and the tickets / works / work_items rows. */
 
-import { getClient, invokeError } from './client';
+import { getClient, getProjectUrl, invokeError } from './client';
 import type { Ticket, Worker } from './types';
 import type { PartRow, TicketWork, WorkDef } from './catalog';
 
@@ -593,6 +593,18 @@ export const deleteTicket = async (key: string) => {
 
 export const PHOTO_BUCKET = 'ticket-photos';
 
+/* How many photos a ticket may hold.
+
+   Two is what a garage sends: the damage and the part. It is also what a
+   WhatsApp message can carry without the links burying the price underneath
+   them — which is the number that matters, because the photos exist in order to
+   be sent.
+
+   The database enforces this on insert (ticket_photos_limit). This constant is
+   what lets the phone say so before the upload rather than after it, and what
+   keeps the message builder and the camera button agreeing on one number. */
+export const PHOTO_LIMIT = 2;
+
 /* Long enough that a board left open across a shift does not fill with broken
    images, short enough that a URL copied out of devtools is not a permanent
    grant. Photos are re-listed on every ticket open, so this is refreshed often
@@ -603,9 +615,28 @@ export interface TicketPhoto {
   id: string;
   path: string;      // object path inside the bucket - what we delete by
   url: string;       // signed, expiring url - what the board and <Image> render
+  /** The short public link, for a customer who has no session. Empty when this
+   *  build was given no project URL (a test with a stub client). */
+  shareUrl: string;
   caption: string;
   createdAt: string;
 }
+
+/* The customer-facing link for a photo.
+ *
+ * Short on purpose: a signed URL is ~330 characters of path and token, which in
+ * a chat wraps over four lines and expires in eight hours — so the customer who
+ * reads the message the next morning taps a dead link. This one is ~60
+ * characters, sits on a single line, and outlives the message, because the
+ * `photo` function signs a fresh URL on every visit.
+ *
+ * Empty when there is no project URL to build from, and every caller treats an
+ * empty share link as "send the signed one instead" — a long link beats none. */
+const photoShareUrl = (shareCode: string | null | undefined): string => {
+  const base = getProjectUrl();
+  if (!base || !shareCode) return '';
+  return `${base}/functions/v1/photo/${shareCode}`;
+};
 
 /* One signed URL per object.
 
@@ -631,6 +662,7 @@ const rowToPhoto = (r: any, url: string): TicketPhoto => ({
   id: r.id,
   path: r.path,
   url,
+  shareUrl: photoShareUrl(r.share_code),
   caption: r.caption ?? '',
   createdAt: r.created_at ? new Date(r.created_at).toLocaleDateString('he-IL') : '',
 });
@@ -639,7 +671,7 @@ const rowToPhoto = (r: any, url: string): TicketPhoto => ({
 export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
   const { data, error } = await getClient()
     .from('ticket_photos')
-    .select('id, path, caption, created_at, tickets!inner(key)')
+    .select('id, path, share_code, caption, created_at, tickets!inner(key)')
     .eq('tickets.key', key)
     .order('created_at');
   if (error) throw error;
@@ -687,11 +719,42 @@ const currentGarageId = async (): Promise<string> => {
   return data as string;
 };
 
+/* The ticket is already full.
+ *
+ * Thrown before the bytes go up, and recognised again by the screen that has to
+ * say so in Hebrew. A flag on the error rather than a matched message: the
+ * database's own refusal (ticket_photos_limit) reaches us as English prose from
+ * Postgres, and a UI that greps error text is a UI that breaks on a rewording. */
+export class PhotoLimitError extends Error {
+  readonly limit = PHOTO_LIMIT;
+  constructor() {
+    super(`a ticket may hold at most ${PHOTO_LIMIT} photos`);
+    this.name = 'PhotoLimitError';
+  }
+}
+
+export const isPhotoLimitError = (e: unknown): boolean =>
+  e instanceof PhotoLimitError ||
+  // The trigger, for anything that got past the check below — a second device
+  // uploading at the same moment, or a caller that never counted at all.
+  Boolean((e as any)?.message?.includes('at most 2 photos'));
+
 export const uploadTicketPhoto = async (
   key: string,
   file: { base64: string; mime: string; ext: string },
 ): Promise<TicketPhoto> => {
   const ticketId = await ticketIdByKey(key);
+
+  /* Counted before the upload, not after it.
+     The trigger would catch this either way, but only once the image bytes have
+     crossed the garage's wifi and been written into the bucket — and then they
+     have to be deleted again. One HEAD request is cheaper than a megabyte. */
+  const { count } = await getClient()
+    .from('ticket_photos')
+    .select('id', { count: 'exact', head: true })
+    .eq('ticket_id', ticketId);
+  if ((count ?? 0) >= PHOTO_LIMIT) throw new PhotoLimitError();
+
   const garageId = await currentGarageId();
   // The garage prefix is what the storage policy checks. The ticket key stays
   // in the path because it is what makes an object recognisable in the
@@ -706,7 +769,7 @@ export const uploadTicketPhoto = async (
   const { data, error } = await getClient()
     .from('ticket_photos')
     .insert({ ticket_id: ticketId, path })
-    .select('id, path, caption, created_at')
+    .select('id, path, share_code, caption, created_at')
     .single();
   if (error) {
     // The row is what makes a photo visible; an object with no row is invisible junk.

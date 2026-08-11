@@ -17,6 +17,7 @@
 
 import type { Session, User } from '@supabase/supabase-js';
 import { getClient } from './client';
+import type { Worker } from './types';
 
 /** What a member may do in their garage. Two, and only the one distinction:
  *  who may change the name or price of a work already on a ticket. Assigned by
@@ -75,8 +76,38 @@ export const getCurrentGarage = (): Garage | null => currentGarage;
    same reason garageName() is — the screens that need it are several levels
    down from the gate that resolved the session. */
 let currentUserId: string | null = null;
+let currentUserEmail: string | null = null;
 
 export const getCurrentUserId = (): string | null => currentUserId;
+
+/** The signed-in address. What the app falls back to when it wants to name who
+ *  is at the keyboard and no worker row claims this account. */
+export const getCurrentUserEmail = (): string | null => currentUserEmail;
+
+/* Who is signed in, in the form a person should read: their name off the staff
+   list, or failing that the address they signed in with.
+ *
+ * The worker list is what the caller already has on hand — the board loads it
+ * for its avatars and keeps it live — so this takes it as an argument rather
+ * than querying again. Retired workers included deliberately: a retired account
+ * cannot reach the garage at all, but if one somehow renders, naming them beats
+ * showing a stranger's email.
+ *
+ * Null only before a session resolves, which is before any screen that shows
+ * this has mounted. */
+export const signedInAs = (
+  workers: readonly Worker[],
+): { name: string; initials: string; color: string | null; email: string | null } | null => {
+  const email = currentUserEmail;
+  const mine = currentUserId ? workers.find((w) => w.userId === currentUserId) : undefined;
+  if (mine) return { name: mine.name, initials: mine.initials, color: mine.color, email };
+  if (!email) return null;
+  // No worker row yet — the trigger writes one on the next membership, but a
+  // session can outrun it. The local part of the address is a better label than
+  // the whole thing in a narrow rail.
+  const handle = email.split('@')[0] ?? email;
+  return { name: handle, initials: handle.slice(0, 2).toUpperCase(), color: null, email };
+};
 
 /** Whether the signed-in user may change what a customer is charged.
  *
@@ -203,9 +234,11 @@ export const resolveAuth = async (session: Session | null): Promise<ResolvedAuth
   if (!session) {
     setCurrentGarage(null);
     currentUserId = null;
+    currentUserEmail = null;
     return SIGNED_OUT;
   }
   currentUserId = session.user?.id ?? null;
+  currentUserEmail = session.user?.email ?? null;
   try {
     const garages = await listMyGarages();
     /* The first membership is the garage the apps present as "this garage".

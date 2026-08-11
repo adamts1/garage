@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { TicketPhoto } from '@garage/shared';
+import { PHOTO_LIMIT, type TicketPhoto } from '@garage/shared';
 import { C, s } from '../../../lib/theme';
 import { Button, SectionHead } from '../../ui';
 import type { TicketPhotos } from '../useTicketPhotos';
@@ -16,29 +16,38 @@ const TILE_WIDTH = '31.9%';
 
 export function PhotosTab({ photos: store }: { photos: TicketPhotos }) {
   const { t } = useTranslation();
-  const { photos, loading, uploading, add, confirmRemove } = store;
+  const { photos, loading, uploading, remaining, add, confirmRemove } = store;
   const [viewing, setViewing] = useState<TicketPhoto | null>(null);
+
+  const full = remaining === 0;
 
   return (
     <>
       <SectionHead title={t('ticket.tabs.photos')} count={photos.length} />
 
+      {/* Disabled rather than hidden. A button that vanishes leaves the mechanic
+          wondering where the camera went; one that is greyed out with the rule
+          written under it answers that before it is asked. */}
       <View style={[s.row, { gap: 10 }]}>
         <Button
           label={t('ticket.photos.camera')}
           onPress={() => add('camera')}
           variant="outline"
-          disabled={uploading}
+          disabled={uploading || full}
           style={{ flex: 1 }}
         />
         <Button
           label={t('ticket.photos.library')}
           onPress={() => add('library')}
           variant="outline"
-          disabled={uploading}
+          disabled={uploading || full}
           style={{ flex: 1 }}
         />
       </View>
+
+      <Text style={[s.dim, { textAlign: 'center' }]}>
+        {t('ticket.photos.limitHint', { count: PHOTO_LIMIT })}
+      </Text>
 
       {uploading && (
         <View style={[s.row, { justifyContent: 'center', gap: 8, paddingVertical: 4 }]}>

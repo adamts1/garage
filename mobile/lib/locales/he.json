@@ -123,7 +123,10 @@
       "deleteTitle": "מחיקת תמונה",
       "deleteBody": "למחוק את התמונה מהכרטיס?",
       "deleteFailed": "המחיקה נכשלה",
-      "deleteFailedBody": "לא ניתן למחוק את התמונה."
+      "deleteFailedBody": "לא ניתן למחוק את התמונה.",
+      "limitTitle": "הגעת למגבלת התמונות",
+      "limitBody": "ניתן לצרף עד {{count}} תמונות לכרטיס. מחק תמונה קיימת כדי להוסיף אחרת.",
+      "limitHint": "עד {{count}} תמונות לכרטיס"
     },
     "whatsapp": {
       "quote": "שלח הצעה לאישור הלקוח",

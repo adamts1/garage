@@ -9,7 +9,7 @@ import { ModalHost } from './components/Modal';
 import { ToastHost } from './components/Toast';
 import { CatalogProvider } from './features/catalog';
 import './i18n';
-import { supabase } from './lib/supabase';
+import { projectUrl, supabase } from './lib/supabase';
 import { ErrorBoundary, initSentry } from './lib/sentry';
 import { store } from './store';
 import './styles.css';
@@ -19,7 +19,7 @@ initSentry();
 
 // @garage/shared has no client of its own — the browser build hands it this one.
 // Must run before any component calls into the data layer.
-setSupabaseClient(supabase);
+setSupabaseClient(supabase, projectUrl);
 
 /** Last resort: a white screen tells the user nothing and tells us nothing. */
 const Fallback = () => (

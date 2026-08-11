@@ -14,6 +14,11 @@ const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 /** False until .env is filled in - the app shows setup instructions instead of an empty list. */
 export const isConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJECT-REF'));
 
+/** The bare project URL, for the one thing that needs it as a string rather than
+ *  as a client: the short photo link a customer opens from WhatsApp. Empty while
+ *  unconfigured, so nothing builds a link onto the placeholder host. */
+export const projectUrl = isConfigured ? url : '';
+
 /* The production Supabase project's ref, so the app can tell where it actually
    landed rather than where the build profile claimed it would.
 

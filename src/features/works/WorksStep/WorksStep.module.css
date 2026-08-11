@@ -22,6 +22,66 @@
   min-width: 0;
 }
 
+/* Each half is its own card, and the parts half is a different colour.
+
+   Before this they were two bare tables in one column, so where the works ended
+   and the parts began was told only by a small grey heading — and the parts
+   table swaps its contents when a row in the table above it is clicked, which is
+   the moment somebody most needs to be sure which of the two they are reading.
+
+   The cards make the boundary structural; the tint makes it visible from across
+   a room, which is the distance a service advisor reads this screen from. */
+.worksCol,
+.partsCol {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 14px 16px;
+}
+
+.worksCol {
+  background: var(--surface);
+}
+
+/* The parts belong to the work above rather than standing beside it, so this
+   reads as inset: the page's own paper, one shade down from the works card. */
+.partsCol {
+  background: var(--surface-2);
+}
+
+/* The rule between them, with what is below it written into the gap. Not a
+   heading — the parts card has its own — but a label on the seam, which is
+   where the eye is when it asks the question. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.dividerLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dividerLabel svg {
+  width: 14px;
+  height: 14px;
+  /* Quieter than the text: they mark the seam, they do not compete with it. */
+  opacity: 0.6;
+}
+
 .head {
   display: flex;
   align-items: center;
