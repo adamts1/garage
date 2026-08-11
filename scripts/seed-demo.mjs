@@ -259,22 +259,33 @@ const work = (code, uid) => {
   };
 };
 
+/* `pay_method` holds a code, never the word a screen displays — the whole point
+   of 20260810000000_payment_methods_are_codes.sql. Seeding the Hebrew would
+   hand a fresh demo garage exactly the legacy values that migration exists to
+   remove, and the apps would render them correctly, so nobody would notice.
+
+   Kept as literals rather than imported from PAY_METHODS in
+   packages/shared/src/payment.ts, because this script is plain node with no
+   build step and that module is TypeScript. If the vocabulary grows, it grows
+   there first and this follows. */
+const PAY = { cash: 'cash', card: 'card', bit: 'bit', transfer: 'bank_transfer', cheque: 'cheque' };
+
 const TICKETS = [
   { n: 101, cust: 'dana', car: 0, st: 'paid', epic: 'service', prio: 'med', who: 'sarah-3',
-    works: ['SRV-30'], created: '2026-06-11', due: '2026-06-12', payMethod: 'כרטיס אשראי', paidOn: '2026-06-12' },
+    works: ['SRV-30'], created: '2026-06-11', due: '2026-06-12', payMethod: PAY.card, paidOn: '2026-06-12' },
   { n: 102, cust: 'eli', car: 0, st: 'paid', epic: 'engine', prio: 'high', who: 'adam-2',
-    works: ['ENG-TB'], created: '2026-06-24', due: '2026-06-27', payMethod: 'העברה בנקאית', paidOn: '2026-06-27' },
+    works: ['ENG-TB'], created: '2026-06-24', due: '2026-06-27', payMethod: PAY.transfer, paidOn: '2026-06-27' },
   { n: 103, cust: 'bendavid', car: 0, st: 'paid', epic: 'brakes', prio: 'urgent', who: 'avi-4',
-    works: ['BRK-PF', 'BRK-DF'], created: '2026-07-08', due: '2026-07-09', payMethod: 'העברה בנקאית', paidOn: '2026-07-10' },
+    works: ['BRK-PF', 'BRK-DF'], created: '2026-07-08', due: '2026-07-09', payMethod: PAY.transfer, paidOn: '2026-07-10' },
   { n: 104, cust: 'ronit', car: 0, st: 'paid', epic: 'service', prio: 'low', who: 'sarah-3',
-    works: ['SRV-10'], created: '2026-07-21', due: '2026-07-22', payMethod: 'מזומן', paidOn: '2026-07-22' },
+    works: ['SRV-10'], created: '2026-07-21', due: '2026-07-22', payMethod: PAY.cash, paidOn: '2026-07-22' },
 
   /* Paid today, so it sits in שולם rather than the archive — isArchived turns
      at midnight, and a demo with an empty payment column is a demo of nothing. */
   { n: 105, cust: 'omer', car: 0, st: 'paid', epic: 'ac', prio: 'med', who: 'avi-4',
-    works: ['AC-GAS'], created: '2026-08-06', due: '2026-08-07', payMethod: 'כרטיס אשראי', paidToday: true },
+    works: ['AC-GAS'], created: '2026-08-06', due: '2026-08-07', payMethod: PAY.card, paidToday: true },
   { n: 106, cust: 'ester', car: 0, st: 'paid', epic: 'service', prio: 'med', who: 'sarah-3',
-    works: ['SRV-10', 'WHL-AL'], created: '2026-08-05', due: '2026-08-08', payMethod: 'מזומן', paidToday: true },
+    works: ['SRV-10', 'WHL-AL'], created: '2026-08-05', due: '2026-08-08', payMethod: PAY.cash, paidToday: true },
 
   { n: 107, cust: 'moshe', car: 0, st: 'done', epic: 'susp', prio: 'high', who: 'adam-2',
     works: ['SUS-RS'], created: '2026-08-03', due: '2026-08-08',
@@ -387,15 +398,15 @@ console.log(`           ${savedWorks.length} works, ${partRows.length} parts`);
    governs the moment a credit is issued, and these are closed history. */
 
 const LEGACY = [
-  { key: 'GAR-17', cust: 'dana', car: 0, epic: 'service', paidOn: '2026-05-14', payMethod: 'מזומן',
+  { key: 'GAR-17', cust: 'dana', car: 0, epic: 'service', paidOn: '2026-05-14', payMethod: PAY.cash,
     work: { name: 'החלפת ערכת מגבים', labor: 26, items: [{ sku: 'WPR', name: 'ערכת מגבים', qty: 1, price: 85 }] } },
-  { key: 'GAR-15', cust: 'bendavid', car: 0, epic: 'engine', paidOn: '2026-05-27', payMethod: 'העברה בנקאית',
+  { key: 'GAR-15', cust: 'bendavid', car: 0, epic: 'engine', paidOn: '2026-05-27', payMethod: PAY.transfer,
     work: { name: 'שיפוץ מנוע — פירוק, אטמים והרכבה', labor: 3800, items: [{ sku: null, name: 'ערכת שיפוץ מנוע', qty: 1, price: 2978 }] } },
-  { key: 'GAR-7', cust: 'omer', car: 0, epic: 'engine', paidOn: '2026-06-03', payMethod: 'כרטיס אשראי',
+  { key: 'GAR-7', cust: 'omer', car: 0, epic: 'engine', paidOn: '2026-06-03', payMethod: PAY.card,
     work: { name: 'החלפת משאבת מים ורצועה', labor: 620, items: [{ sku: null, name: 'משאבת מים', qty: 1, price: 603 }] } },
-  { key: 'GAR-16', cust: 'eli', car: 0, epic: 'engine', paidOn: '2026-06-18', payMethod: 'העברה בנקאית',
+  { key: 'GAR-16', cust: 'eli', car: 0, epic: 'engine', paidOn: '2026-06-18', payMethod: PAY.transfer,
     work: { name: 'החלפת גיר אוטומטי (מחודש)', labor: 1500, items: [{ sku: null, name: 'גיר אוטומטי מחודש', qty: 1, price: 5278 }] } },
-  { key: 'GAR-4', cust: 'ester', car: 0, epic: 'elec', paidOn: '2026-06-29', payMethod: 'מזומן',
+  { key: 'GAR-4', cust: 'ester', car: 0, epic: 'elec', paidOn: '2026-06-29', payMethod: PAY.cash,
     work: { name: 'החלפת נורת לוחית רישוי', labor: 11, items: [] } },
 ];
 
