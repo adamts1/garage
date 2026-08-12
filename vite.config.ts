@@ -7,6 +7,12 @@ export default defineConfig({
     port: 4173,
   },
   test: {
+    /* Runs before every test file. It blocks fetch, WebSocket and
+       XMLHttpRequest, and refuses the run outright if the environment names the
+       production project — so no test can reach a real database, and in
+       particular none can issue a tax document at a garage's provider. See the
+       file itself for why that is worth enforcing rather than assuming. */
+    setupFiles: ['./src/test/no-network.ts'],
     /* `mobile/` is a separate npm project — its own package.json, its own
        vitest, its own CI job. Its tsconfig extends `expo/tsconfig.base`, which
        exists only under mobile/node_modules, so a root run that globs into it
