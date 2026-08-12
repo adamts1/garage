@@ -19,6 +19,37 @@
  */
 
 const API = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321';
+
+/* This file creates users, garages, tickets and photos, and deletes them again,
+ * holding a service_role key that bypasses RLS entirely. Against the local
+ * database that CI throws away, that is exactly right. Against a real project it
+ * is a script that writes junk into a garage's data with the one key that no
+ * policy can stop.
+ *
+ * SUPABASE_URL is read from the environment, and an environment is easy to
+ * inherit by accident — one `source .env.production.local` in the same shell is
+ * the whole distance between the two. So the target is checked rather than
+ * trusted: local by default, anything else only when it is said out loud.
+ */
+const LOCAL = /^https?:\/\/(127\.0\.0\.1|localhost|host\.docker\.internal)(:|$)/.test(API);
+const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+
+if (API.includes(PRODUCTION_PROJECT_REF)) {
+  console.error(
+    `\nRefusing to run: SUPABASE_URL points at PRODUCTION (${PRODUCTION_PROJECT_REF}).\n` +
+      'This test writes to the database with a service_role key. There is no flag for this.\n',
+  );
+  process.exit(1);
+}
+
+if (!LOCAL && !process.argv.includes('--i-know-this-is-not-local')) {
+  console.error(
+    `\nRefusing to run: SUPABASE_URL is ${API}, which is not a local database.\n` +
+      'This test writes rows and then deletes them. Against staging that is survivable\n' +
+      'and still not what anybody meant; pass --i-know-this-is-not-local if it is.\n',
+  );
+  process.exit(1);
+}
 const ANON = process.env.SUPABASE_ANON_KEY
   ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY

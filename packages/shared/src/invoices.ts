@@ -110,6 +110,27 @@ export const listInvoices = async (): Promise<Invoice[]> => {
   return (data ?? []).map(rowToInvoice);
 };
 
+/* Can this garage issue a document at all?
+ *
+ * Asked before the app issues one on the garage's behalf rather than because
+ * somebody pressed a button. A garage that has not connected its provider yet
+ * is an ordinary state, not an error — it takes money and writes documents by
+ * hand — and closing a ticket must not report a failure at it.
+ *
+ * `garage_billing` is readable by the garage's own members (RLS), so this is one
+ * cheap read rather than a round trip to the Edge Function that would come back
+ * with an error either way. False when the row is missing, inactive, or
+ * unreadable: the manual button is still there, and it surfaces the real reason.
+ */
+export const invoicingActive = async (): Promise<boolean> => {
+  const { data, error } = await getClient()
+    .from('garage_billing')
+    .select('active')
+    .maybeSingle();
+  if (error) return false;
+  return Boolean(data?.active);
+};
+
 /* Issue a חשבונית מס-קבלה for a ticket. Irreversible — the only undo is a
    credit note. The Edge Function is idempotent per ticket, so a double click
    returns the invoice that already exists rather than issuing two. */

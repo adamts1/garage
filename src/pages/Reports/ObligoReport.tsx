@@ -6,6 +6,7 @@ import { Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Table, useTable, type Column } from '../../components/Table';
 import { IconCard, IconCustomers, IconReports } from '../../icons';
+import { downloadXlsx } from '../../lib/xlsx';
 import { showError, useAppDispatch } from '../../store';
 import { today } from './localDay';
 import styles from './ReportsPage.module.css';
@@ -92,20 +93,33 @@ export default function ObligoReport() {
     rows: monthRows, columns: monthColumns, defaultSort: { key: 'month', dir: 1 },
   });
 
-  const exportCsv = () => {
-    const head = grouping === 'supplier'
-      ? [t('reports.obligo.fields.supplier'), t('reports.obligo.fields.bills'), t('reports.obligo.fields.oldestDue'), t('reports.obligo.fields.overdue'), t('reports.obligo.fields.total')]
-      : [t('reports.obligo.fields.month'), t('reports.obligo.fields.bills'), t('reports.obligo.fields.onCheques'), t('reports.obligo.fields.total')];
-    const body = grouping === 'supplier'
-      ? supplierTable.sorted.map((r) => [r.supplier, r.count, r.oldestDue, r.overdue.toFixed(2), r.total.toFixed(2)])
-      : monthTable.sorted.map((r) => [r.month, r.count, r.onCheques.toFixed(2), r.total.toFixed(2)]);
-    const csv = [head, ...body].map((line) => line.join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `obligo-${grouping}-${now}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /* Two different reports behind one button — by supplier or by month — so the
+     sheet is built from whichever is on screen, columns and all. */
+  const exportSheet = () => {
+    downloadXlsx(`obligo-${grouping}-${now}`, grouping === 'supplier'
+      ? {
+          name: t('reports.tabs.obligo'),
+          columns: [
+            { header: t('reports.obligo.fields.supplier'), width: 28 },
+            { header: t('reports.obligo.fields.bills'), width: 10, format: 'int' },
+            { header: t('reports.obligo.fields.oldestDue'), width: 14 },
+            { header: t('reports.obligo.fields.overdue'), width: 14, format: 'money' },
+            { header: t('reports.obligo.fields.total'), width: 14, format: 'money' },
+          ],
+          rows: supplierTable.sorted.map((r) => [
+            r.supplier, r.count, r.oldestDue, r.overdue, r.total,
+          ]),
+        }
+      : {
+          name: t('reports.tabs.obligo'),
+          columns: [
+            { header: t('reports.obligo.fields.month'), width: 16 },
+            { header: t('reports.obligo.fields.bills'), width: 10, format: 'int' },
+            { header: t('reports.obligo.fields.onCheques'), width: 14, format: 'money' },
+            { header: t('reports.obligo.fields.total'), width: 14, format: 'money' },
+          ],
+          rows: monthTable.sorted.map((r) => [r.month, r.count, r.onCheques, r.total]),
+        });
   };
 
   return (
@@ -153,7 +167,7 @@ export default function ObligoReport() {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t(`reports.obligo.breakdown.${grouping}`)}
-          <Button onClick={exportCsv}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
         </h3>
 
         {grouping === 'supplier' ? (

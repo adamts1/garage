@@ -6,6 +6,7 @@ import { Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Table, useTable, type Column } from '../../components/Table';
 import { IconCard, IconCustomers, IconReports } from '../../icons';
+import { downloadXlsx } from '../../lib/xlsx';
 import { showError, useAppDispatch } from '../../store';
 import { today } from './localDay';
 import styles from './ReportsPage.module.css';
@@ -86,22 +87,24 @@ export default function AgingReport({ tickets }: { tickets: Ticket[] }) {
 
   const table = useTable({ rows, columns, defaultSort: { key: 'oldest', dir: -1 } });
 
-  const exportCsv = () => {
-    const head = [
-      t(side === 'customers' ? 'reports.aging.fields.customer' : 'reports.aging.fields.supplier'),
-      ...BUCKETS.map((b) => t(`reports.aging.buckets.${b.id}`)),
-      t('reports.aging.fields.total'), t('reports.aging.fields.oldest'),
-    ];
-    const body = table.sorted.map((r) => [
-      r.name, ...BUCKETS.map((b) => r.buckets[b.id].toFixed(2)), r.total.toFixed(2), r.oldest,
-    ]);
-    const csv = [head, ...body].map((line) => line.join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `aging-${side}-${now}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportSheet = () => {
+    downloadXlsx(`aging-${side}-${now}`, {
+      name: t('reports.tabs.aging'),
+      columns: [
+        {
+          header: t(side === 'customers' ? 'reports.aging.fields.customer' : 'reports.aging.fields.supplier'),
+          width: 28,
+        },
+        ...BUCKETS.map((b) => ({
+          header: t(`reports.aging.buckets.${b.id}`), width: 14, format: 'money' as const,
+        })),
+        { header: t('reports.aging.fields.total'), width: 14, format: 'money' as const },
+        { header: t('reports.aging.fields.oldest'), width: 14 },
+      ],
+      rows: table.sorted.map((r) => [
+        r.name, ...BUCKETS.map((b) => r.buckets[b.id]), r.total, r.oldest,
+      ]),
+    });
   };
 
   return (
@@ -149,7 +152,7 @@ export default function AgingReport({ tickets }: { tickets: Ticket[] }) {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t(`reports.aging.breakdown.${side}`, { count: rows.length })}
-          <Button onClick={exportCsv}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
         </h3>
 
         <Table

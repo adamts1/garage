@@ -58,6 +58,22 @@ if (!url || !key) {
   process.exit(1);
 }
 
+/* Demo data is for local and staging. Never production — see supabase/README.md.
+ *
+ * This is the most destructive script in the repo: it empties ten tables for the
+ * named garage and writes a made-up board over the top, with a service_role key
+ * that no policy can stop. The garage is named on the command line, so the whole
+ * distance between a demo refresh and a real garage losing its customers, works
+ * catalogue and parts list is one wrong --env-file. */
+const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+if (url.includes(PRODUCTION_PROJECT_REF)) {
+  console.error(
+    `\nRefusing to run: this is PRODUCTION (${PRODUCTION_PROJECT_REF}).\n` +
+      'seed-demo wipes a garage and writes demo data over it. There is no flag for this.\n',
+  );
+  process.exit(1);
+}
+
 const db = createClient(url, key, { auth: { persistSession: false } });
 
 console.log(`project : ${url}`);

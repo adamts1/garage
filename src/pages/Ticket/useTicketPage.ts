@@ -1,5 +1,5 @@
 import {
-  collectInvoice, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, isBill, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  collectInvoice, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, isBill, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -10,7 +10,7 @@ import { useCloseTicket, type CloseResult } from '../../features/ticket/CloseTic
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
 import { payMethodLabel } from '../../lib/payMethodLabel';
 import {
-  showError, showErrorKey, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
+  showError, showErrorKey, showInfo, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
 } from '../../store';
 
 
@@ -279,8 +279,22 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     setIdNumber(storedId);
   }, [storedId, ticket]);
 
-  /** Issuing is guarded by its own dialog, not by the generic confirm: the copy
-   *  names the amount and says the document cannot be deleted. */
+  /* The act itself, with no dialog in front of it and no check that the ticket
+     is saved. Both callers below supply what they need: the button asks first
+     and refuses to invoice unsaved works; the close-and-charge drawer has just
+     saved the ticket itself and has already told the customer's money apart from
+     the question of whether to bill it. */
+  const issueNow = useCallback(async (docType: BillDocType) => {
+    const inv = await issueInvoice(ticket.k, docType);
+    setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
+    dispatch(showSuccess('invoiceIssue.issued', {
+      docType: inv.docType, docnum: inv.docnum, total: money(inv.total),
+    }));
+    return inv;
+  }, [dispatch, ticket.k]);
+
+  /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
+   *  the copy names the amount and says the document cannot be deleted. */
   const issue = useCallback(async (docType: BillDocType = 'invoice_receipt') => {
     /* The server builds the document from the stored row, so unsaved works
        would be missing from a real tax document. Refuse rather than silently
@@ -299,15 +313,13 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
 
     setBusy(true);
     try {
-      const inv = await issueInvoice(ticket.k, docType);
-      setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
-      dispatch(showSuccess('invoiceIssue.issued', { docType: inv.docType, docnum: inv.docnum, total: money(inv.total) }));
+      await issueNow(docType);
     } catch (e) {
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
-  }, [dirty, dispatch, openModal, ticket.customer, ticket.k, totals.total]);
+  }, [dirty, dispatch, issueNow, openModal, ticket.customer, totals.total]);
 
   /* Money arriving against a חשבונית מס, as a קבלה of its own.
 
@@ -438,15 +450,58 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
 
       dispatch(
         result.paid
+          /* No longer names the document it is about to issue. It used to, and
+             the claim was made before anything had been issued — now the
+             issuing itself reports, with the number the provider actually gave
+             back. Two messages, and the second one is true. */
           ? showSuccess('ticket.paymentTaken', {
               method: payMethodLabel(t, result.method) ?? '-',
               total: money(totals.total),
-              doc: result.doc,
             })
           : showErrorKey('ticket.closedWithBalance', { total: money(totals.total) }),
       );
+
+      /* The document follows the money, without a second trip into the ticket.
+         The drawer has said "יופק חשבונית מס-קבלה" and "המסמך יישלח ללקוח בסיום
+         התהליך" since it was written; until now nothing issued it, so the
+         promise was kept by hand or not at all — and a garage that collected on
+         Friday and remembered on Monday had a week of takings with no documents
+         behind them.
+
+         Only when the money actually arrived. A ticket closed with an open
+         balance is billed with a חשבונית מס from the button, which is a
+         decision about a debt rather than a record of a payment.
+
+         Deliberately without the confirmation dialog the button puts up: the
+         person has just worked through three steps of a drawer that names the
+         document twice and ends on "גבה ₪X". Asking again would be asking
+         whether they meant the thing they just did. */
+      if (!result.paid) return;
+
+      /* A garage that has not connected its provider takes money and writes its
+         documents elsewhere. That is a normal way to run, not a failure to
+         report on top of a payment that succeeded — so it is asked first rather
+         than discovered from an error. */
+      if (!(await invoicingActive())) {
+        dispatch(showInfo('ticket.paidNoInvoicing'));
+        return;
+      }
+
+      setBusy(true);
+      try {
+        await issueNow('invoice_receipt');
+      } catch (e) {
+        /* The money is recorded and the document is not. Both facts are already
+           on screen — the payment's own success message stands, and this says
+           what is missing and implies the button that fixes it. Never swallowed:
+           an uninvoiced payment that nobody was told about is the one outcome
+           worse than either message. */
+        dispatch(showError(e));
+      } finally {
+        setBusy(false);
+      }
     },
-    [dispatch, draft, openCloseDrawer, save, t, totals.total],
+    [dispatch, draft, issueNow, openCloseDrawer, save, t, totals.total],
   );
 
   /** Leaving with something unsaved asks first. */
