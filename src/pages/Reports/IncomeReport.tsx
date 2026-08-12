@@ -6,6 +6,7 @@ import { Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Table, type Column } from '../../components/Table';
 import { IconCard, IconDoc, IconReports } from '../../icons';
+import { downloadXlsx } from '../../lib/xlsx';
 import { showError, useAppDispatch } from '../../store';
 import styles from './ReportsPage.module.css';
 import { presetRange, summarise, type DateRange, type IncomeLine } from './incomeRollUp';
@@ -72,22 +73,22 @@ export default function IncomeReport() {
     },
   ];
 
-  const exportCsv = () => {
-    const head = [
-      t('reports.income.fields.docType'), t('reports.income.fields.count'),
-      t('reports.income.fields.net'), t('reports.income.fields.vat'), t('reports.income.fields.gross'),
-    ];
-    const body = summary.lines.map((l) => [
-      t(`invoices.docType.${l.docType}`), l.count, l.net.toFixed(2), l.vat.toFixed(2), l.gross.toFixed(2),
-    ]);
-    const csv = [head, ...body].map((line) => line.join(',')).join('\n');
-    // The BOM is what makes Excel read this as UTF-8 rather than mojibake.
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `income-${range.from || 'start'}-${range.to || 'today'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  /* Numbers go out as numbers, not as `toFixed(2)` strings: the sheet decides
+     how they are shown, and a bookkeeper who selects the column gets a sum. */
+  const exportSheet = () => {
+    downloadXlsx(`income-${range.from || 'start'}-${range.to || 'today'}`, {
+      name: t('reports.tabs.income'),
+      columns: [
+        { header: t('reports.income.fields.docType'), width: 24 },
+        { header: t('reports.income.fields.count'), width: 10, format: 'int' },
+        { header: t('reports.income.fields.net'), width: 14, format: 'money' },
+        { header: t('reports.income.fields.vat'), width: 14, format: 'money' },
+        { header: t('reports.income.fields.gross'), width: 14, format: 'money' },
+      ],
+      rows: summary.lines.map((l) => [
+        t(`invoices.docType.${l.docType}`), l.count, l.net, l.vat, l.gross,
+      ]),
+    });
   };
 
   return (
@@ -158,7 +159,7 @@ export default function IncomeReport() {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t('reports.income.breakdown')}
-          <Button onClick={exportCsv}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
         </h3>
 
         <Table

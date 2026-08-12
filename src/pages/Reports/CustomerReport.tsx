@@ -6,9 +6,9 @@ import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { Table, useTable, type Column } from '../../components/Table';
 import { IconCustomers, IconDoc, IconReports, IconTickets } from '../../icons';
+import { downloadXlsx } from '../../lib/xlsx';
 import styles from './ReportsPage.module.css';
 import { useCustomerReport, type DocFilter, type ReportRow } from './useCustomerReport';
-
 
 const vatPercent = Math.round(VAT * 100);
 
@@ -73,27 +73,28 @@ export default function CustomerReport({ tickets }: { tickets: Ticket[] }) {
 
   const pager = usePagination({ rows: sorted });
 
-  const exportCsv = () => {
-    const head = [
-      t('reports.fields.customer'), t('reports.fields.phone'), t('reports.fields.tickets'),
-      t('reports.fields.net'), t('reports.fields.vat', { percent: vatPercent }),
-      t('reports.fields.gross'), t('reports.fields.balance'), t('reports.fields.avg'),
-    ];
-    // Every row, not the page on screen — a report you exported a tenth of is
-    // worse than no export.
-    const body = sorted.map((r) => [
-      r.name, r.phone, r.tickets,
-      r.net.toFixed(2), r.vat.toFixed(2), r.gross.toFixed(2),
-      r.balance.toFixed(2), r.avg.toFixed(2),
-    ]);
-    const csv = [head, ...body].map((line) => line.join(',')).join('\n');
-    // The BOM is what makes Excel read this as UTF-8 rather than mojibake.
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'customer-report.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportSheet = () => {
+    downloadXlsx('customer-report', {
+      name: t('reports.tabs.customers'),
+      columns: [
+        { header: t('reports.fields.customer'), width: 28 },
+        /* Text, not a number. A phone is digits that must keep their leading
+           zero and their dashes, and a spreadsheet that reads 0501234567 as a
+           number drops the zero and then writes it in scientific notation. */
+        { header: t('reports.fields.phone'), width: 16 },
+        { header: t('reports.fields.tickets'), width: 10, format: 'int' },
+        { header: t('reports.fields.net'), width: 14, format: 'money' },
+        { header: t('reports.fields.vat', { percent: vatPercent }), width: 14, format: 'money' },
+        { header: t('reports.fields.gross'), width: 14, format: 'money' },
+        { header: t('reports.fields.balance'), width: 14, format: 'money' },
+        { header: t('reports.fields.avg'), width: 14, format: 'money' },
+      ],
+      // Every row, not the page on screen — a report you exported a tenth of is
+      // worse than no export.
+      rows: sorted.map((r) => [
+        r.name, r.phone, r.tickets, r.net, r.vat, r.gross, r.balance, r.avg,
+      ]),
+    });
   };
 
   return (
@@ -153,7 +154,7 @@ export default function CustomerReport({ tickets }: { tickets: Ticket[] }) {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t('reports.breakdown', { count: report.rows.length })}
-          <Button onClick={exportCsv}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
         </h3>
 
         <Table
