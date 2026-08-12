@@ -185,4 +185,28 @@ describe('the field-level indication', () => {
     expect(saved).toBe(true);
     expect(onDone).toHaveBeenCalled();
   });
+
+  /* Saving is synchronous and then navigates, so nothing is disabled while the
+     write is in flight. A second press in that window used to produce a second
+     ticket for the same car — a different GAR- key, because create_ticket takes
+     its number from a counter and cannot tell the two apart. */
+  it('saves one ticket however many times the button is pressed', () => {
+    const setTickets = vi.fn();
+    const { result } = renderHook(() =>
+      useNewTicket({ tickets: [], setTickets, onDone: vi.fn() }),
+    );
+
+    act(() => {
+      result.current.set('customerName', 'ישראל ישראלי');
+      result.current.set('customerPhone', '050-1234567');
+      result.current.set('licensePlate', '12-345-67');
+      result.current.set('manufacturer', 'טויוטה');
+      result.current.set('km', '88900');
+      result.current.set('keyReceived', true);
+    });
+
+    act(() => { result.current.submit(); result.current.submit(); result.current.submit(); });
+
+    expect(setTickets).toHaveBeenCalledTimes(1);
+  });
 });

@@ -5,7 +5,7 @@ import {
   subscribeToTable, subtasksFromWorks, titleFromWorks, worksSummary,
   type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
 } from '@garage/shared';
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { isConfigured } from '../../lib/supabase';
 
 export interface TicketForm {
@@ -206,6 +206,9 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [attempted, setAttempted] = useState(false);
 
+  /** Latches on the first accepted save — see submit() below. */
+  const submitted = useRef(false);
+
   const touch = useCallback(
     (field: string) => setTouched((prev) => new Set(prev).add(field)),
     [],
@@ -278,6 +281,17 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
        press is what turns the objections on. */
     setAttempted(true);
     if (!canSave) return false;
+
+    /* One ticket per form, whatever the counter does with the mouse.
+       Saving is synchronous here — it hands the ticket to setTickets and
+       navigates away — so nothing is disabled while a write is in flight and
+       there is a window, however short, where a second press is accepted. It
+       produces a second GAR- key for the same car: create_ticket takes its
+       number from a counter and has no way to tell the two apart.
+       A ref rather than state on purpose: state would not be read back until
+       the next render, which is the very gap being closed. */
+    if (submitted.current) return true;
+    submitted.current = true;
 
     const { key, job } = nextTicketNumbers(tickets);
 
