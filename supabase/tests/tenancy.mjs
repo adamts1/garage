@@ -1012,6 +1012,55 @@ const delInv = await rest(`invoices?id=eq.${invSeed?.id}`, a.token, { method: 'D
 const stillThereInv = await (await rest(`invoices?id=eq.${invSeed?.id}&select=id`, a.token)).json();
 check('authenticated cannot DELETE an invoice', Array.isArray(stillThereInv) && stillThereInv.length === 1, `delete got ${delInv.status}`);
 
+/* One live bill per ticket.
+ *
+ * issue-invoice checks for an existing bill before it issues, but the check and
+ * the insert straddle a call to the provider — so two overlapping calls both
+ * find nothing and both bill the customer, and a second tax document is the one
+ * duplicate in this system that cannot be undone quietly.
+ *
+ * Written as two service_role inserts, which is exactly what the second call
+ * would reach the database with. */
+const billOne = await admin('/rest/v1/invoices', {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({
+    garage_id: a.garage.id, ticket_id: aTicket.row?.id,
+    doc_type: 'invoice_receipt', provider: 'icount', provider_docnum: `BILL1-${stamp}`,
+    subtotal: 100, vat_rate: 0.18, vat: 18, total: 118, status: 'issued',
+  }),
+});
+const billOneRow = (await billOne.json())[0];
+check('a ticket can be billed', billOne.status === 201, `got ${billOne.status}`);
+
+const billTwice = await admin('/rest/v1/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    garage_id: a.garage.id, ticket_id: aTicket.row?.id,
+    // A different document number, which is what a duplicate really looks like:
+    // the provider issued a second one, so nothing else collides.
+    doc_type: 'tax_invoice', provider: 'icount', provider_docnum: `BILL2-${stamp}`,
+    subtotal: 100, vat_rate: 0.18, vat: 18, total: 118, status: 'issued',
+  }),
+});
+check('the same ticket cannot be billed twice', billTwice.status >= 400, `got ${billTwice.status}`);
+
+/* And the rule is about LIVE bills, not about ever having been billed: an
+ * invoice cancelled by a full credit note leaves the ticket billable again. */
+await admin(`/rest/v1/invoices?id=eq.${billOneRow?.id}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ status: 'cancelled' }),
+});
+const rebill = await admin('/rest/v1/invoices', {
+  method: 'POST',
+  body: JSON.stringify({
+    garage_id: a.garage.id, ticket_id: aTicket.row?.id,
+    doc_type: 'invoice_receipt', provider: 'icount', provider_docnum: `BILL3-${stamp}`,
+    subtotal: 100, vat_rate: 0.18, vat: 18, total: 118, status: 'issued',
+  }),
+});
+check('a ticket whose bill was cancelled can be billed again', rebill.status === 201, `got ${rebill.status}`);
+
 /* Partial credits. A credit note is a document of its own with a positive
  * total, and what is still creditable on an invoice is that invoice minus the
  * notes against it — arithmetic the server has to own, because a client that
