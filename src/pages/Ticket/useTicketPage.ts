@@ -10,7 +10,8 @@ import { useCloseTicket, useCollectPayment, type CloseResult } from '../../featu
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
 import { payMethodLabel } from '../../lib/payMethodLabel';
 import {
-  showError, showErrorKey, showInfo, showSuccess, useAppDispatch, useConfirm, useModalResult, usePrompt,
+  showError, showErrorKey, showInfo, showSuccess, useAppDispatch, useBusyRun, useConfirm,
+  useModalResult, usePrompt,
 } from '../../store';
 
 
@@ -59,6 +60,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptions) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
+  const run = useBusyRun();
   const confirm = useConfirm();
   const prompt = usePrompt();
   const openModal = useModalResult<boolean>();
@@ -286,13 +288,17 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
      saved the ticket itself and has already told the customer's money apart from
      the question of whether to bill it. */
   const issueNow = useCallback(async (docType: BillDocType) => {
-    const inv = await issueInvoice(ticket.k, docType);
+    /* Both ways of issuing come through here, so the overlay is claimed here
+       too rather than at each caller. The wait is a provider round-trip over a
+       network — the longest thing this page does, and the one a disabled button
+       says nothing about. */
+    const inv = await run('busy.issuingInvoice', () => issueInvoice(ticket.k, docType));
     setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
     dispatch(showSuccess('invoiceIssue.issued', {
       docType: inv.docType, docnum: inv.docnum, total: money(inv.total),
     }));
     return inv;
-  }, [dispatch, ticket.k]);
+  }, [dispatch, run, ticket.k]);
 
   /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
    *  the copy names the amount and says the document cannot be deleted. */
@@ -341,9 +347,9 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
 
     setBusy(true);
     try {
-      const { receipt, owed: left } = await collectInvoice(
-        invoice.id, answer.amount, answer.method, answer.reference,
-      );
+      const { receipt, owed: left } = await run('busy.collecting', () => collectInvoice(
+        invoice.id, answer.amount, answer.method!, answer.reference,
+      ));
       setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 
       if (left <= 0) {
@@ -361,7 +367,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     } finally {
       setBusy(false);
     }
-  }, [dispatch, draft, invoice, openCollectDrawer, owed, save, ticket.k]);
+  }, [dispatch, draft, invoice, openCollectDrawer, owed, run, save, ticket.k]);
 
   /* Give the customer money back — all of what is left on the invoice, or part
      of it. The dialog opens on the whole remaining amount, because that is the
@@ -392,7 +398,8 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
 
     setBusy(true);
     try {
-      const { cancelled, note } = await creditInvoice(invoice.id, answer.amount, answer.reason);
+      const { cancelled, note } = await run('busy.crediting',
+        () => creditInvoice(invoice.id, answer.amount, answer.reason));
       setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 
       if (cancelled) {
@@ -409,7 +416,7 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     } finally {
       setBusy(false);
     }
-  }, [creditable, dispatch, invoice, openModal, save, ticket.customer, ticket.k]);
+  }, [creditable, dispatch, invoice, openModal, run, save, ticket.customer, ticket.k]);
 
   /** Deleting a ticket had no confirmation at all — less protection than
    *  deleting a supplier, for something that takes the invoices and photos

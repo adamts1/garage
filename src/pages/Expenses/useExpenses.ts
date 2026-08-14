@@ -4,7 +4,7 @@ import {
   type Supplier, type SupplierExpense,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { showError, showErrorKey, showSuccess, useAppDispatch, useConfirm } from '../../store';
+import { showError, showErrorKey, showSuccess, useAppDispatch, useBusyRun, useConfirm } from '../../store';
 
 export interface ExpenseDraft {
   supplierId: string;
@@ -43,6 +43,7 @@ export function previewTotals(subtotal: string, vatRate: string) {
 
 export function useExpenses() {
   const dispatch = useAppDispatch();
+  const run = useBusyRun();
   const confirm = useConfirm();
   const [rows, setRows] = useState<SupplierExpense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -63,7 +64,7 @@ export function useExpenses() {
       if (!draft.supplierId || !(Number(draft.subtotal) > 0)) return false;
       setBusy(true);
       try {
-        const created = await createExpense({
+        const created = await run('busy.savingExpense', () => createExpense({
           supplierId: draft.supplierId,
           date: draft.date,
           description: draft.description,
@@ -77,13 +78,13 @@ export function useExpenses() {
           dueDate: draft.dueDate || null,
           chequeNumber: draft.chequeNumber || null,
           chequeDate: draft.chequeDate || null,
-        });
+        }));
 
         /* The record exists either way — the sync is a second, separate thing
            that can fail on its own. Reporting them as one action was how "saved
            but not synced" came to read as "not saved". */
         try {
-          const synced = await syncExpense(created.id);
+          const synced = await run('busy.syncingExpense', () => syncExpense(created.id));
           if (synced.syncStatus === 'synced') dispatch(showSuccess('expenses.savedAndSynced'));
           else dispatch(showErrorKey('expenses.savedNotSynced', { reason: synced.syncError ?? '' }));
         } catch (e) {
@@ -101,13 +102,13 @@ export function useExpenses() {
         setBusy(false);
       }
     },
-    [dispatch, load],
+    [dispatch, load, run],
   );
 
   const retrySync = useCallback(
     async (id: string) => {
       try {
-        const synced = await syncExpense(id);
+        const synced = await run('busy.syncingExpense', () => syncExpense(id));
         dispatch(
           synced.syncStatus === 'synced'
             ? showSuccess('expenses.synced')
@@ -118,7 +119,7 @@ export function useExpenses() {
         dispatch(showError(e));
       }
     },
-    [dispatch, load],
+    [dispatch, load, run],
   );
 
   const togglePaid = useCallback(

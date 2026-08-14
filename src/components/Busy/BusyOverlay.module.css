@@ -1,0 +1,46 @@
+/* Above the modal scrim: work started from inside a dialog must not be hidden
+   behind the dialog that started it. Below the toast stack, which reports how
+   it ended and has to be readable the moment this goes. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  animation: fade 0.15s ease-out;
+}
+
+@keyframes fade { from { opacity: 0; } }
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.25);
+  font-weight: 600;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 3px solid rgba(37, 99, 235, 0.25);
+  border-top-color: var(--primary, #2563eb);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Whatever the wait, the app must not look frozen to somebody who cannot see
+   the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2s; }
+  .scrim { animation: none; }
+}
