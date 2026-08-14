@@ -8,6 +8,15 @@ import { IconCard, IconCheck } from '../../../icons';
 import { settleModal } from '../../../store/useModalResult';
 import styles from './CloseTicketModal.module.css';
 
+/* One drawer, two jobs — ending a job and taking money for one already billed.
+   They were two screens: this, and a small CollectPaymentModal built like the
+   credit dialog. Both asked the same three things (how much, by what means,
+   against what reference) and only one of them was reachable from a button
+   whose label promised the other, so the advisor met whichever screen the code
+   picked. Collecting is not a different question from being paid at the
+   counter; it is the same question about money that was billed earlier. */
+export type CloseMode = 'close' | 'collect';
+
 export interface CloseResult {
   paid: boolean;
   /** A code, written into `tickets.pay_method`. Null for the open charge, which
@@ -17,6 +26,10 @@ export interface CloseResult {
   method: PayMethod | null;
   doc: string;
   reference?: string;
+  /** What is actually being collected. Equal to the total when closing, and in
+   *  collect mode whatever was typed — a part payment is a smaller number, and
+   *  the caller needs the figure rather than having to infer it. */
+  amount: number;
 }
 
 interface Method {
@@ -51,7 +64,10 @@ const CHARGE_MS = 900;
 /** How long the success screen shows before the drawer hands its answer back. */
 const SUCCESS_MS = 1500;
 
-/** Reached through `useCloseTicket()`. Resolves the result, or null if dismissed. */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Reached through `useCloseTicket()` / `useCollectPayment()`. Resolves the
+ *  result, or null if dismissed. */
 export default function CloseTicketModal({ props, onClose }: ModalComponentProps) {
   const { t } = useTranslation();
 
@@ -61,14 +77,35 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
   const car = String(props.car ?? '');
   const plate = String(props.plate ?? '');
   const total = Number(props.total ?? 0);
+  const collecting = props.mode === 'collect';
+  /** The document being settled, shown while collecting so the advisor can see
+   *  which bill the money is going against. */
+  const docnum = String(props.docnum ?? '');
 
   const [step, setStep] = useState(1);
   const [methodId, setMethodId] = useState<string | null>(null);
   const [reference, setReference] = useState('');
   const [state, setState] = useState<'form' | 'charging' | 'done'>('form');
+  /* Opens on the whole outstanding amount, because paying a bill in full is what
+     usually happens and typing a total by hand is how a digit goes missing. */
+  const [amountText, setAmountText] = useState(String(total));
 
-  const method = METHODS.find((m) => m.id === methodId) ?? null;
-  const doc = t(method?.paid ? 'close.docReceipt' : 'close.docInvoice');
+  /* Collecting never offers the open charge: the bill has already been issued,
+     and "pay later" is the state the ticket is already in. */
+  const methods = collecting ? METHODS.filter((m) => m.paid) : METHODS;
+  const method = methods.find((m) => m.id === methodId) ?? null;
+
+  const typed = Number(String(amountText).replace(',', '.'));
+  const amountValid = Number.isFinite(typed) && typed > 0 && round2(typed) <= total;
+  /* Only the collect flow lets the figure be edited. Closing bills the ticket's
+     own works, and a total typed over them would be a document that disagrees
+     with the job behind it. */
+  const amount = collecting ? round2(typed) : total;
+  const full = !collecting || (amountValid && amount >= total);
+
+  const doc = t(collecting
+    ? 'close.docCollect'
+    : method?.paid ? 'close.docReceipt' : 'close.docInvoice');
 
   const answer = (result: CloseResult | null) => {
     settleModal(resultId, result);
@@ -90,6 +127,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
         method: method.code,
         doc,
         reference: reference || undefined,
+        amount,
       });
     }, SUCCESS_MS);
     return () => clearTimeout(timer);
@@ -103,6 +141,12 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
 
   const next = () => (step < 3 ? setStep(step + 1) : charge());
 
+  /* What blocks "המשך" on each step: no method chosen, or — collecting — an
+     amount that is not a sum of money this invoice can still take. */
+  const blocked = (step === 1 && !method)
+    || (step === 2 && collecting && !amountValid)
+    || state === 'charging';
+
   if (state === 'done' && method) {
     return (
       <div className={styles.scrim}>
@@ -112,12 +156,18 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
               <span className={styles.ring} />
               <span className={styles.tick}><IconCheck /></span>
             </div>
-            <h3>{t(method.paid ? 'close.successPaid' : 'close.successClosed')}</h3>
-            <p className={styles.amount}>{money(total)}</p>
+            <h3>
+              {t(collecting
+                ? 'close.successCollected'
+                : method.paid ? 'close.successPaid' : 'close.successClosed')}
+            </h3>
+            <p className={styles.amount}>{money(amount)}</p>
             <p className={styles.docLine}>
-              {method.paid
-                ? t('close.paidWith', { method: t(method.label) })
-                : t('close.openBalance')}
+              {collecting
+                ? t('close.collectedWith', { method: t(method.label) })
+                : method.paid
+                  ? t('close.paidWith', { method: t(method.label) })
+                  : t('close.openBalance')}
               {' · '}
               {t('close.issued', { doc })}
             </p>
@@ -142,7 +192,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           >
             ✕
           </button>
-          <h3>{t('close.title')}</h3>
+          <h3>{t(collecting ? 'close.collectTitle' : 'close.title')}</h3>
         </header>
 
         <ol
@@ -172,17 +222,17 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                   <b>{customer}</b>
                 </div>
                 <div className={styles.total}>
-                  <span className={styles.key}>{t('close.amountDue')}</span>
+                  <span className={styles.key}>{t(collecting ? 'close.amountOwed' : 'close.amountDue')}</span>
                   <b>{money(total)}</b>
                 </div>
               </div>
 
               <div className={styles.card}>
-                <h4>{t('close.howPaying')}</h4>
+                <h4>{t(collecting ? 'close.howCollecting' : 'close.howPaying')}</h4>
                 <p className={styles.hint}>{t('close.pickMethod')}</p>
 
                 <div className={styles.payGrid}>
-                  {METHODS.map((m) => (
+                  {methods.map((m) => (
                     <button
                       type="button"
                       key={m.id}
@@ -211,13 +261,32 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 {method.paid ? t('close.collectWith', { method: t(method.label) }) : t('close.openCharge')}
               </h4>
               <p className={styles.hint}>
-                {t(method.paid ? 'close.confirmAmount' : 'close.willCloseOpen')}
+                {t(collecting
+                  ? 'close.confirmCollect'
+                  : method.paid ? 'close.confirmAmount' : 'close.willCloseOpen')}
               </p>
 
-              <div className={styles.payAmount}>
-                <span>{t('close.amountToCollect')}</span>
-                <b>{money(total)}</b>
-              </div>
+              {/* Closing shows the figure; collecting lets it be typed down to a
+                  part payment, which is the whole reason a receipt is its own
+                  document rather than a flag on the invoice. */}
+              {collecting ? (
+                <TextField
+                  label="close.amountReceived"
+                  hint="close.amountHint"
+                  inputMode="decimal"
+                  autoFocus
+                  value={amountText}
+                  error={amountText.trim() !== '' && !amountValid
+                    ? t('close.tooMuch', { owed: money(total) })
+                    : undefined}
+                  onChange={(e) => setAmountText(e.target.value)}
+                />
+              ) : (
+                <div className={styles.payAmount}>
+                  <span>{t('close.amountToCollect')}</span>
+                  <b>{money(total)}</b>
+                </div>
+              )}
 
               {method.ref && (
                 <TextField
@@ -232,7 +301,11 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 <span className={styles.infoIcon}>{method.paid ? <IconCard /> : 'i'}</span>
                 <div>
                   <b>{t('close.willIssue', { doc })}</b>
-                  <p>{t(method.paid ? 'close.sentOnFinish' : 'close.receiptLater')}</p>
+                  <p>
+                    {t(collecting
+                      ? 'close.receiptOnFinish'
+                      : method.paid ? 'close.sentOnFinish' : 'close.receiptLater')}
+                  </p>
                 </div>
               </div>
             </div>
@@ -242,22 +315,29 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           {step === 3 && method && (
             <div className={styles.card}>
               <h4>{t('close.summary')}</h4>
-              <p className={styles.hint}>{t('close.checkBefore')}</p>
+              <p className={styles.hint}>{t(collecting ? 'close.checkBeforeCollect' : 'close.checkBefore')}</p>
 
               <dl className={`kv ${styles.kv}`}>
                 <dt>{t('close.ticket')}</dt><dd>#{ticketNumber}</dd>
                 <dt>{t('close.customer')}</dt><dd>{customer}</dd>
                 <dt>{t('close.vehicle')}</dt><dd>{car} · {plate}</dd>
+                {collecting && docnum && (<><dt>{t('close.docCollect')}</dt><dd>#{docnum}</dd></>)}
                 <dt>{t('close.method')}</dt><dd>{method.icon} {t(method.label)}</dd>
                 {reference && method.ref && (<><dt>{t(method.ref)}</dt><dd>{reference}</dd></>)}
                 <dt>{t('close.documentToIssue')}</dt><dd>{doc}</dd>
-                <dt>{t('close.total')}</dt><dd><b className={styles.big}>{money(total)}</b></dd>
+                <dt>{t('close.total')}</dt><dd><b className={styles.big}>{money(amount)}</b></dd>
               </dl>
 
               <div className={`${styles.info}${method.paid ? ` ${styles.ok}` : ''}`}>
                 <span className={styles.infoIcon}>{method.paid ? <IconCheck /> : 'i'}</span>
                 <div>
-                  <b>{t(method.paid ? 'close.willClosePaid' : 'close.willCloseBalance')}</b>
+                  <b>
+                    {collecting
+                      ? t(full ? 'close.willSettleInvoice' : 'close.willLeaveBalance', {
+                          left: money(round2(total - amount)),
+                        })
+                      : t(method.paid ? 'close.willClosePaid' : 'close.willCloseBalance')}
+                  </b>
                   <p>{t('close.issued', { doc })}</p>
                 </div>
               </div>
@@ -276,12 +356,14 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
             variant="primary"
             className={styles.next}
             onClick={next}
-            disabled={(step === 1 && !method) || state === 'charging'}
+            disabled={blocked}
           >
             {state === 'charging' ? (
               <><span className={styles.spinner} /> {t('close.charging')}</>
             ) : step === 3 ? (
-              method?.paid ? t('close.collectAmount', { amount: money(total) }) : t('close.closeTicket')
+              collecting
+                ? t('close.collectNow', { amount: money(amount) })
+                : method?.paid ? t('close.collectAmount', { amount: money(total) }) : t('close.closeTicket')
             ) : (
               t('close.next')
             )}

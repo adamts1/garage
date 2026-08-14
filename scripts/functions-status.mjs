@@ -24,10 +24,25 @@
  */
 
 import { execFile } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** The CLI as a real program rather than a name the shell would have resolved.
+ *  `npx` is not reliably a file on PATH — under a Node version manager it can be
+ *  a shell function, and execFile() does not use a shell, so the failure arrives
+ *  worded as a problem with Supabase rather than with the lookup. The dependency
+ *  is in this repo, so prefer its binary; npx stays as the fallback for a tree
+ *  with no node_modules. */
+function cli() {
+  const local = join(repoRoot, 'node_modules', '.bin', 'supabase');
+  return existsSync(local) ? { cmd: local, argv: [] } : { cmd: 'npx', argv: ['supabase'] };
+}
 
 const ENVIRONMENTS = [
   { name: 'staging', ref: 'poksqsdklnhaumozriqd' },
@@ -51,38 +66,55 @@ function localFunctions() {
     .sort();
 }
 
-/** The CLI prints JSON on stdout and is prone to trailing noise — a PostHog
- *  shutdown warning, most often. Take the line that parses, not the whole
- *  stream.
- *
- *  This THROWS when it cannot get an answer, and that is the important part.
+const tryParse = (s) => { try { return JSON.parse(s); } catch { return null; } };
+
+/** The function array out of whichever shape the reply arrived in. The CLI has
+ *  two: `{"functions":[...]}` on one line, and a bare `[...]` pretty-printed
+ *  across many. Which one you get depended, before the explicit flag below, on
+ *  whether stdout was a terminal — so the same command answered differently by
+ *  hand and from a script. */
+const functionsIn = (v) =>
+  Array.isArray(v) ? v : Array.isArray(v?.functions) ? v.functions : null;
+
+/** This THROWS when it cannot get an answer, and that is the important part.
  *  The first version returned an empty list instead, so a CLI that was not
  *  logged in, rate-limited or simply having a bad minute rendered as "— not
  *  deployed" against every function — which is the one wrong answer this tool
  *  must never give. It reads as "deploy all of these", about functions that are
  *  already live. Silence and nothing are not the same fact. */
 async function deployed(ref) {
+  const { cmd, argv } = cli();
   let stdout = '';
   let stderr = '';
   try {
-    ({ stdout, stderr } = await run('npx', ['supabase', 'functions', 'list', '--project-ref', ref], {
-      maxBuffer: 10 * 1024 * 1024,
-    }));
+    /* Ask for the format outright. Left to the CLI, it prints a table for a
+       human and JSON for a pipe — which is a fine default and a bad thing to
+       depend on, because the one that reaches here is then a property of how
+       the script was launched rather than of what was asked for. */
+    ({ stdout, stderr } = await run(
+      cmd,
+      [...argv, 'functions', 'list', '--project-ref', ref, '--output-format', 'json'],
+      { maxBuffer: 10 * 1024 * 1024 },
+    ));
   } catch (e) {
     // A non-zero exit still carries the useful text on one of the two streams.
     stdout = e.stdout ?? '';
     stderr = e.stderr ?? e.message ?? '';
   }
 
+  // Whole body first — that is the multi-line shape, which no per-line pass
+  // can read, since its opening line is a lone bracket that parses as nothing.
+  const whole = functionsIn(tryParse(stdout));
+  if (whole) return whole;
+
+  // Then line by line, for the single-line shape with noise around it — a
+  // PostHog shutdown warning, most often.
   for (const line of stdout.split('\n')) {
-    if (!line.trim().startsWith('{')) continue;
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (Array.isArray(parsed.functions)) return parsed.functions;
+    if (!line.trim().startsWith('{') && !line.trim().startsWith('[')) continue;
+    const parsed = tryParse(line);
+    if (!parsed) continue;
+    const fns = functionsIn(parsed);
+    if (fns) return fns;
     /* The CLI reports its own failures as JSON too. Left unrecognised, this
        line looks exactly like noise, and the loop would fall off the end and
        call it an empty project. */
@@ -91,10 +123,15 @@ async function deployed(ref) {
     }
   }
 
-  throw new Error(
-    (stderr.trim().split('\n')[0] || 'no function list in the reply')
-    + ' — are you logged in? try: npx supabase login',
-  );
+  /* Quote what actually arrived. The previous wording — "no function list in
+     the reply, are you logged in?" — named the one cause it could not have
+     been: a rejected login says so on stderr, and this branch is only reached
+     when stderr is empty. The guess was appended to every failure alike, so it
+     sent the reader to re-authenticate an account that was working fine. */
+  const detail = stderr.trim().split('\n')[0]
+    || `could not read the reply: ${JSON.stringify(stdout.trim().slice(0, 200)) || '(nothing on stdout)'}`;
+  const looksLikeAuth = /token|login|unauthori[sz]ed|credential|forbidden/i.test(detail);
+  throw new Error(detail + (looksLikeAuth ? ' — try: npx supabase login' : ''));
 }
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
