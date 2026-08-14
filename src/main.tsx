@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { setSupabaseClient } from '@garage/shared';
 import App from './App';
 import AuthGate from './app/AuthGate';
+import { BusyOverlay } from './components/Busy';
 import { ModalHost } from './components/Modal';
 import { ToastHost } from './components/Toast';
 import { CatalogProvider } from './features/catalog';
@@ -59,8 +60,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             </CatalogProvider>
           </AuthGate>
 
-          {/* Outside the gate: the login screen reports failures the same way
-              every other screen does. */}
+          {/* Outside the gate, both of them: the login screen waits on the
+              network and reports failures the same way every other screen
+              does. */}
+          <BusyOverlay />
           <ToastHost />
         </BrowserRouter>
       </ErrorBoundary>

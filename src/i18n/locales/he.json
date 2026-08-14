@@ -871,6 +871,15 @@
       "notes": "הערות"
     }
   },
+  "busy": {
+    "issuingInvoice": "מפיק מסמך מס…",
+    "collecting": "מפיק קבלה…",
+    "crediting": "מפיק חשבונית זיכוי…",
+    "savingTicket": "שומר את הכרטיס…",
+    "savingExpense": "שומר את ההוצאה…",
+    "syncingExpense": "מסנכרן מול הנהלת החשבונות…",
+    "savingWorker": "שומר את פרטי העובד…"
+  },
   "collect": {
     "outstanding": "נותרו {{owed}} לתשלום",
     "doneFull": "הופקה קבלה {{docnum}} על {{amount}} · החשבונית שולמה במלואה",
