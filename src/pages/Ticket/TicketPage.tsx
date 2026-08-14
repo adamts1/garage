@@ -341,12 +341,27 @@ export default function TicketPage({
               <dt>{t('ticket.fields.document')}</dt><dd>{draft.doc ?? '-'}</dd>
             </dl>
 
-            <button className="btn primary block" onClick={() => void page.close()} disabled={settled}>
-              <IconCard /> {settled
-                ? t('ticket.alreadySettled')
-                : draft.st === 'done'
-                  ? t('ticket.collectPayment')   // ready for pickup, still owes money
-                  : t('ticket.closeAndCharge')}
+            {/* The one money button on this screen. What it opens follows the
+                ticket: a bill still owed on is collected, anything else goes
+                through the close-and-charge drawer — page.close() routes it.
+
+                An outstanding balance keeps it live even on a ticket marked
+                שולם. That pairing should not arise, but it does on any ticket
+                closed while the drawer was issuing nothing and settling the
+                ticket anyway; disabling on `settled` alone would leave those
+                with a debt at the provider and no way in the app to collect it. */}
+            <button
+              className="btn primary block"
+              onClick={() => void page.close()}
+              disabled={settled && page.owed <= 0}
+            >
+              <IconCard /> {page.owed > 0
+                ? t('ticket.collectPayment')     // an open bill, whatever the ticket says
+                : settled
+                  ? t('ticket.alreadySettled')
+                  : draft.st === 'done'
+                    ? t('ticket.collectPayment') // ready for pickup, still owes money
+                    : t('ticket.closeAndCharge')}
             </button>
 
             {/* ---- invoicing: the real tax document, issued through iCount ----
@@ -407,16 +422,16 @@ export default function TicketPage({
                   </p>
                 )}
 
-                {/* An open חשבונית מס: what the customer owes, and the button
-                    that records it arriving. Nothing here for a מס-קבלה, which
-                    was paid the moment it was issued. */}
+                {/* An open חשבונית מס: what the customer still owes. Nothing
+                    here for a מס-קבלה, which was paid the moment it was issued.
+
+                    Stating it only — the button that records the money arriving
+                    is the primary one above, which reads "גבה תשלום" and opens
+                    the same dialog this one did. Two buttons for one act, on one
+                    screen, is a choice the advisor has to make and cannot get
+                    right, since both did the same thing. */}
                 {page.owed > 0 && (
-                  <>
-                    <p className="muted">{t('collect.outstanding', { owed: money(page.owed) })}</p>
-                    <button className="btn primary block" onClick={() => void page.collect()} disabled={busy}>
-                      <IconCard /> {t('ticket.collectOnInvoice')}
-                    </button>
-                  </>
+                  <p className="muted">{t('collect.outstanding', { owed: money(page.owed) })}</p>
                 )}
               </div>
             ) : settled ? (

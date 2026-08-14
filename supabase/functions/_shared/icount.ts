@@ -111,8 +111,19 @@ export const icountAdapter: InvoiceProvider = {
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
   },
 
-  // A receipt has no lines: it says money arrived, and names the invoice it
-  // arrived against. The payment block is the whole content of the document.
+  /* A receipt prices nothing — it says money arrived and names the invoice it
+     arrived against — but iCount will not create a document with no lines. It
+     answers `missing_items`, and spells out the same fact three ways: no line
+     with a description, no line with a unit price, and a document total of 0
+     against a payment of the full amount. `based_on` does not fill them in; the
+     link is recorded, and the lines are still ours to send.
+
+     So the receipt carries one line for the money itself, priced at the gross
+     that arrived. No VAT is named on it — iCount adds none to a receipt, and
+     the invoice settled the tax already. Sending the amount as one line is also
+     what keeps the two halves of the document agreeing: the total iCount
+     computes from the lines is exactly the total the payment block declares,
+     which is the balance it was refusing on. */
   async collect(input: CollectInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
     const data = await call(c, 'doc/create', {
@@ -121,6 +132,11 @@ export const icountAdapter: InvoiceProvider = {
       client_idno: input.customer.idNo || undefined,
       lang: 'he',
       currency: 'ILS',
+      items: [{
+        description: `תשלום על חשבונית ${input.basedOnDocnum}`,
+        unitprice: input.amount,
+        quantity: 1,
+      }],
       ...paymentBlock(input.payMethod, input.amount),
       based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
       email_to_client: false,
