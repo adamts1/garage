@@ -211,12 +211,13 @@ button {
   padding: 14px 16px;
 }
 
+/* The rounded corner belongs to the wrapper the Table component draws, not to
+   the table. Rounding here too clipped the header to a 22px arc inside the
+   wrapper's 14px one, and the table's own white background filled the crescent
+   between them - a white notch above the header colour in every top corner. */
 table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border-radius: 22px;
-  overflow: hidden;
 }
 
 th,
@@ -439,6 +440,27 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .sidebar.is-rail .brand { justify-content: center; }
 .sidebar.is-rail .nav-item { justify-content: center; padding: 14px; }
 .sidebar.is-rail .sidebar-footer { padding: 12px; display: grid; place-items: center; }
+
+/* The rail is a fixed 100vh column that clips, so on a short window the ten nav
+   links pushed the footer - and the sign-out button with it - past the bottom
+   edge. The links scroll instead; brand and footer always keep their space. */
+.app-shell > .sidebar > .brand,
+.app-shell > .sidebar > .sidebar-footer { flex: none; }
+.app-shell > .sidebar > .nav-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Rows stay their own height - without this the flex height is handed back to
+     the grid and every link grows to fill a tall window. */
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 235, 216, 0.25) transparent;
+}
+.app-shell > .sidebar > .nav-list::-webkit-scrollbar { width: 6px; }
+.app-shell > .sidebar > .nav-list::-webkit-scrollbar-thumb {
+  background: rgba(240, 235, 216, 0.25);
+  border-radius: 3px;
+}
 
 .nav-item { display: flex; align-items: center; gap: 12px; text-align: right; }
 .nav-icon { display: grid; place-items: center; flex: none; color: inherit; }
