@@ -6,11 +6,12 @@ import { PageHeader } from '../../components/PageHeader';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
 import { IconPrint } from '../../icons';
 import AgingReport from './AgingReport';
+import BookkeepingExport from './BookkeepingExport';
 import CustomerReport from './CustomerReport';
 import IncomeReport from './IncomeReport';
 import ObligoReport from './ObligoReport';
 
-/* Four reports, one page.
+/* Four reports and the bookkeeper's export, one page.
  *
  * Tabs rather than four routes, because a garage comparing what it is owed
  * against what it owes switches between them in the same breath, and a page
@@ -21,13 +22,14 @@ import ObligoReport from './ObligoReport';
  * the page fetch three tables nobody is looking at, then keep them live over a
  * realtime subscription for the rest of the session.
  */
-type ReportId = 'income' | 'obligo' | 'aging' | 'customers';
+type ReportId = 'income' | 'obligo' | 'aging' | 'customers' | 'bookkeeping';
 
 const TABS: readonly TabDef<ReportId>[] = [
   { id: 'income', label: 'reports.tabs.income' },
   { id: 'obligo', label: 'reports.tabs.obligo' },
   { id: 'aging', label: 'reports.tabs.aging' },
   { id: 'customers', label: 'reports.tabs.customers' },
+  { id: 'bookkeeping', label: 'reports.tabs.bookkeeping' },
 ];
 
 export default function ReportsPage({ tickets }: { tickets: Ticket[] }) {
@@ -56,6 +58,7 @@ export default function ReportsPage({ tickets }: { tickets: Ticket[] }) {
         {tab === 'obligo' && <ObligoReport />}
         {tab === 'aging' && <AgingReport tickets={tickets} />}
         {tab === 'customers' && <CustomerReport tickets={tickets} />}
+        {tab === 'bookkeeping' && <BookkeepingExport />}
       </TabPanel>
     </>
   );
