@@ -743,7 +743,11 @@ export const uploadTicketPhoto = async (
   key: string,
   file: { base64: string; mime: string; ext: string },
 ): Promise<TicketPhoto> => {
-  const ticketId = await ticketIdByKey(key);
+  /* Two waits, not three. The ticket's id and the caller's garage have nothing
+     to do with each other, and asking for them one after the other put a whole
+     round trip of a phone's cellular latency in front of every photo for no
+     reason. Only the count has to follow, since it needs the id. */
+  const [ticketId, garageId] = await Promise.all([ticketIdByKey(key), currentGarageId()]);
 
   /* Counted before the upload, not after it.
      The trigger would catch this either way, but only once the image bytes have
@@ -754,8 +758,6 @@ export const uploadTicketPhoto = async (
     .select('id', { count: 'exact', head: true })
     .eq('ticket_id', ticketId);
   if ((count ?? 0) >= PHOTO_LIMIT) throw new PhotoLimitError();
-
-  const garageId = await currentGarageId();
   // The garage prefix is what the storage policy checks. The ticket key stays
   // in the path because it is what makes an object recognisable in the
   // dashboard when something needs looking at by hand.
