@@ -11,115 +11,109 @@
 /* ---------- login gate ---------- */
 /* Also used by the "no garage" and loading states, so the app never jumps
    between two different full-screen layouts while auth resolves. */
-/* ---------- login (branded split panel) ---------- */
+/* ---------- login (centred card on a soft backdrop) ---------- */
+/* Deliberately off the app's warm --bg: this is the only full-bleed screen seen
+   before the product, and the mockup grounds the card on a cool grey so the
+   navy logo is the one saturated thing on it. */
 .signIn {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
-  display: flex;
-  direction: ltr;                 /* lay brand LEFT, form RIGHT regardless of RTL */
-  background: var(--bg, #f4f5f7);
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  background: #eef0f4;
 }
-.brand, .panel { direction: rtl; }   /* text back to RTL */
 
-.brand {
-  flex: 0 0 42%;
-  max-width: 560px;
-  background: linear-gradient(160deg, #22344e 0%, #16233a 100%);
-  color: #fff;
-  padding: 48px 44px;
+/* The two soft shapes behind the card. Pseudo-elements rather than markup:
+   they mean nothing and must not reach the accessibility tree. Positioned with
+   physical left/right so they stay in the mockup's corners under RTL. */
+.signIn::before,
+.signIn::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: #e3e7ee;
+  pointer-events: none;
+}
+.signIn::before { width: 52vw; height: 80vh; top: -34vh; left: -17vw; }
+.signIn::after { width: 46vw; height: 72vh; bottom: -32vh; right: -14vw; }
+
+.loginCard {
+  position: relative;          /* lifts the card off the shapes */
+  width: 100%;
+  max-width: 480px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 40px;
+  background: #fff;
+  border-radius: 22px;
+  padding: 46px 40px 32px;
+  box-shadow: 0 24px 60px rgba(20, 32, 54, .10), 0 2px 6px rgba(20, 32, 54, .04);
 }
-.brandHead { text-align: center; }
+
 .logo {
-  width: 124px; height: 124px;
-  border-radius: 28px;
+  width: 96px; height: 96px;
+  border-radius: 22px;
   display: block;
   margin: 0 auto 18px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  box-shadow: 0 10px 24px rgba(29, 45, 68, .22);
 }
-.logo.compact { display: none; }
-.title { margin: 0; font-size: 40px; font-weight: 800; }
-.tagline { margin: 6px 0 0; font-size: 15px; color: #b8c4d6; }
+.title { margin: 0; font-size: 38px; font-weight: 800; color: #1d2d44; text-align: center; }
+.tagline { margin: 6px 0 30px; font-size: 14.5px; color: #7a8699; text-align: center; }
 
-.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.feature {
-  display: flex; gap: 14px; align-items: center;
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 14px; padding: 14px 16px;
-}
-.featureIcon {
-  flex: 0 0 40px; height: 40px; border-radius: 10px;
-  background: rgba(255, 255, 255, .1); color: #cdd8e8;
-  display: grid; place-items: center;
-}
-.feature div { display: flex; flex-direction: column; gap: 2px; }
-.feature b { font-size: 14.5px; font-weight: 700; }
-.feature span { font-size: 12.5px; color: #aebace; }
-
-.brandFoot {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  color: #9fb0c8; font-size: 13px;
-}
-
-.panel { flex: 1; display: grid; place-items: center; padding: 40px 24px; }
-.form { width: 100%; max-width: 380px; display: flex; flex-direction: column; }
-.welcome { margin: 0; font-size: 26px; font-weight: 800; color: var(--text, #1d2d44); text-align: center; }
-.sub { margin: 6px 0 28px; font-size: 14px; color: var(--dim, #7a8699); text-align: center; }
-.form label { font-size: 13px; font-weight: 600; color: var(--text, #1d2d44); margin: 12px 0 6px; }
+.loginCard label { font-size: 13.5px; font-weight: 700; color: #1d2d44; margin: 14px 0 7px; }
 
 .field { position: relative; display: flex; align-items: center; }
 .fieldIcon {
-  position: absolute; inset-inline-start: 13px;   /* right in RTL */
-  color: var(--mist, #94a3b8); display: grid; place-items: center; pointer-events: none;
+  position: absolute; inset-inline-start: 14px;   /* right in RTL */
+  color: #94a3b8; display: grid; place-items: center; pointer-events: none;
 }
 .field input {
   width: 100%;
-  padding: 12px 42px;
-  border: 1px solid var(--border, #e3e6ea);
-  border-radius: 11px;
-  background: #fff; color: var(--text, #1d2d44);
+  padding: 14px 44px;
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  background: #fff; color: #1d2d44;
   font: inherit; font-size: 14px; text-align: right;
 }
+.field input::placeholder { color: #a4adbb; }
 .field input:focus { outline: 2px solid #2a3d5a; outline-offset: 1px; border-color: transparent; }
 .eye {
-  position: absolute; inset-inline-end: 10px;     /* left in RTL */
-  background: none; border: 0; cursor: pointer; color: var(--mist, #94a3b8);
+  position: absolute; inset-inline-end: 12px;     /* left in RTL */
+  background: none; border: 0; cursor: pointer; color: #94a3b8;
   display: grid; place-items: center; padding: 4px;
 }
 
-.row { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; }
-.remember { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim, #667); }
-.remember input { width: auto; }
+.row { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 2px; }
+.remember { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #66707f; margin: 0; }
+.remember input { width: auto; margin: 0; }
 .forgot { background: none; border: 0; padding: 0; cursor: pointer; color: #3e5c76; font: inherit; font-size: 13px; font-weight: 600; }
 .forgot:hover { text-decoration: underline; }
 .notice { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #eef2f7; color: #3e5c76; font-size: 13px; }
 
 .submit {
-  margin-top: 20px;
+  margin-top: 22px;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  background: #1d2d44; color: #fff; border: 0; border-radius: 11px;
-  padding: 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  background: #1d2d44; color: #fff; border: 0; border-radius: 12px;
+  padding: 16px; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer;
 }
 .submit:hover:not(:disabled) { background: #22344e; }
 .submit:disabled { opacity: .55; cursor: default; }
 
 .secure {
-  margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border, #e3e6ea);
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  color: var(--dim, #8a94a6); font-size: 12.5px;
+  margin-top: 26px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  color: #8a94a6; font-size: 12.5px;
 }
 
-@media (max-width: 860px) {
-  .signIn { flex-direction: column; direction: rtl; }
-  .brand { flex-basis: auto; max-width: none; padding: 30px 24px 24px; gap: 0; }
-  .features, .brandFoot { display: none; }
-  .logo { width: 78px; height: 78px; border-radius: 18px; margin-bottom: 10px; }
-  .title { font-size: 28px; }
-  .tagline { font-size: 13px; }
-  .panel { padding: 26px 20px 40px; }
+@media (max-width: 560px) {
+  .signIn { padding: 24px 16px; }
+  .loginCard { border-radius: 18px; padding: 34px 24px 26px; }
+  .logo { width: 78px; height: 78px; border-radius: 18px; margin-bottom: 14px; }
+  .title { font-size: 30px; }
+  .tagline { font-size: 13px; margin-bottom: 22px; }
+  .signIn::before { width: 80vw; height: 46vh; top: -20vh; left: -26vw; }
+  .signIn::after { width: 74vw; height: 42vh; bottom: -20vh; right: -22vw; }
 }
 
 /* auxiliary auth states (loading blank, no-garage notice) — a simple centred
