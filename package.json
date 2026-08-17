@@ -22,6 +22,8 @@
     "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs",
     "dupes": "node --env-file=.env.local scripts/duplicate-customers.mjs",
     "seed:demo": "node --env-file=.env.local scripts/seed-demo.mjs",
+    "seed:garage": "node --env-file=.env.local scripts/seed-garage-demo.mjs",
+    "seed:garage:prod": "node --env-file=.env.production.local scripts/seed-garage-demo.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
     "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs"
   },
