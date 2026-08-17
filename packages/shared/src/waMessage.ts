@@ -16,7 +16,7 @@
    the outgoing message a function of the app's language setting. */
 
 import { garageName } from './auth';
-import { VAT, workTotal, worksSummary, type TicketWork } from './catalog';
+import { VAT, workTotal, worksSummary, type PartRow, type TicketWork } from './catalog';
 import type { TicketPhoto } from './db';
 import { money } from './money';
 import { OTHER_PAY_METHOD, payMethod, payMethodHe } from './payment';
@@ -65,6 +65,34 @@ const photoLines = (photos: readonly TicketPhoto[]): string[] => {
   ];
 };
 
+/* One work, priced, with the parts that make up its price underneath.
+
+   The message named the works and then asked for a number: "בלמים" followed by
+   "סה״כ לתשלום: ₪944". Everything that explains the number - the labour, which
+   parts were fitted, how many of each - was on the ticket in front of the
+   garage and nowhere in what the customer received, so the only question a
+   quote could produce was "what am I paying for?" and the only place to ask it
+   was the phone.
+
+   The quantity and the unit price appear together, and only when more than one
+   was fitted: "רפידות - ₪300.00" reads as one expensive part rather than two
+   ordinary ones.
+
+   The labour line shows only where there are parts beside it. On a work with
+   none, the work's own price IS its labour, and repeating the same number
+   underneath reads as a second charge. */
+const partLine = (p: PartRow): string =>
+  p.qty > 1
+    ? `   ◦ ${p.name} ×${p.qty} (${money(p.price)} ליח׳) - ${money(p.qty * p.price)}`
+    : `   ◦ ${p.name} - ${money(p.price)}`;
+
+const workLines = (w: TicketWork): string[] => [
+  `• ${w.name} - ${money(workTotal(w))}`,
+  ...(w.items.length
+    ? [...(w.labor ? [`   ◦ עבודה: ${money(w.labor)}`] : []), ...w.items.map(partLine)]
+    : []),
+];
+
 /** Only what the message says; anything else on a ticket is the sender's business. */
 export type WaTicket = Pick<Ticket, 'customer' | 'car' | 'plate' | 'title' | 'paid'> &
   Partial<Pick<Ticket, 'payMethod' | 'works'>>;
@@ -86,12 +114,29 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
   const greeting = `שלום ${ticket.customer},`;
 
   if (closed) {
+    /* The pickup notice carries the same breakdown as the quote, because it is
+       the one a customer reads standing at the counter with the car keys in
+       reach - the moment the itemisation is least optional.
+
+       The VAT is the difference between the total and the works rather than a
+       second calculation of it. The caller's total is the authority: it is what
+       the ticket screen shows and what the invoice was issued for, and the two
+       apps round VAT differently enough to disagree by an agora. A message
+       whose own lines do not add up to its own total is the one thing a
+       customer checks. Suppressed when there are no works to price - the total
+       is then the ticket's own amount, and nothing here explains it. */
+    const sum = worksSummary(works);
+    const vat = total - sum.net;
+
     return [
       greeting,
       `הרכב ${car} מוכן לאיסוף 🚗`,
       '',
       // Only when there is something to list — an empty header reads as a bug.
-      ...(works.length ? ['העבודות שבוצעו:', ...works.map((w) => `• ${w.name}`), ''] : []),
+      ...(works.length ? ['העבודות שבוצעו:', ...works.flatMap(workLines), ''] : []),
+      ...(works.length && vat > 0
+        ? [`סה״כ לפני מע״מ: ${money(sum.net)}`, `מע״מ (${Math.round(VAT * 100)}%): ${money(vat)}`]
+        : []),
       `סה״כ לתשלום: ${money(total)}`,
       ticket.paid ? paidLine(ticket.payMethod) : 'התשלום יתבצע בעת האיסוף.',
       ...photoLines(photos),
@@ -105,9 +150,7 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
     greeting,
     `לרכב ${car} נדרש אישורך לביצוע העבודות הבאות:`,
     '',
-    ...(works.length
-      ? works.map((w) => `• ${w.name} - ${money(workTotal(w))}`)
-      : [`• ${ticket.title || 'טיפול'}`]),
+    ...(works.length ? works.flatMap(workLines) : [`• ${ticket.title || 'טיפול'}`]),
     '',
     `סה״כ לפני מע״מ: ${money(sum.net)}`,
     `מע״מ (${Math.round(VAT * 100)}%): ${money(sum.vat)}`,
