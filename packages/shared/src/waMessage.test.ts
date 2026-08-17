@@ -175,6 +175,54 @@ describe('waMessage — quote for approval', () => {
   });
 });
 
+describe('waMessage — itemisation', () => {
+  const brakes = work('בלמים', 300, [{ sku: 'P1', name: 'רפידות', qty: 2, price: 150 }]);
+
+  it('breaks a work into its labour and its parts', () => {
+    const text = waMessage({ ticket: ticket({ works: [brakes] }), closed: false, total: 0 });
+    expect(text).toContain('• בלמים - ₪600.00');
+    expect(text).toContain('◦ עבודה: ₪300.00');
+    expect(text).toContain('◦ רפידות ×2 (₪150.00 ליח׳) - ₪300.00');
+  });
+
+  it('drops the quantity and unit price for a single part', () => {
+    const oil = work('שמן', 100, [{ sku: 'P2', name: 'מסנן שמן', qty: 1, price: 40 }]);
+    const text = waMessage({ ticket: ticket({ works: [oil] }), closed: false, total: 0 });
+    expect(text).toContain('◦ מסנן שמן - ₪40.00');
+    expect(text).not.toContain('×1');
+  });
+
+  /* The work's own price is its labour when nothing was fitted; a line saying so
+     underneath reads as a second charge for the same thing. */
+  it('leaves out the labour line on a work with no parts', () => {
+    const text = waMessage({
+      ticket: ticket({ works: [work('אבחון', 250)] }),
+      closed: false,
+      total: 0,
+    });
+    expect(text).toContain('• אבחון - ₪250.00');
+    expect(text).not.toContain('עבודה: ₪250.00');
+  });
+
+  it('itemises the pickup notice too, and its lines add up to the total it states', () => {
+    const text = waMessage({ ticket: ticket({ works: [brakes] }), closed: true, total: 708 });
+    expect(text).toContain('• בלמים - ₪600.00');
+    expect(text).toContain('◦ רפידות ×2 (₪150.00 ליח׳) - ₪300.00');
+    expect(text).toContain('סה״כ לפני מע״מ: ₪600.00');
+    expect(text).toContain('מע״מ (18%): ₪108.00');
+    expect(text).toContain('סה״כ לתשלום: ₪708.00');
+  });
+
+  /* Without works the total is the ticket's own amount, and there is nothing
+     here that explains how it splits — so the message states it and stops. */
+  it('states the total alone when a closed ticket has no works to price', () => {
+    const text = waMessage({ ticket: ticket({ works: [] }), closed: true, total: 500 });
+    expect(text).not.toContain('סה״כ לפני מע״מ');
+    expect(text).not.toContain('מע״מ (18%)');
+    expect(text).toContain('סה״כ לתשלום: ₪500.00');
+  });
+});
+
 describe('waMessage — photos', () => {
   const withPhotos = (photos: TicketPhoto[]) => ({
     ticket: ticket(),
