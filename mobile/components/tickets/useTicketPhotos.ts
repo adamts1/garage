@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useTranslation } from 'react-i18next';
 import {
   deleteTicketPhoto, isPhotoLimitError, listTicketPhotos, PHOTO_LIMIT, uploadTicketPhoto,
@@ -21,6 +22,36 @@ import {
 /** A photo of a scratched bumper does not need 12MP, and the mechanic is usually on cellular. */
 const QUALITY = 0.7;
 
+/* The longest edge an uploaded photo is allowed to have.
+
+   `quality` above is compression, not size — it re-encodes the twelve
+   megapixels the camera produced and hands over two to four megabytes anyway.
+   On the wifi in a garage that is ten to thirty seconds of the mechanic holding
+   a phone up, and it is why uploading felt broken.
+
+   1600 is well above what any screen here shows: the grid draws thumbnails a
+   third of a phone wide, and the viewer is one phone wide. It is also above
+   what the photos are for — a scratch, a dent, an odometer — while being about
+   a tenth of the bytes.
+
+   Downscaling only. resize() enlarges just as willingly, and a small photo blown
+   up to 1600 is a bigger upload than the one that was picked. */
+const MAX_EDGE = 1600;
+
+const shrink = async (asset: ImagePicker.ImagePickerAsset) => {
+  const context = ImageManipulator.manipulate(asset.uri);
+  if (Math.max(asset.width, asset.height) > MAX_EDGE) {
+    context.resize(asset.width >= asset.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+  }
+  const image = await context.renderAsync();
+  /* Base64 is produced here rather than by the picker. The picker's own
+     `base64: true` encoded the full-size original — a four-megabyte string
+     across the bridge, and a hand-written decoder walking every character of it
+     on the other side — for an image we were about to throw away. */
+  const out = await image.saveAsync({ format: SaveFormat.JPEG, compress: QUALITY, base64: true });
+  return { base64: out.base64 ?? '', mime: 'image/jpeg', ext: 'jpg' };
+};
+
 export type PhotoSource = 'camera' | 'library';
 
 export function useTicketPhotos(ticketKey: string) {
@@ -29,6 +60,11 @@ export function useTicketPhotos(ticketKey: string) {
   const [photos, setPhotos] = useState<TicketPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  /* The local files of photos still going up, so the grid can show them at once.
+     Even a fast upload is a second or two of a screen that looks like it ignored
+     the shutter; the tile appearing immediately is the difference between
+     waiting and wondering whether it worked. */
+  const [pending, setPending] = useState<string[]>([]);
 
   useEffect(() => {
     if (!ticketKey) return;
@@ -71,11 +107,10 @@ export function useTicketPhotos(ticketKey: string) {
 
     const result =
       from === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: QUALITY, base64: true })
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: QUALITY })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: QUALITY,
-            base64: true,
             allowsMultipleSelection: remaining > 1,
             // Only as many as the ticket can still take, so the picker refuses a
             // third rather than the upload doing it one photo too late.
@@ -83,18 +118,18 @@ export function useTicketPhotos(ticketKey: string) {
           });
     if (result.canceled) return;
 
+    const chosen = result.assets.slice(0, remaining);
+    setPending(chosen.map((a) => a.uri));
     setUploading(true);
     try {
       // Sequential: parallel uploads on a garage's wifi is how you get timeouts.
-      for (const asset of result.assets.slice(0, remaining)) {
-        if (!asset.base64) continue;
-        const ext = (asset.fileName?.split('.').pop() ?? asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
-        const photo = await uploadTicketPhoto(ticketKey, {
-          base64: asset.base64,
-          mime: asset.mimeType ?? 'image/jpeg',
-          ext,
-        });
+      for (const asset of chosen) {
+        const file = await shrink(asset);
+        if (!file.base64) continue;
+        const photo = await uploadTicketPhoto(ticketKey, file);
         setPhotos((prev) => [...prev, photo]); // each one appears as it lands
+        // Its placeholder goes as the real tile arrives, so neither blinks.
+        setPending((prev) => prev.filter((uri) => uri !== asset.uri));
       }
     } catch (e: any) {
       // The cap refused it — from the count above, or from the trigger when
@@ -107,6 +142,9 @@ export function useTicketPhotos(ticketKey: string) {
       }
     } finally {
       setUploading(false);
+      // Whatever is left never made it — an error already said so, and a tile
+      // stuck mid-upload forever would claim otherwise.
+      setPending([]);
     }
   };
 
@@ -129,7 +167,7 @@ export function useTicketPhotos(ticketKey: string) {
       },
     ]);
 
-  return { photos, loading, uploading, remaining, add, confirmRemove };
+  return { photos, pending, loading, uploading, remaining, add, confirmRemove };
 }
 
 export type TicketPhotos = ReturnType<typeof useTicketPhotos>;

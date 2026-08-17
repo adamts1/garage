@@ -16,7 +16,7 @@ const TILE_WIDTH = '31.9%';
 
 export function PhotosTab({ photos: store }: { photos: TicketPhotos }) {
   const { t } = useTranslation();
-  const { photos, loading, uploading, remaining, add, confirmRemove } = store;
+  const { photos, pending, loading, uploading, remaining, add, confirmRemove } = store;
   const [viewing, setViewing] = useState<TicketPhoto | null>(null);
 
   const full = remaining === 0;
@@ -58,7 +58,7 @@ export function PhotosTab({ photos: store }: { photos: TicketPhotos }) {
 
       {loading ? (
         <ActivityIndicator color={C.ink} style={{ marginTop: 20 }} />
-      ) : photos.length === 0 ? (
+      ) : photos.length === 0 && pending.length === 0 ? (
         <View style={[s.card, { alignItems: 'center', paddingVertical: 28 }]}>
           <Text style={s.dim}>{t('ticket.photos.empty')}</Text>
         </View>
@@ -78,6 +78,31 @@ export function PhotosTab({ photos: store }: { photos: TicketPhotos }) {
                   style={{ width: '100%', height: '100%', borderRadius: 10, backgroundColor: C.line }}
                 />
               </Pressable>
+            ))}
+
+            {/* Still going up: the file straight off the camera, dimmed, with a
+                spinner over it. It is the same picture the mechanic just took,
+                so the tile is right even before the server has it. */}
+            {pending.map((uri) => (
+              <View key={uri} style={{ width: TILE_WIDTH, aspectRatio: 1 }}>
+                <Image
+                  source={{ uri }}
+                  style={{
+                    width: '100%', height: '100%', borderRadius: 10,
+                    backgroundColor: C.line, opacity: 0.45,
+                  }}
+                />
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 0, right: 0, bottom: 0, left: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ActivityIndicator color={C.ink} />
+                </View>
+              </View>
             ))}
           </View>
           <Text style={[s.dim, { textAlign: 'center' }]}>{t('ticket.photos.deleteHint')}</Text>
