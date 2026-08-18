@@ -1190,6 +1190,62 @@ const forgeExp = await rest('supplier_expenses', b.token, {
 });
 check('B cannot plant an expense in A\'s garage', forgeExp.status >= 400, `got ${forgeExp.status}`);
 
+// ---------------------------------------------------------------- bookkeeping
+//
+// The export table carries `callback_token`, which is the ENTIRE authorisation
+// for a public Edge Function — anybody holding one can post a file into a
+// garage's storage. RLS does not help: the row genuinely belongs to the caller,
+// so a `select *` would hand them their own key. The defence is a column-level
+// grant that omits that one column, and the first check below is the one that
+// proves it, because it is the check that would silently pass if the grant were
+// ever loosened back to table-level.
+const exportRow = await admin('/rest/v1/bookkeeping_exports', {
+  method: 'POST', headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({
+    garage_id: a.garage.id,
+    start_date: '2026-07-01',
+    end_date: '2026-07-31',
+    callback_token: `tok${stamp}`,
+  }),
+});
+const exportId = (await exportRow.json())[0]?.id;
+check('an export can be created server-side', exportRow.status === 201 && Boolean(exportId), `got ${exportRow.status}`);
+
+const tokenPeek = await rest(`bookkeeping_exports?id=eq.${exportId}&select=callback_token`, a.token);
+check(
+  'A cannot read the callback token, even on their own export',
+  tokenPeek.status >= 400,
+  `got ${tokenPeek.status}`,
+);
+
+const starPeek = await rest(`bookkeeping_exports?id=eq.${exportId}&select=*`, a.token);
+check('select * on the export table is refused', starPeek.status >= 400, `got ${starPeek.status}`);
+
+const ownPeek = await (await rest(`bookkeeping_exports?id=eq.${exportId}&select=id,status,start_date`, a.token)).json();
+check(
+  'A can read their own export by naming safe columns',
+  Array.isArray(ownPeek) && ownPeek.length === 1,
+  `got ${JSON.stringify(ownPeek)}`,
+);
+
+const bSeesExport = await (await rest(`bookkeeping_exports?id=eq.${exportId}&select=id`, b.token)).json();
+check("B cannot see A's export", Array.isArray(bSeesExport) && bSeesExport.length === 0, `got ${JSON.stringify(bSeesExport)}`);
+
+// No insert policy at all — ordering an export is the Edge Function's job,
+// because it is the thing that mints the token.
+const forgeExport = await rest('bookkeeping_exports', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ start_date: '2026-07-01', end_date: '2026-07-31', callback_token: `x${stamp}` }),
+});
+check('a client cannot order an export directly', forgeExport.status >= 400, `got ${forgeExport.status}`);
+
+// Nor mark one ready: that would point the download at a file of their choosing.
+const forgeReady = await rest(`bookkeeping_exports?id=eq.${exportId}`, a.token, {
+  method: 'PATCH',
+  body: JSON.stringify({ status: 'ready', storage_path: `${a.garage.id}/anything/movein.dat` }),
+});
+check('a client cannot mark an export ready', forgeReady.status >= 400, `got ${forgeReady.status}`);
+
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);
   process.exit(1);

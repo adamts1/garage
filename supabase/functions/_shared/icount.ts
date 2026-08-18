@@ -7,8 +7,8 @@
 // InvoiceProvider shape — nothing here needs to change.
 
 import type {
-  InvoiceProvider, IssueInput, CollectInput, CancelInput, IssuedDoc, ProviderCredentials,
-  RecordExpenseInput, RecordedExpense,
+  InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
+  ProviderCredentials, RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 
 const BASE = 'https://api.icount.co.il/api/v3.php';
@@ -212,6 +212,36 @@ export const icountAdapter: InvoiceProvider = {
     });
 
     return { providerSupplierId: supplierId, providerExpenseId: String(exp.expense_id) };
+  },
+
+  /* The accountant's file, ordered rather than fetched.
+
+     iCount answers this one with `status: true` and nothing else — no file, no
+     job id, not even a handle to ask about later. The file is built in the
+     background and announced by a POST to `webhook_url` carrying a download
+     link. So there is nothing useful to return, and the caller's job is to have
+     already written down what it is waiting for.
+
+     That missing job id is also why the webhook URL has to carry a secret of
+     our own: it is the only thing that will tie the callback back to the row
+     that ordered it. See the callback function and the migration.
+
+     Auth is the Bearer token every other call here uses. iCount also accepts a
+     username and password on this endpoint; we do not store either, and would
+     not — a token can be revoked, a password opens the whole account. */
+  async exportBookkeeping(input: ExportBookkeepingInput): Promise<void> {
+    const c = readCreds(input.credentials);
+    await call(c, 'export/accounting_data', {
+      export_type: input.format,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      export_docs: input.docs,
+      export_expenses: input.expenses,
+      export_clients: input.clients,
+      export_suppliers: input.suppliers,
+      webhook_url: input.webhookUrl,
+      webhook_method: 'JSON',
+    });
   },
 };
 

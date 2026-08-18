@@ -88,6 +88,27 @@ export interface RecordedExpense {
   providerExpenseId: string;
 }
 
+// ---- bookkeeping export (the accountant's file) ----
+// A range of the garage's books in the format its accounting software imports —
+// חשבשבת's movein.dat today. The provider builds it asynchronously and calls
+// `webhookUrl` with a download link when it is done, so this returns as soon as
+// the order is accepted and carries no file of its own.
+export interface ExportBookkeepingInput {
+  credentials: ProviderCredentials;
+  /** Provider's name for the target format, e.g. iCount's `hash_dos_long`. */
+  format: string;
+  startDate: string;   // YYYY-MM-DD
+  endDate: string;     // YYYY-MM-DD
+  docs: boolean;
+  expenses: boolean;
+  clients: boolean;
+  suppliers: boolean;
+  /** Where to call back. Carries the export's secret in its path — it is the
+   *  only thing that ties a callback to the export that asked for it, since the
+   *  order itself comes back with no identifier. */
+  webhookUrl: string;
+}
+
 export interface InvoiceProvider {
   issue(input: IssueInput): Promise<IssuedDoc>;
   /** Issue a receipt against a tax invoice. Separate from issue() because it
@@ -96,4 +117,7 @@ export interface InvoiceProvider {
   collect(input: CollectInput): Promise<IssuedDoc>;
   cancel(input: CancelInput): Promise<IssuedDoc>;
   recordExpense(input: RecordExpenseInput): Promise<RecordedExpense>;
+  /** Orders the export. Resolves when the provider has accepted the job, NOT
+   *  when the file exists — the callback is what says that. */
+  exportBookkeeping(input: ExportBookkeepingInput): Promise<void>;
 }

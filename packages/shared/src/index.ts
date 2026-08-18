@@ -32,4 +32,5 @@ export * from './auth';
 export * from './waMessage';
 export * from './invoices';
 export * from './expenses';
+export * from './bookkeeping';
 export { setSupabaseClient, getClient } from './client';

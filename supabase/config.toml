@@ -386,6 +386,12 @@ allow_dynamic_registration = false
 [functions.photo]
 verify_jwt = false
 
+# The accounting provider calling back with a finished export. It holds no
+# session of ours, so the secret in the path is the whole authorisation — see
+# the function's own header.
+[functions.bookkeeping-ready]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
