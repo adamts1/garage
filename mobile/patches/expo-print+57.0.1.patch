@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-print/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt b/node_modules/expo-print/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+index d1e413e..6063244 100644
+--- a/node_modules/expo-print/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
++++ b/node_modules/expo-print/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+@@ -41,6 +41,14 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+     webView = WebView(context)
+     val settings = webView.settings
+     settings.defaultTextEncodingName = "UTF-8"
++    // The work order sizes itself to one page with a script. iOS renders through
++    // WKWebView, where JavaScript is on, so without this line the same document
++    // fits on one sheet from an iPhone and runs to two from an Android phone.
++    // Safe here: this WebView is loaded with loadDataWithBaseURL(null, ...), so
++    // it has no origin and no network or file access, and the only script in the
++    // document is our own — everything a person typed is HTML-escaped before it
++    // reaches the page.
++    settings.javaScriptEnabled = true
+     webView.webViewClient = webViewClient
+     options.textZoom?.let { textZoom ->
+       webView.settings.textZoom = textZoom

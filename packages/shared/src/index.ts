@@ -30,6 +30,7 @@ export * from './payment';
 export * from './db';
 export * from './auth';
 export * from './waMessage';
+export * from './printDoc';
 export * from './invoices';
 export * from './expenses';
 export * from './bookkeeping';
