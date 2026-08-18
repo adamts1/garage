@@ -447,21 +447,28 @@ export default function TicketPage({
               </button>
             ) : null}
 
-            {closed && (
-              wa ? (
-                <a
-                  className="btn whatsapp block"
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage({ ticket: draft, closed, total: totals.total, photos }))}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <IconWhatsapp /> {t('ticket.messageCustomer')}
-                </a>
-              ) : (
-                <button className="btn ghost block" disabled title={t('ticket.noPhoneTitle')}>
-                  <IconWhatsapp /> {t('ticket.noPhone')}
-                </button>
-              )
+            {/* WhatsApp, on any ticket rather than only a finished one.
+                A closed ticket sends the pickup notice it always did; an open
+                one sends the quote — the works, their parts and the total —
+                and asks the customer to approve it. That is the message a
+                garage needs BEFORE the work is done, and until now the only
+                way to send it from the web was to retype it by hand.
+
+                Both come from the shared builder, which switches on `closed`;
+                nothing about the wording is decided here. */}
+            {wa ? (
+              <a
+                className="btn whatsapp block"
+                href={`https://wa.me/${wa}?text=${encodeURIComponent(waMessage({ ticket: draft, closed, total: totals.total, photos }))}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <IconWhatsapp /> {t(closed ? 'ticket.messageCustomer' : 'ticket.requestApproval')}
+              </a>
+            ) : (
+              <button className="btn ghost block" disabled title={t('ticket.noPhoneTitle')}>
+                <IconWhatsapp /> {t('ticket.noPhone')}
+              </button>
             )}
 
             {/* Not window.print(): that printed the whole screen — sidebar, tabs
@@ -471,7 +478,7 @@ export default function TicketPage({
               onClick={() => warnIfBlocked(printTicket(
                 draft,
                 totals,
-                { workerName: worker, photoCount: photos.length },
+                { photoCount: photos.length },
               ))}
             >
               <IconPrint /> {t('ticket.printTicket')}

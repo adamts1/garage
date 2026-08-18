@@ -15,23 +15,27 @@ import { useWorksStep } from './useWorksStep';
 
 /* The note, typed locally and committed when you leave the field.
  *
- * Every other control here writes straight through `patchWork`, and on the
- * ticket page that lands in `setTickets`, which persists on the spot — so a
- * keystroke becomes a `save_ticket_works` call, and that call DELETES every
- * work and work_item on the ticket and re-inserts them. One character, one
- * wipe-and-rebuild of the whole tree, broadcast to every other screen.
+ * It sits in the work's own row now. It used to live in the pane beside the
+ * parts table, against whichever work was selected — so a note was written
+ * about a work you had to click first, shown one at a time, and invisible from
+ * the list it belongs to. A row-marker (✎) was added to compensate, which is
+ * the tell: the note was somewhere the eye was not. Here it is beside the name
+ * it describes, all of them readable at once, and the marker is gone with the
+ * problem it papered over.
  *
- * That is tolerable for a number typed into a narrow cell. It is not tolerable
- * for a sentence: thirty characters is thirty transactions. So this one holds
- * its own draft and commits once, on blur, and only when the text actually
- * changed.
+ * Why it still holds its own draft: every other control writes straight through
+ * `patchWork`, and on the ticket page that lands in `setTickets`, which persists
+ * on the spot — so a keystroke becomes a `save_ticket_works` call, and that call
+ * DELETES every work and work_item on the ticket and re-inserts them. One
+ * character, one wipe-and-rebuild of the whole tree, broadcast to every other
+ * screen. Tolerable for a number typed into a narrow cell; not for a sentence.
+ * So this commits once, on blur, and only when the text actually changed.
  *
- * Keyed by the work's uid at the call site, so selecting another work remounts
- * it with that work's note instead of needing an effect to re-seed. The trade
- * is that a note edited elsewhere while this field is open shows up when you
- * switch works rather than immediately — which is the right way round: it
- * cannot overwrite what somebody is in the middle of typing. */
-function NotesField({ initial, label, placeholder, onCommit }: {
+ * Keyed by the work's uid at the call site, so a note edited elsewhere while
+ * this field is open shows up on remount rather than immediately — which is the
+ * right way round: it cannot overwrite what somebody is in the middle of
+ * typing. */
+function NoteCell({ initial, label, placeholder, onCommit }: {
   initial: string;
   label: string;
   placeholder: string;
@@ -39,17 +43,17 @@ function NotesField({ initial, label, placeholder, onCommit }: {
 }) {
   const [draft, setDraft] = useState(initial);
   return (
-    <label className={styles.notes}>
-      <span className={styles.notesLabel}>{label}</span>
-      <textarea
-        className={styles.notesInput}
-        rows={2}
-        value={draft}
-        placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => { if (draft !== initial) onCommit(draft); }}
-      />
-    </label>
+    <CellInput
+      className={styles.note}
+      value={draft}
+      aria-label={label}
+      placeholder={placeholder}
+      /* A note runs longer than the column; the full text on hover, since the
+         cell can only ever show its beginning. */
+      title={draft || placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== initial) onCommit(draft); }}
+    />
   );
 }
 
@@ -105,15 +109,22 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
             <span className={styles.locked} title={t('works.adminOnly')}>{w.name}</span>
           )}
           {w.custom && <span className={styles.badge}>{t('picker.work.new')}</span>}
-          {/* The note lives in the pane beside this table, which means it is
-              invisible from here — and a note nobody can tell is there is a
-              note nobody reads. This marks the rows that have one. */}
-          {w.notes?.trim() && (
-            <span className={styles.hasNote} title={w.notes} aria-label={t('works.notes')}>
-              ✎
-            </span>
-          )}
         </div>
+      ),
+    },
+    {
+      /* Beside the name, on the work's own row. Open to everyone: it records
+         what was done, it does not price it. */
+      key: 'notes',
+      header: 'works.notes',
+      render: (w) => (
+        <NoteCell
+          key={w.uid}
+          initial={w.notes ?? ''}
+          label={t('works.notes')}
+          placeholder={t('works.notesPlaceholder')}
+          onCommit={(notes) => step.patchWork(w.uid, { notes })}
+        />
       ),
     },
     {
@@ -308,20 +319,6 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               {current && <span className={styles.ofWork}>{current.name}</span>}
             </span>
           </div>
-
-          {/* What was actually done, against the work it was done on. Above the
-              parts rather than inside the table: it is a sentence, not a cell,
-              and it has to stay reachable when the work has no parts at all.
-              Open to everyone — it records labour, it does not price it. */}
-          {current && (
-            <NotesField
-              key={current.uid}
-              initial={current.notes ?? ''}
-              label={t('works.notes')}
-              placeholder={t('works.notesPlaceholder')}
-              onCommit={(notes) => step.patchWork(current.uid, { notes })}
-            />
-          )}
 
           {!current || current.items.length === 0 ? (
             <EmptyState

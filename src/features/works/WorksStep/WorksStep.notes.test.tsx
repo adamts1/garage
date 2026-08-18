@@ -28,9 +28,11 @@ const notesField = () => screen.queryByPlaceholderText('works.notesPlaceholder')
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-/* This is the bug that shipped: the field renders against the SELECTED work,
-   and on a saved ticket nothing was selected, so it was not on the page at all
-   until somebody happened to click a row. */
+/* The field lives in the work's own row. Two bugs are behind that: it used to
+   render against the SELECTED work, so on a saved ticket — where nothing is
+   selected — it was not on the page at all until somebody happened to click a
+   row; and even once selected it showed one work's note at a time, off to the
+   side of the list it belongs to. */
 describe('the per-work notes field', () => {
   it('is on the page as soon as the ticket has a work, with no click', () => {
     render(<WorksStep works={[work('w1')]} setWorks={vi.fn()} combinedEmpty />);
@@ -39,19 +41,26 @@ describe('the per-work notes field', () => {
 
   it('shows the note already written against that work', () => {
     render(<WorksStep works={[work('w1', { notes: 'הוחלפו גם הדיסקים' })]} setWorks={vi.fn()} combinedEmpty />);
-    expect((notesField() as HTMLTextAreaElement).value).toBe('הוחלפו גם הדיסקים');
+    expect((notesField() as HTMLInputElement).value).toBe('הוחלפו גם הדיסקים');
   });
 
-  it('marks the rows that carry a note, since the field itself is off to the side', () => {
+  it('gives every work its own field, all of them readable at once', () => {
     render(
       <WorksStep
-        works={[work('w1', { notes: 'משהו' }), work('w2')]}
+        works={[work('w1', { notes: 'ראשונה' }), work('w2', { notes: 'שנייה' })]}
         setWorks={vi.fn()}
         combinedEmpty
       />,
     );
-    // The marker itself, not the field's own label — both carry works.notes.
-    expect(screen.getAllByText('✎')).toHaveLength(1);
+    const fields = screen.getAllByPlaceholderText('works.notesPlaceholder') as HTMLInputElement[];
+    expect(fields.map((f) => f.value)).toEqual(['ראשונה', 'שנייה']);
+  });
+
+  /* What the old marker existed to compensate for: a note against a work you
+     had to click first. Nothing needs clicking now. */
+  it('needs no row selected to show a note', () => {
+    render(<WorksStep works={[work('w1'), work('w2', { notes: 'על השנייה' })]} setWorks={vi.fn()} combinedEmpty />);
+    expect(screen.getByDisplayValue('על השנייה')).toBeTruthy();
   });
 
   it('is absent only when the ticket has no works to annotate', () => {
@@ -102,14 +111,17 @@ describe('when the note is written back', () => {
     expect(setWorks).not.toHaveBeenCalled();
   });
 
-  it('shows the right note after switching to another work', () => {
-    const works = [work('w1', { notes: 'ראשונה' }), work('w2', { notes: 'שנייה' })];
-    const { rerender } = render(<WorksStep works={works} setWorks={vi.fn()} combinedEmpty />);
-    expect((notesField() as HTMLTextAreaElement).value).toBe('ראשונה');
+  /* Each row commits its own work, not whichever one happens to be selected. */
+  it('writes the note back against the work whose row it is in', () => {
+    const setWorks = vi.fn();
+    render(<WorksStep works={[work('w1'), work('w2')]} setWorks={setWorks} combinedEmpty />);
 
-    // Selecting w2 is a click on its row; the pane follows `current`.
-    fireEvent.click(screen.getByText('עבודה w2'));
-    rerender(<WorksStep works={works} setWorks={vi.fn()} combinedEmpty />);
-    expect((notesField() as HTMLTextAreaElement).value).toBe('שנייה');
+    const second = screen.getAllByPlaceholderText('works.notesPlaceholder')[1];
+    fireEvent.change(second, { target: { value: 'על השנייה' } });
+    fireEvent.blur(second);
+
+    expect(setWorks).toHaveBeenCalledTimes(1);
+    expect(setWorks.mock.calls[0][0][1]).toMatchObject({ uid: 'w2', notes: 'על השנייה' });
+    expect(setWorks.mock.calls[0][0][0].notes).toBeUndefined();
   });
 });

@@ -456,6 +456,7 @@
     "printInvoice": "הדפס עותק חשבונית",
     "creditCustomer": "זכה לקוח",
     "messageCustomer": "שלח הודעה ללקוח",
+    "requestApproval": "שלח לאישור הלקוח בוואטסאפ",
     "noPhone": "אין טלפון ללקוח",
     "noPhoneTitle": "אין מספר טלפון ללקוח",
     "printTicket": "הדפס כרטיס עבודה",

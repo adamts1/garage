@@ -3,6 +3,21 @@
  *
  *   node scripts/onboard-garage.mjs --garage "מוסך הרצל" --email avi@example.com --admin
  *
+ * The garage's printed letterhead is set here too, and only here — the app has
+ * no editor for it, the same way it has no editor for a role:
+ *
+ *   node scripts/onboard-garage.mjs --garage-id <uuid> \\
+ *     --print-name 'אי-תן שירותי רכב בע"מ' --motto "✡ ישראל חי" \\
+ *     --services "מכונאות לכל סוגי הרכב * מדיאגנוסטיקה * שירותי חשמל ומיזוג אויר" \\
+ *     --address "רח׳ בית הדפוס, ירושלים" --phone 02-6522306 --fax 02-6522307 \\
+ *     --license-no 40677 --tax-id 514123456
+ *
+ * Only the fields passed are written, so correcting a phone number does not
+ * blank the address. Pass an empty string to clear one.
+ *
+ * That form asks for no email and no role, and touches neither the user table
+ * nor the membership: it is a letterhead edit, not an onboarding.
+ *
  * --admin or --member is REQUIRED, with no default. Only an admin may change
  * the name or the price of a work already on a ticket; a member does every
  * other thing the app can do. This script is the only place a role is set —
@@ -63,20 +78,32 @@ try {
   // as they do in CI. The checks below report what is actually missing.
 }
 
-/* Flags are `--name value`, or bare `--name` for a presence-only switch such as
-   --catalog. The earlier version stepped two tokens at a time, which meant a
-   bare flag swallowed the next flag's name as its value and every argument
-   after it was read one position out of phase — so `--catalog --email x@y.com`
-   silently lost the email. Stepping one token at a time and only consuming the
-   next one when it is not itself a flag keeps order irrelevant.
+/* Flags are `--name value`, `--name=value`, or bare `--name` for a
+   presence-only switch such as --catalog. The earlier version stepped two
+   tokens at a time, which meant a bare flag swallowed the next flag's name as
+   its value and every argument after it was read one position out of phase — so
+   `--catalog --email x@y.com` silently lost the email. Stepping one token at a
+   time and only consuming the next one when it is not itself a flag keeps order
+   irrelevant.
 
-   A value that begins with `--` is therefore not expressible. Nothing here
-   takes one: the fields are a garage name, an email, a UUID and a password, and
-   a password starting with `--` is worth rejecting rather than supporting. */
+   The `=` form is here because it was typed and it did not work. Without it
+   `--motto=X` parsed as a flag literally named `motto=X` carrying no value, and
+   an unrecognised flag was dropped without a word — so the field simply was not
+   written, and the first sign of it was a garage whose printed sheet had no
+   motto on it. Both halves of that are fixed: the form is understood, and the
+   check below refuses anything that still is not.
+
+   A value that begins with `--` is therefore not expressible in the spaced
+   form. Nothing here takes one — and `--name=--value` says it if it ever does. */
 const args = new Map();
 for (let i = 2; i < process.argv.length; i++) {
   const token = process.argv[i];
   if (!token.startsWith('--')) continue;
+  const eq = token.indexOf('=');
+  if (eq > 2) {
+    args.set(token.slice(2, eq), token.slice(eq + 1));
+    continue;
+  }
   const next = process.argv[i + 1];
   if (next === undefined || next.startsWith('--')) {
     args.set(token.slice(2), true);
@@ -113,6 +140,65 @@ const email = valued('email')?.trim().toLowerCase();
 const password = valued('password') ?? randomBytes(9).toString('base64url');
 const existingGarageId = valued('garage-id');
 
+/* The garage's letterhead: what the top of its printed work order says.
+ *
+ * Optional, every one of them. A garage that passes none prints the header it
+ * printed before these existed — its name, and nothing else. There is no
+ * default for any of them on purpose: a placeholder address on a customer's
+ * copy is worse than no address at all.
+ *
+ * Settable on an existing garage too, which is the case that actually matters:
+ * a phone number changes, and re-running this with --garage-id and the new
+ * --phone is how it changes on the paper. Only the fields passed are written,
+ * so updating one does not blank the other five. */
+const LETTERHEAD = {
+  // The name on paper, when the garage goes by a shorter one in the app.
+  'print-name': 'print_name',
+  motto: 'motto',
+  services: 'services',
+  address: 'address',
+  phone: 'phone',
+  fax: 'fax',
+  'license-no': 'license_no',
+  // Already a column, and until now nothing wrote it or read it.
+  'tax-id': 'tax_id',
+};
+
+const letterhead = {};
+for (const [flag, column] of Object.entries(LETTERHEAD)) {
+  const v = valued(flag);
+  // An explicit empty string clears the field; an absent flag leaves it alone.
+  if (v !== undefined) letterhead[column] = v.trim() || null;
+}
+
+/* A flag this script does not know is a typo, and until now a typo was silence:
+   the run reported success, the account was created, and the field the operator
+   thought they had set was never written. Nothing here is a pass-through to
+   another tool, so there is no such thing as an argument this script should
+   accept and ignore. */
+const KNOWN_FLAGS = new Set([
+  'garage', 'garage-id', 'email', 'password', 'admin', 'member', 'catalog',
+  ...Object.keys(LETTERHEAD),
+]);
+for (const name of args.keys()) {
+  if (!KNOWN_FLAGS.has(name)) {
+    die(
+      `Unknown flag --${name}. Known flags: ${[...KNOWN_FLAGS].map((f) => `--${f}`).join(' ')}`,
+    );
+  }
+}
+
+/* Setting a letterhead on a garage that already exists is not onboarding
+   anybody, so this mode asks for neither an email nor a role and touches
+   neither the user table nor the membership.
+
+   Requiring them was worse than clumsy. Correcting a phone number meant naming
+   somebody and stating their role, and --admin against the wrong address
+   promotes that person — a live way to hand out price-editing rights while
+   trying to change a fax number. */
+const letterheadOnly =
+  Boolean(existingGarageId) && !args.has('email') && Object.keys(letterhead).length > 0;
+
 /* The role has to be said out loud — there is no default.
 
    It was `--admin, or member if you say nothing`, and the membership row is
@@ -126,11 +212,21 @@ const wantsMember = args.has('member');
 const role = wantsAdmin ? 'admin' : 'member';
 
 if (!url || !serviceKey) die('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
-if (!email) die('Missing --email');
 if (!garageName && !existingGarageId) die('Missing --garage (or --garage-id to join an existing one)');
-if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) die(`Not an email address: ${email}`);
+if (!email && !letterheadOnly) {
+  die(
+    'Missing --email. Pass --garage-id with letterhead flags and no --email to set a ' +
+      'letterhead without touching any account.',
+  );
+}
+/* A role stated with nobody to give it to. Ignoring it would be the silent kind
+   of failure this script has already been bitten by once. */
+if (letterheadOnly && (wantsAdmin || wantsMember)) {
+  die('--admin and --member need an --email. A letterhead-only run grants nothing.');
+}
+if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) die(`Not an email address: ${email}`);
 if (wantsAdmin && wantsMember) die('Pass --admin or --member, not both.');
-if (!wantsAdmin && !wantsMember) {
+if (!wantsAdmin && !wantsMember && !letterheadOnly) {
   die(
     'Missing --admin or --member. Only an admin can change the name or price of a work ' +
       'on a ticket; a member does everything else. This is the only place the role is set, ' +
@@ -203,23 +299,44 @@ const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 // the only indication of which database is about to gain a user.
 console.log(`\nProject  ${projectRef}`);
 console.log(`Garage   ${garageName ?? existingGarageId}`);
-console.log(`User     ${email}\n`);
+console.log(letterheadOnly ? 'Letterhead only\n' : `User     ${email}\n`);
 
 /* ---------- 1. the garage ---------- */
 let garageId = existingGarageId;
 if (!garageId) {
   const { data, error } = await db
     .from('garages')
-    .insert({ name: garageName })
+    .insert({ name: garageName, ...letterhead })
     .select('id')
     .single();
   if (error) die(`Could not create the garage: ${error.message}`);
   garageId = data.id;
   console.log(`\x1b[32m✓\x1b[0m garage created   ${garageId}`);
+  // Said out loud here as well as on the update path below. A letterhead that
+  // was quietly not written looks exactly like one that was.
+  if (Object.keys(letterhead).length) {
+    console.log(`\x1b[32m✓\x1b[0m letterhead set   ${Object.keys(letterhead).join(', ')}`);
+  }
 } else {
   const { data, error } = await db.from('garages').select('id,name').eq('id', garageId).single();
   if (error || !data) die(`No garage with id ${garageId}`);
   console.log(`\x1b[32m✓\x1b[0m garage found     ${data.name}`);
+
+  /* Only when something was actually passed. An unconditional update would
+     rewrite the letterhead to nothing every time somebody is added to an
+     existing garage, which is the common use of --garage-id. */
+  if (Object.keys(letterhead).length) {
+    const { error: lhErr } = await db.from('garages').update(letterhead).eq('id', garageId);
+    if (lhErr) die(`Could not update the letterhead: ${lhErr.message}`);
+    console.log(`\x1b[32m✓\x1b[0m letterhead set   ${Object.keys(letterhead).join(', ')}`);
+  }
+}
+
+/* The letterhead was the whole errand. Stop before the account and the
+   membership, both of which this run was given nothing to act on. */
+if (letterheadOnly) {
+  console.log('\n\x1b[32mDone.\x1b[0m Nothing else was touched — no account, no membership.');
+  process.exit(0);
 }
 
 /* ---------- 2. the user ---------- */

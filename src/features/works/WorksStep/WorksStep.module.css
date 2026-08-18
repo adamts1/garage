@@ -200,38 +200,17 @@
   cursor: default;
 }
 
-/* What was done, against the selected work. */
-.notes {
-  display: block;
-  margin-bottom: 10px;
-}
-.notesLabel {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--muted-d);
-  margin-bottom: 4px;
-}
-.notesInput {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface);
-  font: inherit;
+/* What was done, in the work's own row. A note is a sentence in a table full
+   of numbers, so it stays quiet — regular weight, one line, the rest on hover —
+   and only shows its box when the row is hovered or the field has focus, like
+   every other cell here. */
+.note {
   font-size: 12.5px;
-  line-height: 1.5;
-  resize: vertical;
+  font-weight: 400;
+  color: var(--muted-d);
+  text-overflow: ellipsis;
 }
-.notesInput:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-/* This work has a note, which otherwise only shows in the pane beside. */
-.hasNote {
-  flex: none;
-  font-size: 12px;
+.note::placeholder {
   color: var(--muted);
-  cursor: default;
+  font-weight: 400;
 }

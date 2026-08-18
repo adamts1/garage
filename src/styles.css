@@ -899,6 +899,21 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 }
 .btn.danger:hover { background: var(--danger-soft); }
 
+/* WhatsApp's own green. This button opens WhatsApp, and the colour says so
+   before the label is read — it was inheriting the default button look, so the
+   one control on this screen that leaves the app looked like every other. */
+.btn.whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #25d366;
+  border: 1px solid #1fbe5b;
+  color: #fff;
+  font-weight: 700;
+}
+.btn.whatsapp:hover:not(:disabled) { background: #1eb457; border-color: #1eb457; }
+.btn.whatsapp svg { flex: none; }
+
 /* activity log + notes */
 .log { display: flex; flex-direction: column; gap: 14px; }
 .log-row { font-size: 12.5px; text-align: left; }

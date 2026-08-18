@@ -30,6 +30,33 @@ export interface Garage {
   id: string;
   name: string;
   role: GarageRole;
+  /** The letterhead: what the top of a printed work order says about who
+   *  issued it. Every field is optional and every field is printed only when
+   *  it is set — a garage that has filled in none of them gets the header it
+   *  had before these existed, which is its name alone. */
+  letterhead?: Letterhead;
+}
+
+/** Per-garage, and only ever read from the signed-in garage's own row. A
+ *  placeholder here would put one garage's address on another's paperwork, so
+ *  nothing in this shape has a default. */
+export interface Letterhead {
+  /** The name to print, when it differs from the name the app shows. The rail
+   *  wants "אי-תן"; a document a customer keeps wants the registered name. */
+  printName?: string | null;
+  /** The garage's own line above its name, glyphs included. Printed verbatim. */
+  motto?: string | null;
+  /** What the garage does, as one line. Free text: the garage picks its own
+   *  separators, which is why this is not a list. */
+  services?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  /** מורשה משרד התחבורה. */
+  licenseNo?: string | null;
+  /** ע.מ / ח.פ. The one field here that is not new — it has been a column on
+   *  `garages` since the baseline, and nothing ever read it back. */
+  taxId?: string | null;
 }
 
 /** What the app needs to decide which screen to render. */
@@ -123,6 +150,21 @@ export const isGarageAdmin = (): boolean => currentGarage?.role === 'admin';
  *  some other garage's name — wrong is worse than plain on a customer's quote. */
 export const garageName = (): string => currentGarage?.name?.trim() || 'מוסך';
 
+/** The signed-in garage's letterhead. Empty for a garage that has filled in
+ *  none of it, and every field it does carry is a non-empty string — so a
+ *  printed document asks "is there an address?" rather than "is there an
+ *  address that is not whitespace?" at every line it lays out. */
+export const garageLetterhead = (): Letterhead => currentGarage?.letterhead ?? {};
+
+/** The garage's name as it goes on paper.
+ *
+ *  Falls back to the name the rest of the app uses, which is what every garage
+ *  prints until it sets something else. They differ more often than not: a name
+ *  in a sidebar has to be short, and a name on a document a customer keeps is
+ *  usually the registered one. */
+export const garagePrintName = (): string =>
+  currentGarage?.letterhead?.printName || garageName();
+
 export const signIn = async (email: string, password: string): Promise<Session> => {
   const { data, error } = await getClient().auth.signInWithPassword({
     email: email.trim(),
@@ -165,14 +207,62 @@ export const onAuthStateChange = (fn: (session: Session | null) => void): (() =>
 export const listMyGarages = async (): Promise<Garage[]> => {
   const { data, error } = await getClient().rpc('my_garages');
   if (error) throw error;
-  return (data ?? []).map((r: { garage_id: string; garage_name: string; role: string }) => ({
-    id: r.garage_id,
-    name: r.garage_name,
-    // Anything unrecognised is the lesser privilege. A role this build has not
-    // heard of must not read as admin.
-    role: r.role === 'admin' ? 'admin' : 'member',
-  }));
+  return (data ?? []).map((r: MyGaragesRow): Garage => {
+    /* Read from the same call as the name, deliberately. A printed document is
+       built in a plain module with no chance to await anything, so the
+       letterhead has to be in hand by the time a screen renders — a second
+       round trip for it would mean the first work order of a session prints
+       without one. */
+    const letterhead = readLetterhead(r);
+    return {
+      id: r.garage_id,
+      name: r.garage_name,
+      // Anything unrecognised is the lesser privilege. A role this build has
+      // not heard of must not read as admin.
+      role: r.role === 'admin' ? 'admin' : 'member',
+      ...(letterhead ? { letterhead } : {}),
+    };
+  });
 };
+
+/* The letterhead as stored, with the blanks taken out — and nothing at all when
+   the garage has filled in none of it, which is every garage until somebody
+   does. Absent rather than an object of undefineds, so "this garage has no
+   letterhead" is one check at the top instead of six at the bottom. */
+const readLetterhead = (r: MyGaragesRow): Letterhead | undefined => {
+  const set = (v?: string | null) => {
+    const trimmed = v?.trim();
+    return trimmed ? trimmed : undefined;
+  };
+  const lh: Letterhead = {
+    printName: set(r.print_name),
+    motto: set(r.motto),
+    services: set(r.services),
+    address: set(r.address),
+    phone: set(r.phone),
+    fax: set(r.fax),
+    licenseNo: set(r.license_no),
+    taxId: set(r.tax_id),
+  };
+  return Object.values(lh).some(Boolean) ? lh : undefined;
+};
+
+/** The row shape of public.my_garages(). Every letterhead column is optional
+ *  here too: an app running against a database that predates them gets
+ *  undefined rather than a crash. */
+interface MyGaragesRow {
+  garage_id: string;
+  garage_name: string;
+  role: string;
+  print_name?: string | null;
+  motto?: string | null;
+  services?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  license_no?: string | null;
+  tax_id?: string | null;
+}
 
 /* ---------- what the apps render, decided once ----------
 
