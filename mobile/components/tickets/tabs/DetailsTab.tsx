@@ -79,6 +79,18 @@ export function DetailsTab({
             />
           </Field>
         </View>
+        {/* The intake form asks for it and the printed work order prints it, and
+            between those two the phone never showed it — so the one field a
+            mechanic looks a part up by could not be read, let alone corrected,
+            from the bay. Editable like the rest of this card: on a ticket taken
+            over the phone it is often typed in later, off the licence plate. */}
+        <Field label={t('ticket.fields.vehicleCode')}>
+          <TextInput
+            style={s.input}
+            value={draft.vehicleCode ?? ''}
+            onChangeText={(v) => onSet('vehicleCode', v)}
+          />
+        </Field>
       </View>
 
       <View style={[s.card, { gap: 10 }]}>

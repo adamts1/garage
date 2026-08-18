@@ -5,16 +5,18 @@
    that differ are where the ticket key comes from and what "back" means, so both
    arrive as props rather than being read from the router.
 
-   What is left here is orchestration — the draft, the tab bar, saving, and the
-   WhatsApp send. Each tab renders itself (tabs/), the photos manage themselves
-   (useTicketPhotos), and the message the customer receives is built by
-   @garage/shared's waMessage, which the web app sends too. */
+   What is left here is orchestration — the draft, the tab bar, saving, the
+   WhatsApp send and the printout. Each tab renders itself (tabs/), the photos
+   manage themselves (useTicketPhotos), and both things a customer receives are
+   built by @garage/shared: waMessage for the message and workOrderHtml for the
+   sheet. The web sends and prints the same two. */
 
+import * as Print from 'expo-print';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { listWorkers, waMessage, waNumber, worksSummary } from '@garage/shared';
+import { listWorkers, waMessage, waNumber, workOrderHtml, worksSummary } from '@garage/shared';
 import type { Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
@@ -26,6 +28,16 @@ import { NotesTab } from './tabs/NotesTab';
 import { PhotosTab } from './tabs/PhotosTab';
 import { useTicketPhotos } from './useTicketPhotos';
 import { WorksSection } from './WorksSection';
+
+/* iOS rejects when the print sheet is dismissed without anything being sent to
+   a printer — "Printing did not complete". That is somebody changing their
+   mind, not a failure, and an alert for it would be the app telling them off
+   for closing a dialog. Android resolves in the same case.
+
+   Matched on the message because that is all the module exposes: the native
+   exception types do not survive the bridge as codes. */
+const isPrintCancelled = (e: unknown): boolean =>
+  /did not complete|cancel/i.test(e instanceof Error ? e.message : String(e));
 
 type Tab = 'details' | 'works' | 'photos' | 'history' | 'notes';
 
@@ -155,6 +167,35 @@ export default function TicketEditor({
     );
   };
 
+  /* The same sheet the web prints, through the platform's own print dialog:
+     AirPrint on iOS, the Android print framework on Android. Both offer "save
+     as PDF" beside the printers, which is how a garage with no printer in the
+     bay still gets a copy to send.
+
+     The totals are handed over rather than recomputed inside the document, so
+     the sheet cannot disagree with the figures on this screen — and a ticket
+     with no works is its own amount, exactly as the WhatsApp message treats it.
+
+     printAsync resolves when the sheet is dismissed and rejects when it is
+     cancelled on iOS, which is not an error worth an alert. */
+  const [printing, setPrinting] = useState(false);
+  const printTicket = async () => {
+    setPrinting(true);
+    try {
+      await Print.printAsync({
+        html: workOrderHtml(
+          draft,
+          { labour: sum.labor, items: sum.parts, vat: sum.vat, total: works.length ? sum.total : draft.amount },
+          { photoCount: photos.photos.length },
+        ),
+      });
+    } catch (e) {
+      if (!isPrintCancelled(e)) Alert.alert(t('common.error'), t('ticket.print.failed'));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'details', label: t('ticket.tabs.details') },
     { id: 'works', label: t('ticket.tabs.works') },
@@ -197,6 +238,13 @@ export default function TicketEditor({
           label={closed ? t('ticket.whatsapp.ready') : t('ticket.whatsapp.quote')}
           onPress={sendWhatsApp}
           color={C.whatsapp}
+        />
+
+        <Button
+          label={t('ticket.print.action')}
+          onPress={() => void printTicket()}
+          variant="outline"
+          busy={printing}
         />
 
         <TabBar tabs={TABS} active={tab} onSelect={setTab} />

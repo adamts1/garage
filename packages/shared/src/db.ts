@@ -478,6 +478,11 @@ const ticketToRow = (t: Ticket) => ({
   address: t.address ?? null,
   km: t.km ?? null,
   year: t.year ?? null,
+  /* A tickets column since the baseline, and for a long time a write-only one:
+     create_ticket set it and nothing ever updated it. That was survivable while
+     no screen showed it. Now both apps do, and a field somebody can edit that
+     silently does not save is worse than one they cannot edit at all. */
+  vehicle_code: t.vehicleCode?.trim() || null,
   notes: t.notes ?? null,
   paid: t.paid ?? false,
   pay_method: t.payMethod ?? null,
@@ -538,9 +543,11 @@ const worksPayload = (works: TicketWork[]) =>
    temporary key it painted: two advisors submitting at once each get a distinct
    real number, which need not match what either client guessed. */
 export const createTicket = async (t: Ticket): Promise<{ key: string; job: string }> => {
-  // id_number + the vehicle fields ride along outside ticketToRow: they are not
-  // tickets columns the row maps, but create_ticket reads them to fill the
+  // id_number, manufacturer and model ride along outside ticketToRow: they are
+  // not tickets columns the row maps, but create_ticket reads them to fill the
   // customer (id_number) and to promote the car into the vehicles table.
+  // vehicle_code is not among them any more — it IS a tickets column, and
+  // ticketToRow carries it now, for the create and the update alike.
   const payload = {
     ...ticketToRow(t),
     // The record the advisor picked, when they picked one. create_ticket
@@ -549,7 +556,6 @@ export const createTicket = async (t: Ticket): Promise<{ key: string; job: strin
     id_number: t.idNumber?.trim() || null,
     manufacturer: t.manufacturer?.trim() || null,
     model: t.model?.trim() || null,
-    vehicle_code: t.vehicleCode?.trim() || null,
   };
   const { data, error } = await getClient().rpc('create_ticket', {
     t: payload,
