@@ -22,8 +22,10 @@
     "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs",
     "dupes": "node --env-file=.env.local scripts/duplicate-customers.mjs",
     "seed:demo": "node --env-file=.env.local scripts/seed-demo.mjs",
-    "seed:garage": "node --env-file=.env.local scripts/seed-garage-demo.mjs",
-    "seed:garage:prod": "node --env-file=.env.production.local scripts/seed-garage-demo.mjs",
+    "seed:catalog": "node --env-file=.env.local scripts/seed-catalog.mjs",
+    "seed:catalog:prod": "node --env-file=.env.production.local scripts/seed-catalog.mjs",
+    "seed:board": "node --env-file=.env.local scripts/seed-board.mjs",
+    "seed:board:prod": "node --env-file=.env.production.local scripts/seed-board.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
     "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs"
   },

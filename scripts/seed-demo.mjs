@@ -38,7 +38,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-/* The board itself. Shared with seed-garage-demo.mjs, which writes the same set
+/* The board itself. Shared with seed-board.mjs, which writes the same set
    into an empty garage instead of over an existing one. */
 import { CATALOG, CUSTOMERS, PARTS, PAY, TICKETS, amountOf, due, iso, partBySku, work } from './demo-data.mjs';
 
