@@ -62,6 +62,12 @@ export default function TicketEditor({
   const [draft, setDraft] = useState<Ticket | null>(null);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<Tab>('works');
+  /* Up here with the rest of the state, not down beside the function that uses
+     it. Everything below the early returns for "still loading" and "no such
+     ticket" runs on some renders and not others, so a hook declared there is
+     called a different number of times from one render to the next — which is
+     not a subtle bug, it is the screen refusing to open. */
+  const [printing, setPrinting] = useState(false);
 
   /* The draft is keyed to the ticket: switching which ticket the pane shows
      (tablet) must drop the previous draft, or the new ticket would open showing
@@ -178,7 +184,6 @@ export default function TicketEditor({
 
      printAsync resolves when the sheet is dismissed and rejects when it is
      cancelled on iOS, which is not an error worth an alert. */
-  const [printing, setPrinting] = useState(false);
   const printTicket = async () => {
     setPrinting(true);
     try {

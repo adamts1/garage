@@ -1,11 +1,14 @@
 /* The demo board — parts, catalogue, customers, cars and fourteen tickets.
  *
- * Data only: no client, no inserts, no garage id. Two scripts write it, and
+ * Data only: no client, no inserts, no garage id. Three scripts write it, and
  * they write it differently, so the shared half stops here:
  *
- *   seed-demo.mjs        wipes a garage and rebuilds it. Local and staging only.
- *   seed-garage-demo.mjs fills an EMPTY garage and refuses any other kind,
- *                        which is what makes it safe to point at production.
+ *   seed-demo.mjs      wipes a garage and rebuilds it. Local and staging only.
+ *   seed-catalog.mjs   the works and parts, additively.
+ *   seed-board.mjs     the customers, cars and tickets, additively.
+ *
+ * The last two are additive, which is what makes them safe to point at
+ * production; the first is not, and refuses it.
  *
  * Prices are pre-VAT throughout, as every price in this system is.
  */
@@ -88,7 +91,7 @@ export const CUSTOMERS = [
 
    `who` names a worker code from the seed-demo demo staff. A garage with real
    workers in it has none of those codes, and tickets.assignee is a foreign key
-   to garage_workers.code — so seed-garage-demo maps these onto whatever staff
+   to garage_workers.code — so seed-board maps these onto whatever staff
    the garage actually has rather than sending them as they are. */
 
 export const VAT = 0.18;
