@@ -11,7 +11,7 @@ There are two databases and the app must never confuse them:
 | | Supabase project | who reaches it |
 |---|---|---|
 | **staging** | `poksqsdklnhaumozriqd` | simulators, emulators, `expo start`, internal test builds |
-| **production** | `fdztfosbohiwskzfvwaj` | only App Store / TestFlight and Google Play builds |
+| **production** | `farpgkljbmlaeiocrore` | only App Store / TestFlight and Google Play builds |
 
 Three things keep them apart, and they are deliberately independent — each one
 catches a different mistake:

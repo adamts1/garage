@@ -69,7 +69,7 @@ if (!url || !key) {
  * that no policy can stop. The garage is named on the command line, so the whole
  * distance between a demo refresh and a real garage losing its customers, works
  * catalogue and parts list is one wrong --env-file. */
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 if (url.includes(PRODUCTION_PROJECT_REF)) {
   console.error(
     `\nRefusing to run: this is PRODUCTION (${PRODUCTION_PROJECT_REF}).\n` +

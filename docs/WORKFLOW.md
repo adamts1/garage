@@ -117,7 +117,7 @@ npx supabase link --project-ref poksqsdklnhaumozriqd   # staging
 npx supabase db push
 # check staging still works, then:
 
-npx supabase link --project-ref fdztfosbohiwskzfvwaj   # production
+npx supabase link --project-ref farpgkljbmlaeiocrore   # production
 npx supabase db push
 ```
 
@@ -324,7 +324,7 @@ project-match checks above apply to both. The one-off override still works when
 you want a target that has no env file:
 
 ```bash
-SUPABASE_URL=https://fdztfosbohiwskzfvwaj.supabase.co \
+SUPABASE_URL=https://farpgkljbmlaeiocrore.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<production key> \
   node scripts/onboard-garage.mjs --garage "..." --email ...
 ```
@@ -620,7 +620,7 @@ Every mobile change now needs checking on both platforms.
 ### Launch tasks not in any phase
 
 - [x] **Create the real production project in `eu-central-1`** and migrate.
-      Done 2026-07-22: `garage-production` (`fdztfosbohiwskzfvwaj`), Frankfurt.
+      Done 2026-07-22: `garage-production` (`farpgkljbmlaeiocrore`), Frankfurt.
       The Seoul demo project has been deleted.
 - [ ] Per-garage invoicing and merchant accounts — ten separate legal businesses,
       each with their own credentials and accountant sign-off. **This coordination,

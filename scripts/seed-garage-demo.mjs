@@ -81,7 +81,7 @@ if (!url || !key) {
 
 const db = createClient(url, key, { auth: { persistSession: false } });
 
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 console.log(`project : ${url}${url.includes(PRODUCTION_PROJECT_REF) ? '   ← PRODUCTION' : ''}`);
 console.log(`mode    : ${APPEND ? 'append — existing rows are kept and worked around' : 'empty garage only'}`);
 
