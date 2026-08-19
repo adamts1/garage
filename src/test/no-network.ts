@@ -29,7 +29,7 @@
 /** The garages' real data. Also in mobile/lib/supabase.ts and in the deploy
  *  scripts — not a secret, and the one string this file must never be wrong
  *  about. */
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 
 const namesProduction = (value: unknown): boolean =>
   typeof value === 'string' && value.includes(PRODUCTION_PROJECT_REF);

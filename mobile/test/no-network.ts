@@ -9,7 +9,7 @@
  * garages. The rule is the same on both sides so that neither has to be the one
  * anybody remembers. */
 
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 
 for (const [name, value] of Object.entries(process.env ?? {})) {
   if (typeof value === 'string' && value.includes(PRODUCTION_PROJECT_REF)) {

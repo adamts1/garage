@@ -46,7 +46,7 @@ function cli() {
 
 const ENVIRONMENTS = [
   { name: 'staging', ref: 'poksqsdklnhaumozriqd' },
-  { name: 'production', ref: 'fdztfosbohiwskzfvwaj' },
+  { name: 'production', ref: 'farpgkljbmlaeiocrore' },
 ];
 
 const c = {

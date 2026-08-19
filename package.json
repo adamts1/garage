@@ -16,7 +16,7 @@
     "functions:status": "node scripts/functions-status.mjs",
     "mobile:status": "node scripts/mobile-status.mjs",
     "functions:push": "supabase functions deploy --project-ref poksqsdklnhaumozriqd",
-    "functions:push:prod": "supabase functions deploy --project-ref fdztfosbohiwskzfvwaj",
+    "functions:push:prod": "supabase functions deploy --project-ref farpgkljbmlaeiocrore",
     "test": "vitest run",
     "onboard": "node --env-file=.env.local scripts/onboard-garage.mjs",
     "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs",

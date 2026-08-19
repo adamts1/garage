@@ -32,7 +32,7 @@ const API = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321';
  * trusted: local by default, anything else only when it is said out loud.
  */
 const LOCAL = /^https?:\/\/(127\.0\.0\.1|localhost|host\.docker\.internal)(:|$)/.test(API);
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 
 if (API.includes(PRODUCTION_PROJECT_REF)) {
   console.error(

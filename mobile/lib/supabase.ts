@@ -26,7 +26,7 @@ export const projectUrl = isConfigured ? url : '';
    here, and matched against the resolved `url`, because a build's environment
    is a claim and this is the observation — lib/env.ts compares the two and the
    badge shouts when they disagree. */
-const PRODUCTION_PROJECT_REF = 'fdztfosbohiwskzfvwaj';
+const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
 
 /** True only when this build is genuinely pointed at the garages' real data. */
 export const isProductionDb = isConfigured && url.includes(PRODUCTION_PROJECT_REF);
