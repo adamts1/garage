@@ -110,11 +110,25 @@ const CSS = `
         margin:9px 3px 0;font-size:11px;color:#666}
   .docbar-k{font-size:12.5px;font-weight:800;color:#1d2d44}
 
+  /* The invoice copy says what it is, once and plainly. A printout that looked
+     like the issued document would be a second paper claiming to be the same
+     tax invoice — so this sits above the figures, not in the small print. */
+  .copybar{margin:6px 0 0;padding:5px 10px;border-radius:6px;background:#f4f5f7;
+        border:1px solid #d8dde5;color:#555;font-size:11px;font-weight:700;text-align:center}
+  .copybar.void{background:#fbeaea;border-color:#e6c9c9;color:#9c3236}
+
   .box{background:#fff;border:1px solid #1d2d44;border-radius:11px;
         padding:13px 13px 9px;margin-top:10px}
   .box.tight{padding:9px}
   .sub-t{font-size:10.5px;font-weight:800;color:#1d2d44;letter-spacing:.3px;
         margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid #e4e8ee}
+
+  /* A box that covers one subject says so, above the columns that divide it.
+     Heavier than .sub-t, which labels the columns themselves — two levels, so
+     "the customer" reads as part of "customer and vehicle" rather than as its
+     equal. */
+  .box-t{font-size:11.5px;font-weight:800;color:#1d2d44;letter-spacing:.2px;
+        margin:-2px 0 9px;padding-bottom:5px;border-bottom:1.5px solid #1d2d44}
 
   /* What the customer owes, said once and said loudly. */
   .sums{width:330px;margin-right:auto;margin-top:9px}
@@ -255,6 +269,38 @@ const workBlock = (w: TicketWork, index: number): string => {
     + `</tbody>`;
 };
 
+/* The garage's own paper: the block every printed document opens with.
+ *
+ * Each line is dropped when that garage has not filled it in, so a garage with
+ * nothing but a name prints exactly the header it printed before letterheads
+ * existed. Nothing here has a default — a placeholder would put one garage's
+ * details on another's paperwork.
+ *
+ * Exported because the invoice copy needs the same one. It was inlined in the
+ * work order, and copying it would have been the start of two letterheads that
+ * agree today. */
+export const letterheadHtml = (): string => {
+  const lh = garageLetterhead();
+  const contact: string[] = [
+    lh.address ? esc(lh.address) : '',
+    lh.taxId ? `ע.מ / ח.פ.<br>${esc(lh.taxId)}` : '',
+    lh.licenseNo ? `מורשה משרד התחבורה<br>${esc(lh.licenseNo)}` : '',
+    [lh.phone ? `טלפון ${esc(lh.phone)}` : '', lh.fax ? `פקס ${esc(lh.fax)}` : '']
+      .filter(Boolean).join('<br>'),
+  ].filter(Boolean);
+
+  return `
+    ${lh.motto ? `<div class="topmotto">${esc(lh.motto)}</div>` : ''}
+    <div class="lh">
+      <div class="lh-name">${esc(garagePrintName())}</div>
+      ${lh.services ? `<div class="lh-rule"><i></i></div>
+        <div class="lh-services">${esc(lh.services)}</div>` : ''}
+      ${contact.length
+        ? `<div class="lh-contact">${contact.map((c) => `<span>${c}</span>`).join('')}</div>`
+        : ''}
+    </div>`;
+};
+
 /** What the window or the print dialog is called. */
 export const workOrderTitle = (t: Ticket): string => `כרטיס עבודה ${t.k}`;
 
@@ -288,25 +334,8 @@ export const workOrderHtml = (
   /* The garage's own paper. Each line is dropped when that garage has not
      filled it in, so a garage with nothing but a name prints exactly the header
      it printed before any of this existed. */
-  const lh = garageLetterhead();
-  const contact: string[] = [
-    lh.address ? esc(lh.address) : '',
-    lh.taxId ? `ע.מ / ח.פ.<br>${esc(lh.taxId)}` : '',
-    lh.licenseNo ? `מורשה משרד התחבורה<br>${esc(lh.licenseNo)}` : '',
-    [lh.phone ? `טלפון ${esc(lh.phone)}` : '', lh.fax ? `פקס ${esc(lh.fax)}` : '']
-      .filter(Boolean).join('<br>'),
-  ].filter(Boolean);
-
   const body = `
-    ${lh.motto ? `<div class="topmotto">${esc(lh.motto)}</div>` : ''}
-    <div class="lh">
-      <div class="lh-name">${esc(garagePrintName())}</div>
-      ${lh.services ? `<div class="lh-rule"><i></i></div>
-        <div class="lh-services">${esc(lh.services)}</div>` : ''}
-      ${contact.length
-        ? `<div class="lh-contact">${contact.map((c) => `<span>${c}</span>`).join('')}</div>`
-        : ''}
-    </div>
+    ${letterheadHtml()}
 
     <div class="docbar">
       <span class="docbar-k">כרטיס עבודה ${esc(t.k)}</span>

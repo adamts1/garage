@@ -395,7 +395,7 @@ export default function TicketPage({
                 {/* A readable copy from the stored row — reachable even when the
                     provider PDF is missing, which is the case for every invoice
                     issued before pdfUrl was captured. */}
-                <button className="btn ghost block" onClick={() => warnIfBlocked(printInvoice(invoice))}>
+                <button className="btn ghost block" onClick={() => warnIfBlocked(printInvoice(invoice, { ticket: draft }))}>
                   <IconPrint /> {t('ticket.printInvoice')}
                 </button>
                 {/* Money back to the customer — part of the bill or the rest of

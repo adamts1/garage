@@ -1,5 +1,5 @@
 import { money, shekelRounded } from '@garage/shared';
-import type { Invoice } from '@garage/shared';
+import type { Invoice, Ticket } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
@@ -16,13 +16,17 @@ const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('he
 
 export interface InvoicesPageProps {
   onOpenTicket: (key: string) => void;
+  /** Only for the printed copy: grouping its lines, and naming the car.
+   *  Nothing on this screen reads a ticket for a figure — see the note below,
+   *  which is the rule these tickets must not be used to break. */
+  tickets: Ticket[];
 }
 
 /* Invoices are READ from the stored, immutable invoices table — one row per
    real document iCount issued. Nothing here recomputes anything from live
    tickets (the §3.1 bug): number, VAT and totals are whatever was frozen at
    issue. See docs/PRODUCTION.md §4a. */
-export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
+export default function InvoicesPage({ onOpenTicket, tickets }: InvoicesPageProps) {
   const { t } = useTranslation();
   const inv = useInvoices();
 
@@ -220,6 +224,7 @@ export default function InvoicesPage({ onOpenTicket }: InvoicesPageProps) {
           statusLabel={statusLabel}
           statusTone={statusTone}
           onOpenTicket={onOpenTicket}
+          ticket={tickets.find((x) => x.k === inv.selected?.ticketKey)}
           creditable={inv.selectedCreditable}
           canCredit={inv.canCredit}
           onCredit={() => void inv.credit(inv.selected!)}

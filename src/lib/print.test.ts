@@ -266,6 +266,99 @@ describe('printInvoice', () => {
     expect(html).toContain('18%');
   });
 
+  /* The layout the ticket screen asked for: works banded, their parts beneath.
+     Only ever a rearrangement of the frozen lines. */
+  it('groups the frozen lines under their works when the works still match', () => {
+    printInvoice(invoice, { ticket: { ...ticket, works: [
+      { uid: 'w1', code: 'BRK-01', name: 'החלפת רפידות', labor: 500, items: [] },
+    ] } });
+    const html = doc();
+    expect(html).toContain('<tbody class="w">');
+    expect(html).toContain('tr class="work"');
+    expect(html).toContain('₪500.00');
+  });
+
+  /* A ticket edited after billing no longer describes what was issued, and a
+     copy that reorganised it by those works would be arranging the customer's
+     tax document around numbers it does not carry. */
+  it('falls back to the flat list when the ticket was edited after billing', () => {
+    printInvoice(invoice, { ticket: { ...ticket, works: [
+      { uid: 'w1', code: 'BRK-01', name: 'שם שהשתנה', labor: 500, items: [] },
+    ] } });
+    const html = doc();
+    expect(html).not.toContain('<tbody class="w">');
+    expect(html).toContain('החלפת רפידות');   // the frozen description, still printed
+  });
+
+  it('prints the flat list when no ticket was handed over', () => {
+    printInvoice(invoice);
+    const html = doc();
+    expect(html).not.toContain('<tbody class="w">');
+    expect(html).toContain('החלפת רפידות');
+  });
+
+  /* Asked for alongside the grouping: what the document itself is. */
+  it('prints the document and customer details', () => {
+    printInvoice({
+      ...invoice,
+      customerPhone: '050-1234567',
+      customerAddress: 'הרצל 15, תל אביב',
+      payReference: 'REF-9',
+    } as Invoice);
+    const html = doc();
+    expect(html).toContain('050-1234567');
+    expect(html).toContain('הרצל 15, תל אביב');
+    expect(html).toContain('אסמכתא');
+    expect(html).toContain('REF-9');
+    expect(html).toContain('מספר מסמך');
+  });
+
+  /* The car is on the ticket and nowhere else — no tax document carries a
+     licence plate — so a copy without the ticket simply says so. */
+  it('names the car from the ticket, minus the vehicle code', () => {
+    printInvoice(invoice, { ticket });
+    const html = doc();
+    expect(html).toContain('12-345-67');       // plate
+    expect(html).toContain('מאזדה 3');          // model
+    expect(html).toContain('180000');           // km
+    expect(html).toContain('1998');             // year
+    expect(html).not.toContain('MZ3-2005');     // the vehicle code, left out
+    expect(html).not.toContain('קוד רכב');
+  });
+
+  it('says the vehicle is unavailable when the ticket is gone', () => {
+    printInvoice(invoice);
+    expect(doc()).toContain('פרטי הרכב אינם זמינים');
+  });
+
+  it('splits the panels into customer-and-vehicle, then invoice', () => {
+    printInvoice(invoice, { ticket });
+    const html = doc();
+    expect(html).toContain('פרטי לקוח ורכב');
+    expect(html).toContain('פרטי חשבונית');
+    expect(html.indexOf('פרטי לקוח ורכב')).toBeLessThan(html.indexOf('פרטי חשבונית'));
+  });
+
+  /* The customer stays frozen even when a ticket is at hand: who the document
+     was made out to is part of the document. */
+  it('takes the customer from the invoice, not from the ticket', () => {
+    printInvoice(invoice, { ticket: { ...ticket, customer: 'מישהו אחר' } });
+    const html = doc();
+    expect(html).toContain('יוסי לוי');
+    expect(html).not.toContain('מישהו אחר');
+  });
+
+  it('carries the garage letterhead, the same one the work order prints', () => {
+    setCurrentGarage({
+      id: 'g1', name: 'מוסך הרצל', role: 'admin',
+      letterhead: { motto: 'ישראל חי', phone: '02-6522306' },
+    });
+    printInvoice(invoice);
+    const html = doc();
+    expect(html).toContain('ישראל חי');
+    expect(html).toContain('02-6522306');
+  });
+
   it('calls itself a copy, so it cannot pass as the issued document', () => {
     printInvoice(invoice);
     expect(doc()).toContain('עותק');
