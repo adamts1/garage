@@ -9,6 +9,7 @@
 
    See docs/PRODUCTION.md §4a and migration 20260727000000_invoices.sql. */
 
+import type { TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
 
 /* Four documents, two of which are bills.
@@ -340,4 +341,79 @@ export const subscribeToInvoices = (onChange: () => void) => {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, onChange)
     .subscribe();
   return () => void getClient().removeChannel(channel);
+};
+
+/* ---------------- regrouping a frozen invoice under its works ----------------
+
+   An invoice's lines are flat and frozen: issue-invoice walked the ticket's
+   works and emitted one line for each work's labour and one for each of its
+   parts, in that order, and what it sent is what the provider printed. Nothing
+   in the stored row says which line was a work and which was a part.
+
+   So the grouping cannot be inferred from the lines alone — a part bought once
+   and a work's labour are both a line with quantity 1 — and guessing would put
+   a part under the wrong heading on a document a customer keeps.
+
+   What can be done is a check rather than a guess: take the ticket's works,
+   emit the lines they WOULD produce under the same rule, and compare against
+   the frozen ones. If every line matches in order, the works are provably the
+   ones this invoice was issued from, and grouping by them shows the same
+   figures better organised. If anything differs — a work renamed, a part
+   repriced, a ticket edited after billing — this returns null and the caller
+   prints the flat list it can vouch for.
+
+   The rule below mirrors supabase/functions/issue-invoice/index.ts. If that
+   one changes, this stops matching and every invoice quietly falls back to
+   flat — which is the safe direction to fail in, but worth knowing. */
+
+/** One work, and the frozen lines that came from it. */
+export interface InvoiceGroup {
+  name: string;
+  /** The work's labour line, absent when the work was not charged for. */
+  labour: InvoiceLine | null;
+  parts: InvoiceLine[];
+}
+
+/** Money compares to the agora; these have been through a float and a database. */
+const sameMoney = (a: number, b: number) => Math.abs(Number(a) - Number(b)) < 0.005;
+
+export const groupInvoiceLines = (
+  inv: Pick<Invoice, 'lines'>,
+  works: readonly TicketWork[] | undefined,
+): InvoiceGroup[] | null => {
+  if (!works?.length || !inv.lines.length) return null;
+
+  const groups: InvoiceGroup[] = [];
+  let i = 0;
+
+  const take = (desc: string, qty: number, unit: number): InvoiceLine | null => {
+    const line = inv.lines[i];
+    if (!line || line.desc !== desc || Number(line.qty) !== qty || !sameMoney(line.unit_price, unit)) {
+      return null;
+    }
+    i += 1;
+    return line;
+  };
+
+  for (const w of works) {
+    const group: InvoiceGroup = { name: w.name, labour: null, parts: [] };
+
+    // `> 0`, and the fallback name, exactly as the issuing function has them.
+    if (Number(w.labor) > 0) {
+      const line = take(w.name || 'עבודה', 1, Number(w.labor));
+      if (!line) return null;
+      group.labour = line;
+    }
+    for (const p of w.items) {
+      if (Number(p.price) === 0) continue;
+      const line = take(p.name || 'חלק', Number(p.qty) || 1, Number(p.price));
+      if (!line) return null;
+      group.parts.push(line);
+    }
+    if (group.labour || group.parts.length) groups.push(group);
+  }
+
+  // Lines left over belong to something these works do not explain.
+  if (i !== inv.lines.length) return null;
+  return groups.length ? groups : null;
 };

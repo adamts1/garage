@@ -1,5 +1,5 @@
 import { money } from '@garage/shared';
-import type { Invoice } from '@garage/shared';
+import type { Invoice, Ticket } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Pill } from '../../components/Pill';
@@ -19,6 +19,11 @@ export interface InvoiceDetailProps {
   statusTone: (s: Invoice['status']) => 'ok' | 'danger';
   statusLabel: (s: Invoice['status']) => string;
   onOpenTicket: (key: string) => void;
+  /** The ticket this document was issued from, when it is still on the board.
+   *  Used only by the printed copy: its works decide how the frozen lines are
+   *  grouped, and its vehicle names the car — which no invoice carries. Every
+   *  figure printed comes from the invoice itself. */
+  ticket?: Ticket;
   /** What is still creditable on this document — 0 for a credit note, for a
    *  cancelled invoice, and for one already given back in full. */
   creditable: number;
@@ -29,7 +34,7 @@ export interface InvoiceDetailProps {
 }
 
 export default function InvoiceDetail({
-  invoice, docLabel, statusTone, statusLabel, onOpenTicket, creditable, canCredit, onCredit, busy,
+  invoice, docLabel, statusTone, statusLabel, onOpenTicket, ticket, creditable, canCredit, onCredit, busy,
 }: InvoiceDetailProps) {
   const { t } = useTranslation();
 
@@ -121,7 +126,7 @@ export default function InvoiceDetail({
         {/* The stored row, laid out as a document. Printing the page itself gave
             you the sidebar, the KPI cards and the filter bar around a table —
             and nothing at all when no provider PDF existed. */}
-        <Button onClick={() => warnIfBlocked(printInvoice(invoice))}>
+        <Button onClick={() => warnIfBlocked(printInvoice(invoice, { ticket }))}>
           <IconPrint /> {t('invoices.printCopy')}
         </Button>
 

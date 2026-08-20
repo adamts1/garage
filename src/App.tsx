@@ -164,7 +164,7 @@ export default function App() {
                 }
               />
 
-              <Route path="/invoices" element={<InvoicesPage onOpenTicket={openTicket} />} />
+              <Route path="/invoices" element={<InvoicesPage onOpenTicket={openTicket} tickets={tickets} />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/suppliers" element={<SuppliersPage />} />
               <Route path="/customers" element={<CustomersPage />} />
