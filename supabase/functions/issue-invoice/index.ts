@@ -206,6 +206,121 @@ Deno.serve(async (req) => {
       return json({ invoice: inserted });
     }
 
+    /* ====================== ISSUE, NO TICKET ======================
+
+       A counter sale: one part, one customer, no work order. The lines are
+       typed rather than derived, which is the whole difference and the whole
+       risk — nothing upstream has priced them, so this is the one place in the
+       system where somebody decides what a customer is charged by typing it.
+
+       That is why it is admin-only. Billing a ticket is not: its amounts come
+       from works, and only an admin can price a work (save_ticket_works
+       enforces it). Keeping the same hand on both means the rule is "whoever
+       may set a price may issue a document for it" rather than two rules that
+       happen to differ.
+
+       Idempotent on a key the caller mints, because there is no ticket to
+       deduplicate on and a second click would buy a second legal number. */
+    if (action === 'issue_standalone') {
+      const { data: isAdmin, error: roleErr } = await userClient.rpc('is_garage_admin');
+      if (roleErr) return json({ error: roleErr.message }, 400);
+      if (!isAdmin) return json({ error: 'only an admin may issue an invoice with no work order behind it' }, 403);
+
+      /* The garage comes from the caller's own membership, never from the body:
+         a garage_id in a request is a garage_id somebody can change. */
+      const { data: garages, error: gErr } = await userClient.rpc('my_garages');
+      if (gErr) return json({ error: gErr.message }, 400);
+      const garageId = garages?.[0]?.garage_id as string | undefined;
+      if (!garageId) return json({ error: 'no garage for this user' }, 403);
+
+      const key = body.idempotency_key as string | undefined;
+      if (!key) return json({ error: 'idempotency_key required' }, 400);
+
+      // Already issued under this key: hand back that document, ask for nothing.
+      const { data: already } = await admin
+        .from('invoices').select('*')
+        .eq('garage_id', garageId).eq('idempotency_key', key)
+        .maybeSingle();
+      if (already) return json({ invoice: already, reused: true });
+
+      const customerName = String(body.customer_name ?? '').trim();
+      if (!customerName) return json({ error: 'customer_name required' }, 400);
+
+      /* Validated here rather than trusted from the form: this builds a legal
+         document, and a line with a NaN price would reach the provider as one. */
+      const rawLines = Array.isArray(body.lines) ? body.lines : [];
+      const items: InvoiceItem[] = [];
+      for (const l of rawLines) {
+        const description = String(l?.desc ?? '').trim();
+        const quantity = Number(l?.qty);
+        const unitprice = Number(l?.unit_price);
+        if (!description) return json({ error: 'every line needs a description' }, 400);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          return json({ error: `quantity must be a positive number: "${description}"` }, 400);
+        }
+        if (!Number.isFinite(unitprice) || unitprice < 0) {
+          return json({ error: `price must be a number: "${description}"` }, 400);
+        }
+        items.push({ description, quantity, unitprice });
+      }
+      if (items.length === 0) return json({ error: 'nothing to invoice — no lines' }, 400);
+
+      const { provider, adapter, credentials, vatRate, defaultDocType } = await billing(garageId);
+
+      const docType = (body.doc_type as BillDocType) ?? defaultDocType;
+      if (docType !== 'invoice_receipt' && docType !== 'tax_invoice') {
+        return json({ error: `a counter sale is an invoice-receipt or a tax invoice, not ${docType}` }, 400);
+      }
+
+      const subtotal = round2(items.reduce((s, i) => s + i.unitprice * i.quantity, 0));
+      const vat = round2(subtotal * vatRate);
+      const total = round2(subtotal + vat);
+
+      const payMethod = docType === 'invoice_receipt' ? (body.pay_method as string | null) ?? null : null;
+
+      const doc = await adapter.issue({
+        credentials,
+        docType,
+        customer: {
+          name: customerName,
+          idNo: (body.customer_id_number as string) || undefined,
+          address: (body.customer_address as string) || undefined,
+        },
+        items,
+        payMethod,
+        total,
+      });
+
+      const row = {
+        garage_id: garageId,
+        ticket_id: null,
+        ticket_key: null,
+        doc_type: docType,
+        provider,
+        provider_docnum: doc.docnum,
+        allocation_number: doc.allocationNumber,
+        provider_doc_id: doc.docId,
+        pdf_url: doc.pdfUrl,
+        issued_at: doc.issueDate ? new Date(doc.issueDate).toISOString() : new Date().toISOString(),
+        customer_name: customerName,
+        customer_id_number: (body.customer_id_number as string) || null,
+        customer_address: (body.customer_address as string) || null,
+        customer_phone: (body.customer_phone as string) || null,
+        lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        subtotal,
+        vat_rate: vatRate,
+        vat,
+        total,
+        pay_method: payMethod,
+        pay_reference: (body.pay_reference as string) || null,
+        status: 'issued',
+        idempotency_key: key,
+      };
+      const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
+      if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
+      return json({ invoice: inserted });
+    }
+
     /* =========================== COLLECT ===========================
 
        Money arriving against a חשבונית מס, as its own document — which is what

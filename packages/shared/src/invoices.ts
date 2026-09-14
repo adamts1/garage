@@ -159,6 +159,55 @@ export const issueInvoice = async (
  * The invoice is not edited: an issued document never is. What is still owed is
  * the bill less the receipts and credits against it, so this only ever inserts.
  */
+/** One typed line on a counter sale. Pre-VAT, like every price in this system. */
+export interface StandaloneLine {
+  desc: string;
+  qty: number;
+  unit_price: number;
+}
+
+export interface StandaloneInvoiceInput {
+  /* Minted when the dialog OPENS, not when the button is pressed.
+     That is the whole point of it: every press of one dialog carries the same
+     key, so a slow first request and an impatient second click produce one
+     document rather than two legal numbers to credit back. */
+  idempotencyKey: string;
+  customerName: string;
+  customerIdNumber?: string | null;
+  customerAddress?: string | null;
+  customerPhone?: string | null;
+  lines: readonly StandaloneLine[];
+  docType?: BillDocType;
+  /** Only meaningful on an invoice-receipt: a tax invoice records no payment. */
+  payMethod?: string | null;
+  payReference?: string | null;
+}
+
+/** Issue a document with no work order behind it — a counter sale.
+ *
+ *  Admin only, and the Edge Function is where that is enforced. Billing a
+ *  ticket is open to anyone because its amounts come from works that only an
+ *  admin could price; here the amounts are typed, so the same hand has to be on
+ *  it. A member calling this gets a 403, not a document. */
+export const issueStandaloneInvoice = async (input: StandaloneInvoiceInput): Promise<Invoice> => {
+  const { data, error } = await getClient().functions.invoke('issue-invoice', {
+    body: {
+      action: 'issue_standalone',
+      idempotency_key: input.idempotencyKey,
+      doc_type: input.docType ?? 'invoice_receipt',
+      customer_name: input.customerName,
+      customer_id_number: input.customerIdNumber ?? null,
+      customer_address: input.customerAddress ?? null,
+      customer_phone: input.customerPhone ?? null,
+      pay_method: input.payMethod ?? null,
+      pay_reference: input.payReference ?? null,
+      lines: input.lines.map((l) => ({ desc: l.desc, qty: l.qty, unit_price: l.unit_price })),
+    },
+  });
+  if (error) throw await invokeError(error);
+  return rowToInvoice(data.invoice);
+};
+
 export const collectInvoice = async (
   invoiceId: string,
   amount?: number,

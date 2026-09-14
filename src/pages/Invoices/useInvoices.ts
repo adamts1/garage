@@ -1,7 +1,8 @@
 import {
-  creditInvoice, creditableRemainder, isGarageAdmin, listInvoices, money, subscribeToInvoices,
-  type Invoice,
+  creditInvoice, creditableRemainder, isGarageAdmin, issueStandaloneInvoice, listInvoices, money,
+  subscribeToInvoices, type Invoice,
 } from '@garage/shared';
+import type { CounterSale } from '../../features/invoices';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useModalResult } from '../../store';
 import { headline, netTotal } from './invoiceTotals';
@@ -12,6 +13,7 @@ export type DocTypeFilter = 'all' | Invoice['docType'];
 export function useInvoices() {
   const dispatch = useAppDispatch();
   const openModal = useModalResult<{ amount: number; reason: string } | null>();
+  const openCounterSale = useModalResult<CounterSale>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [crediting, setCrediting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -93,6 +95,44 @@ export function useInvoices() {
 
   const filtered = status !== 'all' || docType !== 'all' || query.trim() !== '';
 
+  /* A document with no work order behind it — a part sold over the counter.
+     The dialog collects it, this issues it, and the ledger is re-read.
+
+     `issuing` is not only a spinner: the button it disables is the one that
+     asks a provider for a legal number, and the dialog's idempotency key is
+     what covers the click that gets through anyway. */
+  const [issuing, setIssuing] = useState(false);
+  const counterSale = useCallback(async () => {
+    const sale = await openCounterSale('counterSale', {});
+    if (!sale) return;
+    setIssuing(true);
+    try {
+      const inv = await issueStandaloneInvoice({
+        idempotencyKey: sale.idempotencyKey,
+        customerName: sale.customerName,
+        customerIdNumber: sale.customerIdNumber || null,
+        customerPhone: sale.customerPhone || null,
+        customerAddress: sale.customerAddress || null,
+        docType: sale.docType,
+        payMethod: sale.payMethod,
+        lines: sale.lines,
+      });
+      /* Re-read rather than wait to be told. The same line is in `credit`
+         above, and for the same reason: subscribeToInvoices listens to a table
+         that was never in the realtime publication, so nothing was ever
+         delivered. 20260820100000 publishes it — and even once that is
+         deployed, the client that just issued the document should not be
+         waiting on a round trip through the broadcaster to see its own work. */
+      setInvoices(await listInvoices());
+      setSelectedId(inv.id);
+      dispatch(showSuccess('counterSale.issued', { docnum: inv.docnum }));
+    } catch (e) {
+      dispatch(showError(e));
+    } finally {
+      setIssuing(false);
+    }
+  }, [dispatch, openCounterSale]);
+
   const clear = () => {
     setQuery('');
     setStatus('all');
@@ -107,6 +147,12 @@ export function useInvoices() {
     clear,
     credit,
     crediting,
+    counterSale,
+    issuing,
+    /* Same rule as crediting: the function refuses a member, so the button is
+       not offered to one. Typing a price into a document is the admin's act
+       that pricing a work already was. */
+    canIssue: isGarageAdmin(),
     /* What is left on the open document, and whether this user may hand it
        back. A member sees the ledger and not the button — the function refuses
        them anyway, and a button that always fails is worse than none. */

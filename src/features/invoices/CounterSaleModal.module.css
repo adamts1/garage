@@ -1,0 +1,123 @@
+.lede {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.block:first-of-type {
+  padding-top: 0;
+  margin-top: 8px;
+  border-top: 0;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--muted-d);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+
+/* ---- the lines ----
+
+   A grid rather than a table: the columns have to hold their widths while rows
+   are added and removed, and the last two are a figure and a button that must
+   not be squeezed by a long description. */
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 1fr 76px 104px 92px 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+.lineTotal {
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.addRow {
+  margin-top: 2px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addRow:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ---- totals ---- */
+.totals {
+  margin-top: 16px;
+  margin-inline-start: auto;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.totals b { white-space: nowrap; }
+
+/* The rate the provider will actually use lives on the server, so these two
+   are marked as what they are rather than presented as the document's figures. */
+.est { color: var(--muted); }
+.grand {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 2px solid var(--border);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.warning {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 620px) {
+  .line {
+    grid-template-columns: 1fr 60px 88px 36px;
+  }
+  .lineTotal { display: none; }
+}

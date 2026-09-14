@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { CloseTicketModal } from '../../features/ticket/CloseTicketModal';
 import CreditNoteModal from '../../features/ticket/CreditNoteModal';
+import CounterSaleModal from '../../features/invoices/CounterSaleModal';
 import IssueInvoiceModal from '../../features/ticket/IssueInvoiceModal';
 import ItemPickerModal from '../../features/works/ItemPickerModal';
 import WorkPickerModal from '../../features/works/WorkPickerModal';
@@ -21,6 +22,7 @@ import type { ModalComponentProps } from './types';
 export const MODAL_REGISTRY: Record<string, ComponentType<ModalComponentProps>> = {
   confirm: ConfirmModal,
   prompt: PromptModal,
+  counterSale: CounterSaleModal,
   issueInvoice: IssueInvoiceModal,
   creditNote: CreditNoteModal,
   /* Collecting on a bill opens `closeTicket` in collect mode — same drawer,

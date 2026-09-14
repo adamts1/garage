@@ -1,6 +1,7 @@
 import { money, shekelRounded } from '@garage/shared';
 import type { Invoice, Ticket } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
+import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
@@ -134,7 +135,18 @@ export default function InvoicesPage({ onOpenTicket, tickets }: InvoicesPageProp
 
   return (
     <>
-      <PageHeader title="invoices.title" subtitle="invoices.subtitle" />
+      <PageHeader
+        title="invoices.title"
+        subtitle="invoices.subtitle"
+        actions={inv.canIssue && (
+          /* A document with no ticket behind it. Offered here rather than on
+             the board because that is what it is: a sale that never became a
+             job. Admin only — the Edge Function refuses a member either way. */
+          <Button variant="primary" onClick={() => void inv.counterSale()} disabled={inv.issuing}>
+            <IconDoc /> {inv.issuing ? t('counterSale.issuing') : t('counterSale.open')}
+          </Button>
+        )}
+      />
 
       <KpiRow>
         <KpiCard
