@@ -5,7 +5,7 @@
   border-radius: 12px;
   background: var(--surface-2);
   font: inherit;
-  font-size: 15px;
+  font-size: 17px;
   text-align: right;
   margin-bottom: 10px;
 }
@@ -37,7 +37,7 @@
   border-radius: 10px;
   text-align: right;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15.5px;
   cursor: pointer;
 }
 
@@ -48,16 +48,16 @@
 .empty {
   padding: 28px 16px;
   text-align: center;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .muted {
-  color: var(--muted);
-  font-size: 12.5px;
+  color: var(--ink);
+  font-size: 14.5px;
   margin-top: 6px;
 }
 
 .hint {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 14px;
 }

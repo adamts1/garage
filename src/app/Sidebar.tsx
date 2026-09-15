@@ -1,4 +1,4 @@
-import { garageName, isGarageAdmin, signedInAs, signOut, type Worker } from '@garage/shared';
+import { garageName, isGarageAdmin, signedInAs, type Worker } from '@garage/shared';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -43,10 +43,14 @@ export interface SidebarProps {
   pinned: boolean;
   onPinToggle: () => void;
   onHoverChange: (hovered: boolean) => void;
+  /* From the shell rather than signOut() directly: an open ticket may have
+     unsaved edits, and signing out unmounts it without a navigation for the
+     router to hold. */
+  onSignOut: () => void;
 }
 
 export default function Sidebar({
-  activeCount, workers, expanded, pinned, onPinToggle, onHoverChange,
+  activeCount, workers, expanded, pinned, onPinToggle, onHoverChange, onSignOut,
 }: SidebarProps) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
@@ -128,7 +132,7 @@ export default function Sidebar({
             )}
             <div className="status-badge">{t('nav.open')}</div>
             <div className="footer-note">{t('nav.activeTickets', { count: activeCount })}</div>
-            <button className="sign-out" onClick={() => void signOut()}>{t('nav.signOut')}</button>
+            <button className="sign-out" onClick={onSignOut}>{t('nav.signOut')}</button>
           </>
         ) : (
           <>
@@ -146,7 +150,7 @@ export default function Sidebar({
             <div className="status-dot" title={t('nav.activeTickets', { count: activeCount })} />
             <button
               className="sign-out icon-only"
-              onClick={() => void signOut()}
+              onClick={onSignOut}
               title={t('nav.signOut')}
             >
               ⏻

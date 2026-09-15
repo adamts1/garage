@@ -21,7 +21,7 @@
 }
 
 .filter > span {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--muted-d);
 }
@@ -33,7 +33,7 @@
   border-radius: 10px;
   background: var(--surface);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   text-align: right;
 }
 
@@ -46,7 +46,7 @@
 .clear {
   color: var(--slate);
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 14.5px;
   padding: 10px 4px;
   border: none;
   background: none;

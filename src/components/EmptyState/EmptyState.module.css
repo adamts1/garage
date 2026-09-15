@@ -34,14 +34,14 @@
 
 .title {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .body {
   margin: 0;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 15px;
+  color: var(--ink);
   max-width: 40ch;
 }
 

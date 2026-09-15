@@ -17,7 +17,7 @@
   background: none;
   font: inherit;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink);
   white-space: nowrap;
   cursor: pointer;
   /* The active underline sits on the element itself rather than on a pseudo

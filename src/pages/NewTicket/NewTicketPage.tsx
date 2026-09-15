@@ -30,13 +30,16 @@ export interface NewTicketPageProps {
   workers: Worker[];
   onDone: () => void;
   onCancel: () => void;
+  /** Told whenever the form goes from blank to started and back, so the shell
+   *  can ask before any way out of the page throws the typing away. */
+  onDirtyChange?: (started: boolean) => void;
 }
 
 export default function NewTicketPage({
-  tickets, setTickets, workers, onDone, onCancel,
+  tickets, setTickets, workers, onDone, onCancel, onDirtyChange,
 }: NewTicketPageProps) {
   const { t } = useTranslation();
-  const form = useNewTicket({ tickets, setTickets, onDone });
+  const form = useNewTicket({ tickets, setTickets, onDone, onDirtyChange });
   const [tab, setTab] = useState<1 | 2>(1);
 
   const field = (key: 'customerName' | 'customerPhone' | 'idNumber' | 'address' | 'email'

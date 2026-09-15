@@ -8,7 +8,7 @@
 
 .tableTitle {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
 }
 
@@ -18,8 +18,8 @@
 }
 
 .sub {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 14px;
 }
 
 .amount {

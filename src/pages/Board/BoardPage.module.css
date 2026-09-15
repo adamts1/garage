@@ -44,7 +44,7 @@
   border-radius: 50%;
   display: inline-grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   color: #fff;
   border: 2px solid var(--surface);
@@ -66,7 +66,7 @@
 
 .all {
   background: var(--surface-2);
-  color: var(--muted);
+  color: var(--ink);
 }
 
 /* ---------- view toggle ---------- */
@@ -89,7 +89,7 @@
   background: none;
   border-radius: 9px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--muted-d);
   cursor: pointer;
@@ -119,7 +119,7 @@
   border-radius: 10px;
   background: var(--surface);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   min-width: 240px;
 }
 .search:focus {
@@ -128,8 +128,8 @@
 }
 
 .shown {
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--ink);
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -179,7 +179,7 @@
   gap: 8px;
   padding: 12px 14px;
   font-weight: 800;
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--muted-d);
   border-bottom: 1px solid var(--border);
 }
@@ -197,12 +197,12 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 1px 9px;
-  font-size: 11.5px;
+  font-size: 13.5px;
   color: var(--muted-d);
 }
 
 .wip {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 800;
   color: var(--danger);
   background: var(--danger-soft);
@@ -248,16 +248,16 @@
 
 .cardTitle {
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15.5px;
   line-height: 1.35;
   margin: 7px 0;
   color: var(--text);
 }
 
 .cardCar {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink);
 }
 
 /* ---------- drag feedback ---------- */
@@ -290,13 +290,13 @@
   padding: 1px 7px;
   border-radius: 5px;
   border: 1px solid var(--border);
-  font-size: 10.5px;
+  font-size: 12.5px;
   letter-spacing: 0.4px;
   direction: ltr;
 }
 
 .epic {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   padding: 2px 7px;
   border-radius: 5px;
@@ -307,7 +307,7 @@
 .tblKey {
   font-weight: 800;
   color: var(--muted-d);
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -318,7 +318,7 @@
 
 .blocked {
   margin-inline-start: 6px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 800;
   color: var(--danger);
   background: var(--danger-soft);
@@ -334,7 +334,7 @@
   border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }

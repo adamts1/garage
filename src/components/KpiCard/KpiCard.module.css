@@ -32,7 +32,7 @@
 }
 
 .label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--muted-d);
   flex: 1;
@@ -54,15 +54,15 @@
 }
 
 .value {
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 800;
   line-height: 1.2;
 }
 
 .sub {
   margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--muted);
+  font-size: 13.5px;
+  color: var(--ink);
 }
 
 /* ---------- tones ---------- */

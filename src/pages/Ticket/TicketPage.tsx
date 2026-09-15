@@ -22,6 +22,9 @@ export interface TicketPageProps {
   /** Code → chip, retired workers included: this page shows history. */
   workerChips: WorkerMap;
   onBack: () => void;
+  /** Told whenever the page gains or loses unsaved edits, so the shell can ask
+   *  before any way out of the page throws them away. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const STEPS = [
@@ -41,10 +44,10 @@ const Val = ({ children }: { children?: string | number | null }) =>
     : <>{children}</>;
 
 export default function TicketPage({
-  ticket, setTickets, workers, workerChips, onBack,
+  ticket, setTickets, workers, workerChips, onBack, onDirtyChange,
 }: TicketPageProps) {
   const { t } = useTranslation();
-  const page = useTicketPage({ ticket, setTickets, onBack });
+  const page = useTicketPage({ ticket, setTickets, onBack, onDirtyChange });
   const { photos, invoice, busy, totals, works, dirty } = page;
 
   /* Everything on this screen reads the DRAFT, not the row. The row is what the

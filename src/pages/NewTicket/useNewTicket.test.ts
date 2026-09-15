@@ -210,3 +210,50 @@ describe('the field-level indication', () => {
     expect(setTickets).toHaveBeenCalledTimes(1);
   });
 });
+
+/* The shell asks before a started intake is thrown away — by the sidebar, Back,
+   or signing out — so the form has to say when it has been started, and stop
+   saying so once the ticket is saved. */
+describe('reporting a started form', () => {
+  const setup = () => {
+    const reports: boolean[] = [];
+    const onDirtyChange = (started: boolean) => { reports.push(started); };
+    const view = renderHook(() =>
+      useNewTicket({ tickets: [], setTickets: vi.fn(), onDone: vi.fn(), onDirtyChange }),
+    );
+    return { ...view, reports };
+  };
+
+  it('reports a blank form as not started', () => {
+    const { reports } = setup();
+    expect(reports[reports.length - 1]).toBe(false);
+  });
+
+  it('reports started from the first thing typed, before anything is complete', () => {
+    const { result, reports } = setup();
+    act(() => result.current.set('customerSearch', 'ד'));
+    expect(reports[reports.length - 1]).toBe(true);
+  });
+
+  it('counts a work added with nothing else filled in', () => {
+    const { result, reports } = setup();
+    act(() => result.current.setWorks([{ id: 'w1', items: [] } as never]));
+    expect(reports[reports.length - 1]).toBe(true);
+  });
+
+  it('reports not started once the ticket is saved, before it navigates away', () => {
+    const { result, reports } = setup();
+    act(() => {
+      result.current.set('customerName', 'ישראל ישראלי');
+      result.current.set('customerPhone', '050-1234567');
+      result.current.set('licensePlate', '12-345-67');
+      result.current.set('manufacturer', 'טויוטה');
+      result.current.set('km', '88900');
+      result.current.set('keyReceived', true);
+    });
+    expect(reports[reports.length - 1]).toBe(true);
+
+    act(() => { result.current.submit(); });
+    expect(reports[reports.length - 1]).toBe(false);
+  });
+});

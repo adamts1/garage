@@ -5,7 +5,7 @@
 .key {
   font-weight: 800;
   color: var(--muted-d);
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -18,7 +18,7 @@
   display: inline-block;
   padding: 2px 8px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -29,7 +29,7 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
   direction: ltr;
 }
@@ -41,7 +41,7 @@
   display: inline-grid;
   place-items: center;
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 

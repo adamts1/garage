@@ -19,6 +19,9 @@ export interface UseTicketPageOptions {
   ticket: Ticket;
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
   onBack: () => void;
+  /** Reports unsaved edits up to the shell, which asks before any exit — the
+   *  sidebar, Back, signing out — discards them. See app/useLeaveGuard. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** Of the receipts on a ticket, the live one — else the most recent. A ticket
@@ -57,7 +60,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
    on `customers`, not on `tickets`, so it is held beside the draft rather than
    inside it — otherwise every ticket read back from the server would look
    edited the moment the customer had a number. */
-export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptions) {
+export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: UseTicketPageOptions) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const run = useBusyRun();
@@ -430,8 +433,11 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     if (!ok) return;
     setTickets((prev) => prev.filter((t) => t.k !== ticket.k));
     dispatch(showSuccess('ticket.deleted'));
+    /* The edits went with the ticket. Cleared before navigating, or the shell
+       would ask about discarding changes to a ticket that no longer exists. */
+    onDirtyChange?.(false);
     onBack();
-  }, [confirm, dispatch, invoice, onBack, setTickets, ticket.k]);
+  }, [confirm, dispatch, invoice, onBack, onDirtyChange, setTickets, ticket.k]);
 
   /** Opens the close-and-charge drawer and applies whatever it comes back with.
    *  A dismissed drawer resolves null and changes nothing.
@@ -540,11 +546,13 @@ export function useTicketPage({ ticket, setTickets, onBack }: UseTicketPageOptio
     [collect, dispatch, draft, invoice, issueNow, openCloseDrawer, owed, save, t, totals.total],
   );
 
-  /** Leaving with something unsaved asks first. */
-  const leave = useCallback(async () => {
-    if (dirty && !(await confirm({ bodyKey: 'ticket.confirmLeave', danger: true }))) return;
-    onBack();
-  }, [confirm, dirty, onBack]);
+  /* Leaving with something unsaved asks first — but not here. The close button
+     is one exit of several, and the question is asked once, by the shell, for
+     all of them (app/useLeaveGuard). Asking here as well would ask twice. */
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
+  const leave = useCallback(async () => { onBack(); }, [onBack]);
 
   /* Closing the tab is the one exit this page cannot put a dialog in front of,
      so it uses the browser's own. Registered only while there is something to

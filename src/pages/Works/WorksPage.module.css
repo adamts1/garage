@@ -13,7 +13,7 @@
   border-radius: 10px;
   background: var(--surface);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15.5px;
   text-align: right;
 }
 .search:focus {
@@ -25,10 +25,10 @@
    already written keeps the price it was written at. */
 .hint {
   margin: -6px 0 14px;
-  font-size: 12.5px;
-  color: var(--muted);
+  font-size: 14.5px;
+  color: var(--ink);
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--ink);
 }

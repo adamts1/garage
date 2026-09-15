@@ -27,7 +27,7 @@
   border-radius: 5px;
   background: #eef1f5;
   color: #3e5c76;
-  font-size: 13px;
+  font-size: 15px;
   direction: ltr;
   display: inline-block;
 }
@@ -37,7 +37,7 @@
   border-radius: 8px;
   background: #1d2d44;
   color: #dbe3ec;
-  font-size: 12.5px;
+  font-size: 14.5px;
   direction: ltr;
   text-align: left;
   overflow-x: auto;
@@ -47,6 +47,6 @@
 
 /* Was the global .text-muted; local now, with the one screen that uses it. */
 .muted {
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--ink);
+  font-size: 15px;
 }

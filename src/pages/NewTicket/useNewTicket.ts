@@ -110,11 +110,31 @@ export interface UseNewTicketOptions {
   tickets: Ticket[];
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
   onDone: () => void;
+  /** Reports whether anything has been entered yet, up to the shell, which asks
+   *  before any exit discards it. See app/useLeaveGuard. */
+  onDirtyChange?: (started: boolean) => void;
 }
 
-export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOptions) {
+export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: UseNewTicketOptions) {
   const [form, setForm] = useState<TicketForm>(emptyForm);
   const [works, setWorks] = useState<TicketWork[]>([]);
+
+  /* Started means anything at all differs from a blank form — a search typed,
+     a box ticked, a work added. Not "enough to save": a half-filled intake is
+     exactly the one worth warning about. */
+  const started = works.length > 0 || JSON.stringify(form) !== JSON.stringify(emptyForm);
+
+  useEffect(() => { onDirtyChange?.(started); }, [started, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
+  /* Closing or reloading the tab is the one exit no in-app dialog can stand in
+     front of — same as the ticket page, it goes to the browser's own. */
+  useEffect(() => {
+    if (!started) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [started]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showMatches, setShowMatches] = useState(false);
@@ -336,9 +356,12 @@ export function useNewTicket({ tickets, setTickets, onDone }: UseNewTicketOption
     };
 
     setTickets((prev) => [ticket, ...prev]);
+    /* Saved, so nothing is lost by leaving. Cleared before navigating, or the
+       shell would ask about discarding the ticket that was just opened. */
+    onDirtyChange?.(false);
     onDone();
     return true;
-  }, [canSave, form, onDone, setTickets, tickets, totals.total, works]);
+  }, [canSave, form, onDirtyChange, onDone, setTickets, tickets, totals.total, works]);
 
   return {
     form, set, works, setWorks,

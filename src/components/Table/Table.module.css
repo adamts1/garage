@@ -25,7 +25,7 @@
 .table th {
   background: var(--surface-2);
   color: var(--muted-d);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   text-align: right;
   padding: 12px 14px;
@@ -51,7 +51,7 @@
 }
 
 .sortArrow {
-  font-size: 9px;
+  font-size: 11px;
   margin-inline-start: 5px;
   color: var(--steel);
 }
@@ -59,7 +59,7 @@
 .table td {
   padding: 11px 14px;
   border-bottom: 1px solid var(--border-soft);
-  font-size: 13px;
+  font-size: 15px;
   vertical-align: middle;
 }
 
@@ -79,15 +79,15 @@
 }
 
 .empty {
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--ink);
+  font-size: 15px;
   text-align: center;
   padding: 28px 14px;
 }
 
 .footer {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 14px;
   background: var(--surface-2);
 }
 

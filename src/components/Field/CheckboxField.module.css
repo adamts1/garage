@@ -10,7 +10,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   /* Lines up with the controls in a CrudForm row, whose labels sit above. */
@@ -27,8 +27,8 @@
 
 .hint {
   margin: 4px 0 0;
-  font-size: 11.5px;
-  color: var(--muted);
+  font-size: 13.5px;
+  color: var(--ink);
 }
 
 /* An unticked box that has to be ticked. Colouring the label as well as the
@@ -45,7 +45,7 @@
 
 .error {
   margin: 4px 0 0;
-  font-size: 11.5px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--danger);
 }

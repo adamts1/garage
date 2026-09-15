@@ -58,10 +58,10 @@
   margin: 0 auto 18px;
   box-shadow: 0 10px 24px rgba(29, 45, 68, .22);
 }
-.title { margin: 0; font-size: 38px; font-weight: 800; color: #1d2d44; text-align: center; }
-.tagline { margin: 6px 0 30px; font-size: 14.5px; color: #7a8699; text-align: center; }
+.title { margin: 0; font-size: 40px; font-weight: 800; color: #1d2d44; text-align: center; }
+.tagline { margin: 6px 0 30px; font-size: 16.5px; color: #7a8699; text-align: center; }
 
-.loginCard label { font-size: 13.5px; font-weight: 700; color: #1d2d44; margin: 14px 0 7px; }
+.loginCard label { font-size: 15.5px; font-weight: 700; color: #1d2d44; margin: 14px 0 7px; }
 
 .field { position: relative; display: flex; align-items: center; }
 .fieldIcon {
@@ -74,7 +74,7 @@
   border: 1px solid #e3e6ea;
   border-radius: 12px;
   background: #fff; color: #1d2d44;
-  font: inherit; font-size: 14px; text-align: right;
+  font: inherit; font-size: 16px; text-align: right;
 }
 .field input::placeholder { color: #a4adbb; }
 .field input:focus { outline: 2px solid #2a3d5a; outline-offset: 1px; border-color: transparent; }
@@ -85,17 +85,17 @@
 }
 
 .row { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 2px; }
-.remember { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #66707f; margin: 0; }
+.remember { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: #66707f; margin: 0; }
 .remember input { width: auto; margin: 0; }
-.forgot { background: none; border: 0; padding: 0; cursor: pointer; color: #3e5c76; font: inherit; font-size: 13px; font-weight: 600; }
+.forgot { background: none; border: 0; padding: 0; cursor: pointer; color: #3e5c76; font: inherit; font-size: 15px; font-weight: 600; }
 .forgot:hover { text-decoration: underline; }
-.notice { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #eef2f7; color: #3e5c76; font-size: 13px; }
+.notice { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #eef2f7; color: #3e5c76; font-size: 15px; }
 
 .submit {
   margin-top: 22px;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   background: #1d2d44; color: #fff; border: 0; border-radius: 12px;
-  padding: 16px; font: inherit; font-size: 15.5px; font-weight: 700; cursor: pointer;
+  padding: 16px; font: inherit; font-size: 17.5px; font-weight: 700; cursor: pointer;
 }
 .submit:hover:not(:disabled) { background: #22344e; }
 .submit:disabled { opacity: .55; cursor: default; }
@@ -103,15 +103,15 @@
 .secure {
   margin-top: 26px;
   display: flex; align-items: center; justify-content: center; gap: 7px;
-  color: #8a94a6; font-size: 12.5px;
+  color: #8a94a6; font-size: 14.5px;
 }
 
 @media (max-width: 560px) {
   .signIn { padding: 24px 16px; }
   .loginCard { border-radius: 18px; padding: 34px 24px 26px; }
   .logo { width: 78px; height: 78px; border-radius: 18px; margin-bottom: 14px; }
-  .title { font-size: 30px; }
-  .tagline { font-size: 13px; margin-bottom: 22px; }
+  .title { font-size: 32px; }
+  .tagline { font-size: 15px; margin-bottom: 22px; }
   .signIn::before { width: 80vw; height: 46vh; top: -20vh; left: -26vw; }
   .signIn::after { width: 74vw; height: 42vh; bottom: -20vh; right: -22vw; }
 }
@@ -137,8 +137,8 @@
   gap: 6px;
   text-align: center;
 }
-.card h1 { margin: 0; font-size: 20px; }
-.muted { margin: 8px 0 14px; font-size: 13.5px; color: var(--dim, #7a8699); }
+.card h1 { margin: 0; font-size: 22px; }
+.muted { margin: 8px 0 14px; font-size: 15.5px; color: var(--dim, #7a8699); }
 .card .btn { margin-top: 10px; }
 
 .error {
@@ -147,7 +147,7 @@
   border-radius: 9px;
   background: var(--danger-soft, #fdecec);
   color: var(--danger, #b42318);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 /* Sign-out lives in the sidebar footer, the one chrome element present on every
@@ -161,7 +161,7 @@
   background: transparent;
   color: var(--text-muted, #7a8699);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 14.5px;
   cursor: pointer;
 }
 .sidebar-footer .sign-out:hover {
@@ -171,6 +171,6 @@
 .sidebar-footer .sign-out.icon-only {
   width: auto;
   padding: 6px 8px;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
 }

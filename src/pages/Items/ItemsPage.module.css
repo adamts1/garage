@@ -13,7 +13,7 @@
   border-radius: 10px;
   background: var(--surface);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15.5px;
   text-align: right;
 }
 .search:focus {
@@ -22,7 +22,7 @@
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--ink);
 }
 
 /* Out of stock, and the reason to look at this screen at all. */

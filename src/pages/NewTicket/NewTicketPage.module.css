@@ -30,7 +30,7 @@
   border-radius: 9px;
   background: var(--surface);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 15.5px;
   text-align: right;
 }
 .search:focus {
@@ -74,19 +74,19 @@
 
 .suggestName {
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15.5px;
 }
 
 .suggestMeta {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 14px;
+  color: var(--ink);
 }
 
 .suggestTag {
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 800;
   padding: 1px 6px;
   border-radius: 5px;
@@ -97,8 +97,8 @@
 
 .suggestEmpty {
   padding: 10px;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 15px;
+  color: var(--ink);
   text-align: center;
 }
 
@@ -116,7 +116,7 @@
 
 .vehicleLabel {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--muted-d);
   margin-bottom: 8px;
@@ -144,18 +144,18 @@
   border-color: var(--primary);
 }
 .vehicleChip b {
-  font-size: 13px;
+  font-size: 15px;
 }
 .vehicleChip span {
-  font-size: 11.5px;
-  color: var(--muted);
+  font-size: 13.5px;
+  color: var(--ink);
 }
 
 /* Sits next to the total in the sticky footer, where the eye already is when
    the save button refuses to light up. */
 .missing {
   margin: 0 0 0 4px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--danger);
 }
@@ -173,7 +173,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-2);
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 .conflict span {

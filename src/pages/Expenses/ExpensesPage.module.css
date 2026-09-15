@@ -1,11 +1,11 @@
 .muted {
-  color: var(--muted);
+  color: var(--ink);
 }
 
 /* The live VAT and total under the add form — the number someone checks
    against the supplier's invoice before saving. */
 .preview {
-  font-size: 12.5px;
+  font-size: 14.5px;
   color: var(--muted-d);
   font-weight: 600;
   white-space: nowrap;

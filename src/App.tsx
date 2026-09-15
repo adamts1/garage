@@ -1,8 +1,9 @@
-import { garageName, isArchived, listWorkers, subscribeToTable, workerMap, type Ticket, type Worker } from '@garage/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { garageName, isArchived, listWorkers, signOut, subscribeToTable, workerMap, type Ticket, type Worker } from '@garage/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Sidebar from './app/Sidebar';
+import { useLeaveGuard } from './app/useLeaveGuard';
 import { isConfigured } from './lib/supabase';
 import { useTickets } from './lib/useTickets';
 import { ArchivePage } from './pages/Archive';
@@ -51,6 +52,16 @@ export default function App() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { tickets, setTickets, loading, error } = useTickets();   // Supabase-backed, live
+
+  /* Unsaved edits on an open ticket. Held here, above the routes, because every
+     way out of that page — the sidebar, the browser's Back, signing out — starts
+     outside it. */
+  const leaveGuard = useLeaveGuard();
+  // Stable, or the intake form would report itself clean and dirty on every render.
+  const setIntakeStarted = useCallback(
+    (started: boolean) => leaveGuard.setUnsaved(started, 'newTicket.confirmLeave'),
+    [leaveGuard.setUnsaved],
+  );
 
   // Name the browser tab after the garage — several are often open at once.
   useEffect(() => { document.title = garageName(); }, []);
@@ -106,6 +117,9 @@ export default function App() {
         pinned={pinned}
         onPinToggle={() => setPinned((v) => !v)}
         onHoverChange={setHovered}
+        onSignOut={() => {
+          void leaveGuard.confirmDiscard().then((ok) => { if (ok) void signOut(); });
+        }}
       />
 
       {/* The board is the only screen that runs edge to edge — the others need
@@ -133,6 +147,7 @@ export default function App() {
                     workers={workers}
                     onDone={() => navigate('/')}
                     onCancel={() => navigate('/')}
+                    onDirtyChange={setIntakeStarted}
                   />
                 }
               />
@@ -160,6 +175,7 @@ export default function App() {
                     workers={workers}
                     workerChips={workerChips}
                     onBack={() => navigate('/')}
+                    onDirtyChange={leaveGuard.setUnsaved}
                   />
                 }
               />

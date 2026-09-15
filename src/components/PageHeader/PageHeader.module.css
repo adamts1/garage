@@ -8,7 +8,7 @@
 
 .title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -16,8 +16,8 @@
 
 .subtitle {
   margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 15px;
+  color: var(--ink);
 }
 
 .count {
@@ -27,7 +27,7 @@
   border-radius: 999px;
   background: #eef1f5;
   color: #3e5c76;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   vertical-align: middle;
 }

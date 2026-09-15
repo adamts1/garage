@@ -1,7 +1,7 @@
 .lede {
   margin: 0 0 4px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--ink);
+  font-size: 15px;
 }
 
 .block {
@@ -27,7 +27,7 @@
 
 .blockTitle {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.2px;
   color: var(--muted-d);
@@ -59,7 +59,7 @@
 
 .lineTotal {
   text-align: left;
-  font-size: 13px;
+  font-size: 15px;
   white-space: nowrap;
 }
 
@@ -71,7 +71,7 @@
   background: var(--surface-2);
   color: var(--muted-d);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -88,7 +88,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: 15px;
 }
 .totals > div {
   display: flex;
@@ -99,19 +99,19 @@
 
 /* The rate the provider will actually use lives on the server, so these two
    are marked as what they are rather than presented as the document's figures. */
-.est { color: var(--muted); }
+.est { color: var(--ink); }
 .grand {
   margin-top: 4px;
   padding-top: 8px;
   border-top: 2px solid var(--border);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .warning {
   margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 14px;
   line-height: 1.6;
 }
 
