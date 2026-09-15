@@ -27,7 +27,9 @@
 
 .row {
   display: grid;
-  grid-template-columns: 90px 1fr auto auto;
+  /* minmax(0, …) on the name: a grid track defaults to its content's width, so a
+     long name would push the code column rather than wrap. */
+  grid-template-columns: 150px minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   width: 100%;

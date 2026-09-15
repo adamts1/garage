@@ -1,4 +1,14 @@
+/* A work code or a SKU, in a column of its own. Clipped rather than allowed to
+   run on: the search list and the parts table both hold it to a fixed width,
+   and past that it lands on top of the name. The full code is in the title.
+   LTR so the ellipsis falls at the end of the code rather than the start. */
 .code {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: ltr;
+  text-align: right;
   font-weight: 800;
   font-size: 14px;
   color: var(--primary);
@@ -6,10 +16,22 @@
 }
 
 .name {
+  min-width: 0;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+/* The same clipping for a SKU cell in a table, without the search list's
+   accent colour. */
+.sku {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: ltr;
+  text-align: right;
 }
 
 .badge {

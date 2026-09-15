@@ -90,7 +90,7 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
         onClose={() => answer(null)}
         renderRow={(p) => (
           <>
-            <span className={styles.code}>{p.sku}</span>
+            <span className={styles.code} title={p.sku}>{p.sku}</span>
             <span className={styles.name}>{p.name}</span>
             <span />
             <span className={styles.price}>{shekel(p.price)}</span>

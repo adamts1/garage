@@ -82,11 +82,13 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'code',
       header: 'works.fields.code',
-      width: 116,
+      width: 150,
       render: (w) => (
         <CellInput
           className={styles.code}
           value={w.code}
+          /* Clipped to the column when long, so the full code is on hover. */
+          title={w.code}
           aria-label={t('works.fields.code')}
           /* Same rule as the catalog it came from: a code is uppercase Latin,
              whichever screen types it. */
@@ -178,7 +180,13 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
   ];
 
   const partColumns: Column<PartRow>[] = [
-    { key: 'sku', header: 'items.fields.sku', width: 84, cellClassName: styles.muted, render: (i) => i.sku },
+    {
+      key: 'sku',
+      header: 'items.fields.sku',
+      width: 150,
+      cellClassName: styles.muted,
+      render: (i) => <span className={styles.sku} title={i.sku}>{i.sku}</span>,
+    },
     { key: 'name', header: 'works.fields.part', render: (i) => i.name },
     {
       key: 'qty',

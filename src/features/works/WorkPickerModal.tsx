@@ -111,7 +111,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
         onClose={() => answer(null)}
         renderRow={(w) => (
           <>
-            <span className={styles.code}>{w.code}</span>
+            <span className={styles.code} title={w.code}>{w.code}</span>
             <span className={styles.name}>
               {w.name}
               {w.id.startsWith('custom-') && <span className={styles.badge}>{t('picker.work.new')}</span>}
@@ -127,7 +127,13 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
   }
 
   const columns: Column<PartRow>[] = [
-    { key: 'sku', header: 'items.fields.sku', width: 130, cellClassName: styles.muted, render: (i) => i.sku },
+    {
+      key: 'sku',
+      header: 'items.fields.sku',
+      width: 150,
+      cellClassName: styles.muted,
+      render: (i) => <span className={styles.sku} title={i.sku}>{i.sku}</span>,
+    },
     { key: 'name', header: 'items.fields.name', render: (i) => i.name },
     {
       key: 'qty',
@@ -223,7 +229,14 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
       {items.length === 0 ? (
         <p className={styles.noParts}>{t('picker.work.noPartsYet')}</p>
       ) : (
-        <Table columns={columns} rows={items} rowKey={(i) => i.sku} />
+        <Table
+          columns={columns}
+          rows={items}
+          rowKey={(i) => i.sku}
+          /* Fixed, or a long SKU widens its own column and squeezes the name
+             and the inputs instead of clipping. */
+          fixedLayout
+        />
       )}
 
       <button type="button" className={styles.addPart} onClick={() => void addItem()}>

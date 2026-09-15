@@ -117,6 +117,20 @@
      wrong end and truncates to "…K-01". */
   direction: ltr;
   text-align: right;
+  text-overflow: ellipsis;
+}
+
+/* A part's SKU, read-only. The tables are fixed-layout, so a code longer than
+   its column would otherwise spill over the name beside it; clipped instead,
+   with the whole code in the cell's title. LTR for the same reason as .code —
+   the ellipsis then lands at the end of the code, not the start. */
+.sku {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: ltr;
+  text-align: right;
 }
 
 /* The one column long enough to need it — a work name runs to a sentence. */
