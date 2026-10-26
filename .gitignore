@@ -15,3 +15,6 @@ dist/
 # local-Supabase pointers for pre-flip verification (public demo keys, still not committed)
 .env.local.localdb
 mobile/.env.localdb
+
+# Personal documents
+תעודת רישום 275601.pdf
