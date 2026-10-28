@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Ticket } from '@garage/shared';
+import { takePrefetched } from './prefetch';
 import { isConfigured } from './supabase';
 import {
   createTicket, deleteTicket, listTickets, subscribeToTickets, updateTicket,
@@ -33,19 +34,31 @@ export function useTickets() {
 
     let alive = true;
 
-    refetch()
+    // The first load is usually already in flight, started at sign-in.
+    takePrefetched('tickets')
+      .then((rows) => {
+        if (!alive) return;
+        current.current = rows;
+        setLocal(rows);
+      })
       .catch((e) => alive && setError(e.message ?? String(e)))
       .finally(() => alive && setLoading(false));
 
     // Someone else changed something. If we're mid-write, defer the pull rather
     // than drop it — otherwise a concurrent edit is lost until an unrelated event
     // happens to trigger the next refetch, and two boards silently diverge.
+    //
+    // One save touches tickets, works and work_items, and every row arrives as
+    // its own event. Refetching on each one loaded the whole list several times
+    // per save; a short window folds the burst into one read.
+    let burst: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = subscribeToTickets(() => {
       if (writing.current > 0) { pending.current = true; return; }
-      void refetch().catch(() => {});
+      clearTimeout(burst);
+      burst = setTimeout(() => { void refetch().catch(() => {}); }, 150);
     });
 
-    return () => { alive = false; unsubscribe(); };
+    return () => { alive = false; clearTimeout(burst); unsubscribe(); };
   }, [refetch]);
 
   const persist = useCallback(async (prev: Ticket[], next: Ticket[]) => {
