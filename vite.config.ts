@@ -6,6 +6,26 @@ export default defineConfig({
   server: {
     port: 4173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        /* The large libraries each get a chunk of their own. In one bundle,
+           every deploy renamed the whole thing, and the first load after any
+           change downloaded React and Supabase again. A library chunk keeps its
+           hash — and, with the immutable header in public/_headers, its cache —
+           until that library is upgraded. */
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+          if (/node_modules\/(react-router|react-router-dom|@remix-run)\//.test(id)) return 'router';
+          if (id.includes('node_modules/@supabase/')) return 'supabase';
+          if (id.includes('node_modules/@sentry')) return 'sentry';
+          if (/node_modules\/(i18next|react-i18next)\//.test(id)) return 'i18n';
+          return 'vendor';
+        },
+      },
+    },
+  },
   test: {
     /* Runs before every test file. It blocks fetch, WebSocket and
        XMLHttpRequest, and refuses the run outright if the environment names the
