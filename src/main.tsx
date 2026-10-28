@@ -18,6 +18,18 @@ import './styles.css';
 // Before render, so a crash during the first paint is still reported.
 initSentry();
 
+/* Screens are separate chunks now, named by content hash. A tab left open
+   across a deploy asks for chunks the new deploy no longer has — Netlify
+   answers with index.html and the import fails. Reload once onto the new
+   build; the timestamp stops a genuinely broken deploy from reloading forever. */
+window.addEventListener('vite:preloadError', (event) => {
+  const last = Number(sessionStorage.getItem('chunkReloadAt') ?? 0);
+  if (Date.now() - last < 10_000) return;   // already tried — let the error boundary show
+  sessionStorage.setItem('chunkReloadAt', String(Date.now()));
+  event.preventDefault();
+  window.location.reload();
+});
+
 // @garage/shared has no client of its own — the browser build hands it this one.
 // Must run before any component calls into the data layer.
 setSupabaseClient(supabase, projectUrl);

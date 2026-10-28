@@ -1,9 +1,10 @@
 import {
-  createItem, createWorkDef, isDuplicateCodeError, listItems, listWorkDefs,
+  createItem, createWorkDef, isDuplicateCodeError,
   type PartDef, type WorkDef,
 } from '@garage/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { takePrefetched } from '../../lib/prefetch';
 import { isConfigured } from '../../lib/supabase';
 import { showError, showErrorKey, useAppDispatch } from '../../store';
 
@@ -53,7 +54,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     if (!isConfigured) { setLoading(false); return; }
     let live = true;
 
-    Promise.all([listWorkDefs(), listItems()])
+    // Usually already in flight, started at sign-in.
+    Promise.all([takePrefetched('workDefs'), takePrefetched('items')])
       .then(([defs, items]) => {
         if (!live) return;
         setWorks(defs);
