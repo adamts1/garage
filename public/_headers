@@ -1,0 +1,11 @@
+# Vite names every built file under /assets by a hash of its contents, so a
+# given URL never changes what it serves — a new build is a new URL. The
+# browser can keep them for good and skip the round trip on every load.
+#
+# Netlify's default is max-age=0, must-revalidate: every refresh asked again
+# for a bundle it already had, and paid for it in full on a slow edge.
+#
+# index.html stays on the default on purpose. It is what points at the current
+# hashes, so it must be checked each time or a deploy would never reach anyone.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
