@@ -1,24 +1,30 @@
 import { garageName, isArchived, listWorkers, signOut, subscribeToTable, workerMap, type Ticket, type Worker } from '@garage/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Sidebar from './app/Sidebar';
 import { useLeaveGuard } from './app/useLeaveGuard';
+import { takePrefetched } from './lib/prefetch';
 import { isConfigured } from './lib/supabase';
 import { useTickets } from './lib/useTickets';
-import { ArchivePage } from './pages/Archive';
 import { BoardPage } from './pages/Board';
-import { CustomersPage } from './pages/Customers';
-import { ExpensesPage } from './pages/Expenses';
-import { InvoicesPage } from './pages/Invoices';
-import { ItemsPage } from './pages/Items';
-import { WorksPage } from './pages/Works';
-import { NewTicketPage } from './pages/NewTicket';
-import { ReportsPage } from './pages/Reports';
-import { SuppliersPage } from './pages/Suppliers';
-import { TicketPage } from './pages/Ticket';
-import { WorkersPage } from './pages/Workers';
 import SetupNotice from './app/SetupNotice';
+
+/* Every screen but the board is its own chunk, fetched the first time it is
+   opened. They all used to ship in the one bundle the login screen waits on,
+   though most sessions only ever see the board and a ticket. The board stays
+   in the main bundle: it is the first paint for nearly everyone. */
+const ArchivePage = lazy(() => import('./pages/Archive').then((m) => ({ default: m.ArchivePage })));
+const CustomersPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomersPage })));
+const ExpensesPage = lazy(() => import('./pages/Expenses').then((m) => ({ default: m.ExpensesPage })));
+const InvoicesPage = lazy(() => import('./pages/Invoices').then((m) => ({ default: m.InvoicesPage })));
+const ItemsPage = lazy(() => import('./pages/Items').then((m) => ({ default: m.ItemsPage })));
+const WorksPage = lazy(() => import('./pages/Works').then((m) => ({ default: m.WorksPage })));
+const NewTicketPage = lazy(() => import('./pages/NewTicket').then((m) => ({ default: m.NewTicketPage })));
+const ReportsPage = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
+const SuppliersPage = lazy(() => import('./pages/Suppliers').then((m) => ({ default: m.SuppliersPage })));
+const TicketPage = lazy(() => import('./pages/Ticket').then((m) => ({ default: m.TicketPage })));
+const WorkersPage = lazy(() => import('./pages/Workers').then((m) => ({ default: m.WorkersPage })));
 
 export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`;
 
@@ -78,7 +84,8 @@ export default function App() {
   useEffect(() => {
     if (!isConfigured) return;
     let live = true;
-    listWorkers()
+    // Usually already in flight, started at sign-in.
+    takePrefetched('workers')
       .then((team) => { if (live) setWorkers(team); })
       .catch(() => {});   // an empty picker beats a crash
     return () => { live = false; };
@@ -137,72 +144,74 @@ export default function App() {
           ) : loading ? (
             <div className="db-loading">{t('app.loading')}</div>
           ) : (
-            <Routes>
-              <Route
-                path="/tickets/new"
-                element={
-                  <NewTicketPage
-                    tickets={tickets}
-                    setTickets={setTickets}
-                    workers={workers}
-                    onDone={() => navigate('/')}
-                    onCancel={() => navigate('/')}
-                    onDirtyChange={setIntakeStarted}
-                  />
-                }
-              />
+            <Suspense fallback={<div className="db-loading">{t('app.loading')}</div>}>
+              <Routes>
+                <Route
+                  path="/tickets/new"
+                  element={
+                    <NewTicketPage
+                      tickets={tickets}
+                      setTickets={setTickets}
+                      workers={workers}
+                      onDone={() => navigate('/')}
+                      onCancel={() => navigate('/')}
+                      onDirtyChange={setIntakeStarted}
+                    />
+                  }
+                />
 
-              <Route
-                path="/"
-                element={
-                  <BoardPage
-                    tickets={activeTickets}
-                    setTickets={setTickets}
-                    workers={workers}
-                    workerChips={workerChips}
-                    onNewTicket={() => navigate('/tickets/new')}
-                    onOpenTicket={openTicket}
-                  />
-                }
-              />
+                <Route
+                  path="/"
+                  element={
+                    <BoardPage
+                      tickets={activeTickets}
+                      setTickets={setTickets}
+                      workers={workers}
+                      workerChips={workerChips}
+                      onNewTicket={() => navigate('/tickets/new')}
+                      onOpenTicket={openTicket}
+                    />
+                  }
+                />
 
-              <Route
-                path="/tickets/:key"
-                element={
-                  <TicketRoute
-                    tickets={tickets}
-                    setTickets={setTickets}
-                    workers={workers}
-                    workerChips={workerChips}
-                    onBack={() => navigate('/')}
-                    onDirtyChange={leaveGuard.setUnsaved}
-                  />
-                }
-              />
+                <Route
+                  path="/tickets/:key"
+                  element={
+                    <TicketRoute
+                      tickets={tickets}
+                      setTickets={setTickets}
+                      workers={workers}
+                      workerChips={workerChips}
+                      onBack={() => navigate('/')}
+                      onDirtyChange={leaveGuard.setUnsaved}
+                    />
+                  }
+                />
 
-              <Route path="/invoices" element={<InvoicesPage onOpenTicket={openTicket} tickets={tickets} />} />
-              <Route path="/expenses" element={<ExpensesPage />} />
-              <Route path="/suppliers" element={<SuppliersPage />} />
-              <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/workers" element={<WorkersPage />} />
-              <Route path="/items" element={<ItemsPage />} />
-              <Route path="/works" element={<WorksPage />} />
-              <Route path="/reports" element={<ReportsPage tickets={tickets} />} />
-              <Route
-                path="/archive"
-                element={
-                  <ArchivePage
-                    tickets={archivedTickets}
-                    workerChips={workerChips}
-                    onOpenTicket={openTicket}
-                  />
-                }
-              />
+                <Route path="/invoices" element={<InvoicesPage onOpenTicket={openTicket} tickets={tickets} />} />
+                <Route path="/expenses" element={<ExpensesPage />} />
+                <Route path="/suppliers" element={<SuppliersPage />} />
+                <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/workers" element={<WorkersPage />} />
+                <Route path="/items" element={<ItemsPage />} />
+                <Route path="/works" element={<WorksPage />} />
+                <Route path="/reports" element={<ReportsPage tickets={tickets} />} />
+                <Route
+                  path="/archive"
+                  element={
+                    <ArchivePage
+                      tickets={archivedTickets}
+                      workerChips={workerChips}
+                      onOpenTicket={openTicket}
+                    />
+                  }
+                />
 
-              {/* A mistyped or stale URL lands on the board rather than a blank
-                  panel. replace, so Back does not bounce off the bad path. */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                {/* A mistyped or stale URL lands on the board rather than a blank
+                    panel. replace, so Back does not bounce off the bad path. */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           )}
         </section>
       </main>
