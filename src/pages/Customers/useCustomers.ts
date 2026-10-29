@@ -28,6 +28,14 @@ export const toDraft = (c: Customer): CustomerDraft => ({
   id_number: c.id_number ?? '',
 });
 
+/* The way back. The form holds '' for an empty ת״ז, and the database must get
+   NULL: the unique index skips only NULL, so a stored '' made every later
+   customer without a ת״ז a "duplicate" of the first one. */
+export const toRow = (draft: CustomerDraft): CustomerDraft => ({
+  ...draft,
+  id_number: draft.id_number?.trim() || null,
+});
+
 export function useCustomers() {
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
@@ -92,7 +100,7 @@ export function useCustomers() {
       if (!draft.name.trim()) return false;
       if (idTaken(draft)) return false;
       try {
-        await createCustomer(draft);
+        await createCustomer(toRow(draft));
         dispatch(showSuccess('customers.created'));
         load();
         return true;
@@ -108,7 +116,7 @@ export function useCustomers() {
     async (id: string, draft: CustomerDraft) => {
       if (idTaken(draft, id)) return false;
       try {
-        await updateCustomer(id, draft);
+        await updateCustomer(id, toRow(draft));
         dispatch(showSuccess('customers.updated'));
         load();
         return true;
