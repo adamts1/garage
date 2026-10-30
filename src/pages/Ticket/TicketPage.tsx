@@ -8,7 +8,7 @@ import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
 import { WorksStep } from '../../features/works';
 import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
-  IconDoc, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
+  IconDoc, IconEye, IconEyeOff, IconPhoto, IconPrint, IconTrash, IconWhatsapp, IconWrench,
 } from '../../icons';
 import { payMethodLabel } from '../../lib/payMethodLabel';
 import { printInvoice, printTicket, warnIfBlocked } from '../../lib/print';
@@ -485,6 +485,16 @@ export default function TicketPage({
               ))}
             >
               <IconPrint /> {t('ticket.printTicket')}
+            </button>
+
+            {/* The board's eye button, from inside the ticket. The table view
+                lists it either way. */}
+            <button
+              className="btn ghost block"
+              onClick={() => page.setBoardHidden(!ticket.boardHidden)}
+            >
+              {ticket.boardHidden ? <IconEye /> : <IconEyeOff />}{' '}
+              {t(ticket.boardHidden ? 'board.showOnBoard' : 'board.hideFromBoard')}
             </button>
           </section>
         </aside>

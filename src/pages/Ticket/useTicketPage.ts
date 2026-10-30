@@ -421,6 +421,20 @@ export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: Use
     }
   }, [creditable, dispatch, invoice, openModal, run, save, ticket.customer, ticket.k]);
 
+  /* Off the board or back onto it, from inside the ticket. Applied at once
+     rather than held in the draft: it is a view choice, not an edit to the
+     ticket, and "save" is not where anybody would look for it to take effect.
+     The draft gets the same value, so a save of other pending edits carries it
+     rather than putting back the old one. */
+  const setBoardHidden = useCallback(
+    (boardHidden: boolean) => {
+      setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, boardHidden } : t)));
+      setDraft((d) => ({ ...d, boardHidden }));
+      dispatch(showInfo(boardHidden ? 'board.hiddenToast' : 'board.shownToast'));
+    },
+    [dispatch, setTickets, ticket.k],
+  );
+
   /** Deleting a ticket had no confirmation at all — less protection than
    *  deleting a supplier, for something that takes the invoices and photos
    *  with it. */
@@ -575,5 +589,6 @@ export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: Use
      *  which is what decides whether a payment can be recorded at all. */
     owed,
     patch, setWorks, assign, save, discard, issue, collect, credit, remove, close, leave,
+    setBoardHidden,
   };
 }

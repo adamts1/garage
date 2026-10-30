@@ -127,6 +127,18 @@
   border-color: var(--slate);
 }
 
+.hiddenLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .shown {
   color: var(--ink);
   font-size: 15px;
@@ -242,6 +254,44 @@
   border-color: var(--steel);
 }
 
+/* Takes a card off the board. Out of the way until the card is hovered — it is
+   an occasional tidy-up, and a button on every card would read as the card's
+   main action. Kept reachable by keyboard focus. */
+.card {
+  position: relative;
+}
+.hideBtn {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-d);
+  cursor: pointer;
+  opacity: 0;
+}
+.card:hover .hideBtn,
+.hideBtn:focus-visible {
+  opacity: 1;
+}
+.hideBtn:hover {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+/* No hover on a touch screen, so the button simply stays visible there. */
+@media (hover: none) {
+  .hideBtn {
+    opacity: 1;
+  }
+}
+
 .hidden {
   display: none;
 }
@@ -322,6 +372,16 @@
   font-weight: 800;
   color: var(--danger);
   background: var(--danger-soft);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+
+.offBoard {
+  margin-inline-start: 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--muted-d);
+  background: var(--surface-2);
   border-radius: 5px;
   padding: 2px 7px;
 }

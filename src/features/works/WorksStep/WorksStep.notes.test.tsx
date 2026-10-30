@@ -9,6 +9,7 @@ vi.mock('../usePickers', () => ({
   usePickWork: () => vi.fn(),
   usePickPart: () => vi.fn(),
 }));
+vi.mock('../../../store/usePrompt', () => ({ usePrompt: () => vi.fn() }));
 
 /* Admin, so the priced cells render as inputs — the notes field is open to
    everyone either way, which is the point of the last case below. */
