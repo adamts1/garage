@@ -42,10 +42,11 @@
   background: var(--surface);
 }
 
-/* The parts belong to the work above rather than standing beside it, so this
-   reads as inset: the page's own paper, one shade down from the works card. */
+/* Same white card as the works. It used to be one shade down (--surface-2) to
+   read as inset; the labelled divider above it already says where the works
+   end and the parts begin. */
 .partsCol {
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 /* The rule between them, with what is below it written into the gap. Not a
@@ -163,6 +164,23 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--text);
+}
+
+/* The catalog button and the free-text one, side by side. The catalog one is
+   what is reached for most, so it takes the larger share. */
+.addRows {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.addRows .addRow {
+  margin-top: 0;
+}
+.addRows .addRow:first-child {
+  flex: 2;
+}
+.addRows .addRow + .addRow {
+  flex: 1;
 }
 
 .addRow {

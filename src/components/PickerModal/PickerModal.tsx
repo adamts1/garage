@@ -82,7 +82,7 @@ export default function PickerModal<T>({
         <>
           <span className={styles.hint}>{t('picker.keys')}</span>
           <Button variant="primary" onClick={() => onCreate(query.trim())}>
-            ＋ {t(createLabel)}
+             {t(createLabel)} ＋
           </Button>
         </>
       }

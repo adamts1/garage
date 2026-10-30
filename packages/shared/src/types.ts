@@ -109,6 +109,11 @@ export interface Ticket {
   payMethod?: string;
   doc?: string;
   reference?: string;
+
+  /** Taken off the board by hand (tickets.board_hidden). Still in the table
+   *  view, which is where it is put back from. Undefined on a row read before
+   *  the column existed — ticketToRow then leaves the column alone. */
+  boardHidden?: boolean;
 }
 
 /* A paid ticket stays on the board for the rest of the day it was paid, and is

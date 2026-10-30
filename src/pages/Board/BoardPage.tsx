@@ -5,8 +5,9 @@ import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction }
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Table, type Column } from '../../components/Table';
-import { IconBoard, IconTickets } from '../../icons';
+import { IconBoard, IconEye, IconEyeOff, IconTickets } from '../../icons';
 import { epicChip } from '../../lib/epic';
+import { showInfo, useAppDispatch } from '../../store';
 import styles from './BoardPage.module.css';
 import { BOARD_ATTR, CARD_ATTR, DROP_LIST_ATTR, useBoardDrag } from './useBoardDrag';
 
@@ -34,6 +35,16 @@ export default function BoardPage({
 
   const { drag, hover, onPointerDown } = useBoardDrag({ setTickets, onOpenTicket });
 
+  /* Off the board or back onto it. A view choice, not a status — the ticket
+     keeps its column, and the table shows it either way. Persisted like any
+     other edit, so the whole garage sees the same board. */
+  const dispatch = useAppDispatch();
+  const setHidden = (k: string, boardHidden: boolean) => {
+    setTickets((prev) => prev.map((x) => (x.k === k ? { ...x, boardHidden } : x)));
+    // Hidden is not gone — say where it went.
+    dispatch(showInfo(boardHidden ? 'board.hiddenToast' : 'board.shownToast'));
+  };
+
   const visible = useMemo(
     () =>
       tickets.filter((ticket) => {
@@ -47,6 +58,10 @@ export default function BoardPage({
       }),
     [tickets, who, query],
   );
+
+  /* The table is the full list; only the board leaves the hidden ones out. */
+  const onBoard = useMemo(() => visible.filter((x) => !x.boardHidden), [visible]);
+  const hiddenCount = visible.length - onBoard.length;
 
   /* The last hand-rolled sort in the app is gone: these are the table's own
      columns, sorted by the table. `st`, `prio` and `who` sort on a rank or a
@@ -73,6 +88,7 @@ export default function BoardPage({
               {epic.t}
             </span>
             {ticket.blocked && <span className={styles.blocked}>⛔ {t('board.blocked')}</span>}
+            {ticket.boardHidden && <span className={styles.offBoard}>{t('board.offBoard')}</span>}
           </>
         );
       },
@@ -137,6 +153,21 @@ export default function BoardPage({
       cellClassName: styles.amount,
       render: (ticket) => (ticket.amount ? shekel(ticket.amount) : '-'),
     },
+    {
+      key: 'board',
+      width: 150,
+      render: (ticket) => (
+        <Button
+          size="sm"
+          /* The row opens the ticket; this button must not do both. */
+          onClick={(e) => { e.stopPropagation(); setHidden(ticket.k, !ticket.boardHidden); }}
+        >
+          {ticket.boardHidden ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+          {' '}
+          {t(ticket.boardHidden ? 'board.showOnBoard' : 'board.hideFromBoard')}
+        </Button>
+      ),
+    },
   ];
 
   const card = (ticket: Ticket) => (
@@ -147,6 +178,18 @@ export default function BoardPage({
       {...{ [CARD_ATTR]: '' }}
       onPointerDown={(e) => onPointerDown(e, ticket)}
     >
+      <button
+        type="button"
+        className={styles.hideBtn}
+        title={t('board.hideFromBoard')}
+        aria-label={t('board.hideFromBoard')}
+        /* Stopped at pointer-down, or the card would take it as the start of a
+           drag — and a drag that never moves is a click that opens the ticket. */
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => setHidden(ticket.k, true)}
+      >
+        <IconEyeOff size={15} />
+      </button>
       <span className={styles.plate}>{ticket.plate}</span>
       <div className={styles.cardTitle}>{ticket.title}</div>
       <div className={styles.cardCar}>{ticket.car}</div>
@@ -257,13 +300,22 @@ export default function BoardPage({
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className={styles.spacer} />
+        {/* Hidden is not gone: say how many, and where they are. */}
+        {view === 'board' && hiddenCount > 0 && (
+          <button type="button" className={styles.hiddenLink} onClick={() => setView('table')}>
+            {t('board.hiddenCount', { count: hiddenCount })}
+          </button>
+        )}
         <span className={styles.shown}>
-          {t('board.shown', { shown: visible.length, total: tickets.length })}
+          {t('board.shown', {
+            shown: view === 'board' ? onBoard.length : visible.length,
+            total: tickets.length,
+          })}
         </span>
       </div>
 
       {view === 'board' ? (
-        boardView(visible, 'all')
+        boardView(onBoard, 'all')
       ) : (
         <Table
           columns={columns}
