@@ -10,6 +10,11 @@ vi.mock('../usePickers', () => ({
   usePickPart: () => vi.fn(),
 }));
 
+/* The free-text lines ask for their text through the prompt modal; each test
+   says what was typed. */
+const prompt = vi.fn();
+vi.mock('../../../store/usePrompt', () => ({ usePrompt: () => prompt }));
+
 const work = (uid: string, over: Partial<TicketWork> = {}): TicketWork => ({
   uid, code: 'BR1', name: `עבודה ${uid}`, labor: 100, items: [], ...over,
 });
@@ -75,5 +80,66 @@ describe('patchWork', () => {
     expect(next[0]).toMatchObject({ uid: 'w1', notes: 'הוחלפו גם הדיסקים' });
     expect(next[1].uid).toBe('w2');
     expect(next[1].notes).toBeUndefined();
+  });
+});
+
+describe('free text', () => {
+  it('adds a work that is on this ticket only — no code, no parts, no price yet', async () => {
+    prompt.mockResolvedValueOnce('  בדיקת רעש בגלגל קדמי  ');
+    const setWorks = vi.fn();
+    const { result } = renderHook(() => useWorksStep({ works: [work('w1')], setWorks }));
+
+    await act(() => result.current.addFreeWork());
+
+    const next = setWorks.mock.calls[0][0] as TicketWork[];
+    expect(next).toHaveLength(2);
+    expect(next[1]).toMatchObject({
+      code: '', name: 'בדיקת רעש בגלגל קדמי', labor: 0, items: [], custom: true,
+    });
+    expect(next[1].uid).not.toBe('w1');
+  });
+
+  it('adds nothing when the box is cancelled or left blank', async () => {
+    const setWorks = vi.fn();
+    const { result } = renderHook(() => useWorksStep({ works: [work('w1')], setWorks }));
+
+    prompt.mockResolvedValueOnce(null);
+    await act(() => result.current.addFreeWork());
+    prompt.mockResolvedValueOnce('   ');
+    await act(() => result.current.addFreePart());
+
+    expect(setWorks).not.toHaveBeenCalled();
+  });
+
+  it('adds a part with no SKU to the selected work', async () => {
+    prompt.mockResolvedValueOnce('בורג מיוחד');
+    const setWorks = vi.fn();
+    const works = [work('w1', { items: [{ sku: 'P1', name: 'רפידות', qty: 1, price: 80 }] })];
+    const { result } = renderHook(() => useWorksStep({ works, setWorks }));
+
+    await act(() => result.current.addFreePart());
+
+    const next = setWorks.mock.calls[0][0] as TicketWork[];
+    expect(next[0].items).toEqual([
+      { sku: 'P1', name: 'רפידות', qty: 1, price: 80 },
+      { sku: '', name: 'בורג מיוחד', qty: 1, price: 0 },
+    ]);
+  });
+
+  /* Two free-text parts both have SKU '' — keyed by SKU, an edit to one landed
+     on both. */
+  it('edits and removes parts by position, so two without a SKU stay apart', () => {
+    const setWorks = vi.fn();
+    const items = [
+      { sku: '', name: 'א', qty: 1, price: 0 },
+      { sku: '', name: 'ב', qty: 1, price: 0 },
+    ];
+    const { result } = renderHook(() => useWorksStep({ works: [work('w1', { items })], setWorks }));
+
+    act(() => result.current.patchPart('w1', 1, { price: 50 }));
+    expect((setWorks.mock.calls[0][0] as TicketWork[])[0].items.map((i) => i.price)).toEqual([0, 50]);
+
+    act(() => result.current.removePart('w1', 0));
+    expect((setWorks.mock.calls[1][0] as TicketWork[])[0].items.map((i) => i.name)).toEqual(['ב']);
   });
 });

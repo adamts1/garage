@@ -425,6 +425,7 @@ const rowToTicket = (r: any): Ticket => ({
   payMethod: r.pay_method ?? undefined,
   doc: r.doc ?? undefined,
   reference: r.reference ?? undefined,
+  boardHidden: r.board_hidden ?? undefined,
   works: (r.works ?? [])
     .slice()
     .sort((a: any, b: any) => a.position - b.position)
@@ -488,6 +489,9 @@ const ticketToRow = (t: Ticket) => ({
   pay_method: t.payMethod ?? null,
   doc: t.doc ?? null,
   reference: t.reference ?? null,
+  /* Only when known: sent unconditionally, it would turn every save into an
+     error against a database the migration has not reached yet. */
+  ...(t.boardHidden !== undefined && { board_hidden: t.boardHidden }),
 });
 
 export const listTickets = async (): Promise<Ticket[]> => {

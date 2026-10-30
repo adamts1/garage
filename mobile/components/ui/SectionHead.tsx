@@ -24,7 +24,7 @@ export function SectionHead({
         {title} ({count})
       </Text>
       {action && onAction ? (
-        <Button label={`+ ${action}`} onPress={onAction} variant="secondary" size="sm" />
+        <Button label={`${action} +`} onPress={onAction} variant="secondary" size="sm" />
       ) : null}
     </View>
   );

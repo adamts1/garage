@@ -20,6 +20,7 @@ vi.mock('../usePickers', () => ({
   usePickWork: () => vi.fn(),
   usePickPart: () => vi.fn(),
 }));
+vi.mock('../../../store/usePrompt', () => ({ usePrompt: () => vi.fn() }));
 
 // i18next is not initialised here, so t() returns the key.
 const work = (uid: string, over: Partial<TicketWork> = {}): TicketWork => ({

@@ -110,7 +110,11 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           ) : (
             <span className={styles.locked} title={t('works.adminOnly')}>{w.name}</span>
           )}
-          {w.custom && <span className={styles.badge}>{t('picker.work.new')}</span>}
+          {/* A picker-created work always has a code; one without was typed in
+              as free text and is on this ticket only. */}
+          {w.custom && (
+            <span className={styles.badge}>{w.code ? t('picker.work.new') : t('works.freeBadge')}</span>
+          )}
         </div>
       ),
     },
@@ -119,6 +123,10 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
          what was done, it does not price it. */
       key: 'notes',
       header: 'works.notes',
+      /* Narrower than the name, which it used to split the leftover width with
+         evenly — the room went to the money columns, which cut off a total of
+         ₪1,000 and up. The full note is on hover either way. */
+      width: '20%',
       render: (w) => (
         <NoteCell
           key={w.uid}
@@ -132,7 +140,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'labor',
       header: 'works.fields.labor',
-      width: 84,
+      width: 104,
       render: (w) =>
         canPrice ? (
           <CellInput
@@ -156,7 +164,8 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'total',
       header: 'works.fields.total',
-      width: 96,
+      /* Room for ₪123,456.00 in bold. At 96 anything from ₪1,000 was clipped. */
+      width: 132,
       render: (w) => <strong>{money(workTotal(w))}</strong>,
     },
     {
@@ -187,52 +196,63 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       cellClassName: styles.muted,
       render: (i) => <span className={styles.sku} title={i.sku}>{i.sku}</span>,
     },
-    { key: 'name', header: 'works.fields.part', render: (i) => i.name },
+    {
+      key: 'name',
+      header: 'works.fields.part',
+      render: (i) => (
+        <div className={styles.nameCell}>
+          {i.name}
+          {/* No SKU means it was typed in, not picked from the catalog. */}
+          {!i.sku && <span className={styles.badge}>{t('works.freeBadge')}</span>}
+        </div>
+      ),
+    },
     {
       key: 'qty',
       header: 'picker.work.qty',
       width: 64,
-      render: (i) => (
+      render: (i, index) => (
         <CellInput
           type="number"
           min={0}
           value={i.qty}
           aria-label={t('picker.work.qty')}
-          onChange={(e) => current && step.patchPart(current.uid, i.sku, { qty: Number(e.target.value) || 0 })}
+          onChange={(e) => current && step.patchPart(current.uid, index, { qty: Number(e.target.value) || 0 })}
         />
       ),
     },
     {
       key: 'price',
       header: 'works.fields.unitPrice',
-      width: 84,
-      render: (i) => (
+      width: 104,
+      render: (i, index) => (
         <CellInput
           type="number"
           min={0}
           value={i.price}
           aria-label={t('works.fields.unitPrice')}
-          onChange={(e) => current && step.patchPart(current.uid, i.sku, { price: Number(e.target.value) || 0 })}
+          onChange={(e) => current && step.patchPart(current.uid, index, { price: Number(e.target.value) || 0 })}
         />
       ),
     },
     {
       key: 'total',
       header: 'works.fields.total',
-      width: 96,
+      /* Room for ₪123,456.00 in bold. At 96 anything from ₪1,000 was clipped. */
+      width: 132,
       render: (i) => <strong>{money(i.qty * i.price)}</strong>,
     },
     {
       key: 'actions',
       width: 44,
-      render: (i) => (
+      render: (_i, index) => (
         <RowActions>
           <Button
             variant="ghostDanger"
             size="sm"
             title={t('works.removePart')}
             aria-label={t('works.removePart')}
-            onClick={() => current && step.removePart(current.uid, i.sku)}
+            onClick={() => current && step.removePart(current.uid, index)}
           >
             ✕
           </Button>
@@ -250,9 +270,12 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
           icon={<IconToolbox size={44} />}
           large
           actions={
-            <Button variant="primary" onClick={() => void step.addWork()}>
-              {t('works.addWork')} ＋
-            </Button>
+            <>
+              <Button variant="primary" onClick={() => void step.addWork()}>
+                {t('works.addWork')} ＋
+              </Button>
+              <Button onClick={() => void step.addFreeWork()}>{t('works.freeText')}</Button>
+            </>
           }
         />
       </div>
@@ -278,7 +301,10 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               body="works.noWorksBody"
               icon={<IconWrench />}
               actions={
-                <Button onClick={() => void step.addWork()}>{t('works.addWork')} ＋</Button>
+                <>
+                  <Button onClick={() => void step.addWork()}>{t('works.addWork')} ＋</Button>
+                  <Button onClick={() => void step.addFreeWork()}>{t('works.freeText')}</Button>
+                </>
               }
             />
           ) : (
@@ -301,9 +327,14 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                   </span>
                 }
               />
-              <button type="button" className={styles.addRow} onClick={() => void step.addWork()}>
-                ＋ {t('works.addWork')}
-              </button>
+              <div className={styles.addRows}>
+                <button type="button" className={styles.addRow} onClick={() => void step.addWork()}>
+                  {t('works.addWork')} ＋
+                </button>
+                <button type="button" className={styles.addRow} onClick={() => void step.addFreeWork()}>
+                  {t('works.freeText')}
+                </button>
+              </div>
             </>
           )}
         </div>
@@ -334,9 +365,15 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
               body="works.noPartsBody"
               icon={<IconBox />}
               actions={
-                <Button onClick={() => void (current ? step.addPart() : step.addWork())}>
-                  {t('works.addPart')} ＋
-                </Button>
+                <>
+                  <Button onClick={() => void (current ? step.addPart() : step.addWork())}>
+                    {t('works.addPart')} ＋
+                  </Button>
+                  {/* A free-text part needs a work to sit on. */}
+                  {current && (
+                    <Button onClick={() => void step.addFreePart()}>{t('works.freeText')}</Button>
+                  )}
+                </>
               }
             />
           ) : (
@@ -346,7 +383,8 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                 fixedLayout
                 columns={partColumns}
                 rows={current.items}
-                rowKey={(i) => i.sku}
+                /* Position, not SKU: a free-text part has none. */
+                rowKey={(i, index) => `${index}-${i.sku}`}
                 /* Only the selected work's parts, so say so — the summary's
                    figure is every work's parts together. */
                 footer={
@@ -355,9 +393,14 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
                   </span>
                 }
               />
-              <button type="button" className={styles.addRow} onClick={() => void step.addPart()}>
-                ＋ {t('works.addPart')}
-              </button>
+              <div className={styles.addRows}>
+                <button type="button" className={styles.addRow} onClick={() => void step.addPart()}>
+                  {t('works.addPart')} ＋
+                </button>
+                <button type="button" className={styles.addRow} onClick={() => void step.addFreePart()}>
+                  {t('works.freeText')}
+                </button>
+              </div>
             </>
           )}
         </div>

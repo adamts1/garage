@@ -1,5 +1,6 @@
 import { fromCatalog, type PartRow, type TicketWork } from '@garage/shared';
 import { useCallback, useRef, useState } from 'react';
+import { usePrompt } from '../../../store/usePrompt';
 import { usePickPart, usePickWork } from '../usePickers';
 
 export interface UseWorksStepOptions {
@@ -16,6 +17,7 @@ export interface UseWorksStepOptions {
 export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
   const pickWork = usePickWork();
   const pickPart = usePickPart();
+  const prompt = usePrompt();
 
   /* The initial value is read on the FIRST render only, and on a saved ticket
      that render happens before the works have come back from the database — so
@@ -25,9 +27,17 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
   const [selectedUid, setSelectedUid] = useState<string | null>(works[0]?.uid ?? null);
 
   /* A counter, not works.length: removing a work and adding another would
-     otherwise hand out a uid that is already on the ticket. */
+     otherwise hand out a uid that is already on the ticket. And skipping past
+     what the ticket already carries, because the counter starts again at w1 on
+     every mount — a saved ticket reopened with a w1 on it would get a second
+     one, and the selection, the row keys and the admin price check in
+     save_ticket_works all tell works apart by uid. */
   const seq = useRef(1);
-  const nextUid = () => `w${seq.current++}`;
+  const nextUid = () => {
+    let uid = `w${seq.current++}`;
+    while (works.some((w) => w.uid === uid)) uid = `w${seq.current++}`;
+    return uid;
+  };
 
   /* Falls back to the first work, so opening a ticket that already has works
      lands on one instead of on an empty right-hand pane. Derived rather than
@@ -55,6 +65,22 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
     [pickWork, setWorks, works],
   );
 
+  /* A line in the mechanic's own words — "בדיקת רעש בגלגל קדמי" — that is not
+     in the catalog and should not be. It goes onto this ticket only: no
+     work_defs row, no code, no parts, and a price of zero for an admin to fill
+     in on the row. `custom` because that is what it is, and because the badge
+     beside the name is how the table already says "not from the catalog". */
+  const addFreeWork = useCallback(async () => {
+    const text = (await prompt({
+      titleKey: 'works.freeWorkTitle',
+      labelKey: 'works.freeTextLabel',
+    }))?.trim();
+    if (!text) return;
+    const uid = nextUid();
+    setWorks([...works, { uid, code: '', name: text, labor: 0, items: [], custom: true }]);
+    setSelectedUid(uid);
+  }, [prompt, setWorks, works]);
+
   const removeWork = useCallback(
     (uid: string) => {
       setWorks(works.filter((w) => w.uid !== uid));
@@ -77,12 +103,27 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
     patchWork(current.uid, { items: [...current.items, { ...part, qty: 1 }] });
   }, [current, patchWork, pickPart]);
 
+  /* The part-side twin of addFreeWork: a line on the selected work that is not
+     in the items catalog. No SKU — work_items.sku is nullable, and an invented
+     one would be a code nobody can look up. */
+  const addFreePart = useCallback(async () => {
+    if (!current) return;
+    const text = (await prompt({
+      titleKey: 'works.freePartTitle',
+      labelKey: 'works.freeTextLabel',
+    }))?.trim();
+    if (!text) return;
+    patchWork(current.uid, { items: [...current.items, { sku: '', name: text, qty: 1, price: 0 }] });
+  }, [current, patchWork, prompt]);
+
+  /* By position, not by SKU. A free-text part has none, so two of them on one
+     work would share the key '' and an edit to one would land on both. */
   const patchPart = useCallback(
-    (uid: string, sku: string, patch: Partial<PartRow>) =>
+    (uid: string, index: number, patch: Partial<PartRow>) =>
       setWorks(
         works.map((w) =>
           w.uid === uid
-            ? { ...w, items: w.items.map((i) => (i.sku === sku ? { ...i, ...patch } : i)) }
+            ? { ...w, items: w.items.map((i, j) => (j === index ? { ...i, ...patch } : i)) }
             : w,
         ),
       ),
@@ -90,9 +131,9 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
   );
 
   const removePart = useCallback(
-    (uid: string, sku: string) =>
+    (uid: string, index: number) =>
       setWorks(
-        works.map((w) => (w.uid === uid ? { ...w, items: w.items.filter((i) => i.sku !== sku) } : w)),
+        works.map((w) => (w.uid === uid ? { ...w, items: w.items.filter((_, j) => j !== index) } : w)),
       ),
     [setWorks, works],
   );
@@ -102,9 +143,11 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
     setSelectedUid,
     current,
     addWork,
+    addFreeWork,
     removeWork,
     patchWork,
     addPart,
+    addFreePart,
     patchPart,
     removePart,
   };
