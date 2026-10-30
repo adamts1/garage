@@ -146,6 +146,21 @@ export default function TicketEditor({
     onClose();
   };
 
+  /* Off the board or back onto it. Saved at once, against the ticket as stored
+     rather than the draft: it is a view choice, not an edit, and must not take
+     half-typed changes to the database with it. The draft gets the same value,
+     so a later save of those changes does not undo it. Same as the web. */
+  const toggleBoardHidden = () => {
+    if (!ticket) return;
+    const boardHidden = !ticket.boardHidden;
+    setDraft((d) => (d ? { ...d, boardHidden } : d));
+    void saveTicket({ ...ticket, boardHidden }, false);
+    Alert.alert(
+      t(boardHidden ? 'ticket.board.hiddenTitle' : 'ticket.board.shownTitle'),
+      boardHidden ? t('ticket.board.hiddenBody') : undefined,
+    );
+  };
+
   const confirmLeave = () => {
     if (!dirty) return onClose();
     Alert.alert(t('ticket.leave.title'), t('ticket.leave.body'), [
@@ -250,6 +265,12 @@ export default function TicketEditor({
           onPress={() => void printTicket()}
           variant="outline"
           busy={printing}
+        />
+
+        <Button
+          label={t(ticket?.boardHidden ? 'ticket.board.show' : 'ticket.board.hide')}
+          onPress={toggleBoardHidden}
+          variant="outline"
         />
 
         <TabBar tabs={TABS} active={tab} onSelect={setTab} />
