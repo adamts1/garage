@@ -16,7 +16,8 @@ import {
   type TicketWork,
 } from '@garage/shared';
 import { C, rtl, s } from '../../lib/theme';
-import { Button, NumberPrompt, SectionHead, Stepper, TotalRow, TrashIcon } from '../ui';
+import { Button, NumberPrompt, SectionHead, Stepper, TextPrompt, TotalRow, TrashIcon } from '../ui';
+import { workUid } from './catalog';
 import { PartPicker } from './PartPicker';
 import { WorkPicker } from './WorkPicker';
 
@@ -34,6 +35,8 @@ export function WorksSection({
   const [pickPartFor, setPickPartFor] = useState<string | null>(null); // work uid
   const [pricing, setPricing] = useState<{ uid: string; index: number; part: PartRow } | null>(null);
   const [laborFor, setLaborFor] = useState<TicketWork | null>(null);
+  /* Free text: 'work' for a new work, or the uid of the work a part goes on. */
+  const [freeFor, setFreeFor] = useState<'work' | string | null>(null);
 
   const sum = worksSummary(works);
 
@@ -49,6 +52,20 @@ export function WorksSection({
   const addWork = (w: TicketWork) => {
     onChange([...works, w]);
     setPickWork(false);
+  };
+
+  /* A line in the mechanic's own words that is not in either catalog and should
+     not be. On this ticket only: no work_defs or items row, no code or מק״ט, and
+     a price of zero — an admin prices it on the card. Same as the web. */
+  const addFreeText = (text: string) => {
+    if (freeFor === 'work') {
+      const uid = workUid();
+      onChange([...works, { uid, code: '', name: text, labor: 0, items: [], custom: true }]);
+      setOpenWork(uid);   // open, so the price and the parts are right there
+    } else if (freeFor) {
+      addPart(freeFor, { sku: '', name: text, qty: 1, price: 0 });
+    }
+    setFreeFor(null);
   };
 
   const patchWork = (uid: string, patch: Partial<TicketWork>) =>
@@ -93,6 +110,8 @@ export function WorksSection({
         count={works.length}
         action={t('works.add')}
         onAction={() => setPickWork(true)}
+        secondary={t('works.freeText')}
+        onSecondary={() => setFreeFor('work')}
       />
 
       {works.map((w, wi) => (
@@ -103,6 +122,7 @@ export function WorksSection({
           canPrice={canPrice}
           onToggle={() => setOpenWork(openWork === w.uid ? null : w.uid)}
           onAddPart={() => setPickPartFor(w.uid)}
+          onAddFreePart={() => setFreeFor(w.uid)}
           onPatchPart={(i, patch) => patchPart(w.uid, i, patch)}
           onEditPrice={(i, p) => setPricing({ uid: w.uid, index: i, part: p })}
           onEditLabor={() => setLaborFor(w)}
@@ -144,6 +164,15 @@ export function WorksSection({
         onSubmit={applyPrice}
       />
 
+      <TextPrompt
+        visible={Boolean(freeFor)}
+        title={t(freeFor === 'work' ? 'works.freeWorkTitle' : 'works.freePartTitle')}
+        subtitle={t('works.freeHint')}
+        placeholder={t('works.freePlaceholder')}
+        onCancel={() => setFreeFor(null)}
+        onSubmit={addFreeText}
+      />
+
       <NumberPrompt
         visible={Boolean(laborFor)}
         title={t('works.laborTitle')}
@@ -179,6 +208,7 @@ function WorkCard({
   canPrice,
   onToggle,
   onAddPart,
+  onAddFreePart,
   onPatchPart,
   onEditPrice,
   onEditLabor,
@@ -192,6 +222,7 @@ function WorkCard({
   canPrice: boolean;
   onToggle: () => void;
   onAddPart: () => void;
+  onAddFreePart: () => void;
   onPatchPart: (idx: number, patch: Partial<PartRow>) => void;
   onEditPrice: (idx: number, part: PartRow) => void;
   onEditLabor: () => void;
@@ -210,6 +241,8 @@ function WorkCard({
           </Text>
           <Text style={[s.dim, { marginTop: 2 }]}>
             {t('works.summary', { n: w.items.length, amount: money(workTotal(w)) })}
+            {/* A picker-made work always has a code; one without was typed in. */}
+            {w.custom && !w.code ? ` · ${t('works.freeBadge')}` : ''}
           </Text>
         </View>
         <Text style={{ fontSize: 20, color: C.mist }}>{open ? '⌄' : '‹'}</Text>
@@ -302,12 +335,10 @@ function WorkCard({
             <Text style={[s.dim, { paddingVertical: 6 }]}>{t('works.noParts')}</Text>
           ) : null}
 
-          <Button
-            label={t('works.addPart')}
-            onPress={onAddPart}
-            variant="accent"
-            style={{ marginTop: 12 }}
-          />
+          <View style={[s.row, { gap: 8, marginTop: 12 }]}>
+            <Button label={t('works.addPart')} onPress={onAddPart} variant="accent" style={{ flex: 2 }} />
+            <Button label={t('works.freeText')} onPress={onAddFreePart} variant="outline" style={{ flex: 1 }} />
+          </View>
 
           <View
             style={[

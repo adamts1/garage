@@ -15,8 +15,9 @@ import { useTicketsStore } from '../../lib/TicketsProvider';
 import { C, rtl, s } from '../../lib/theme';
 import { Chip, ChipRow } from '../ui';
 
-/** 'archive' is a view, not a status — the board's chips only cover live work. */
-type Filter = Status | 'all' | 'archive';
+/** 'archive' and 'hidden' are views, not statuses — the board's chips only cover
+ *  live work. */
+type Filter = Status | 'all' | 'archive' | 'hidden';
 
 export default function TicketList({
   onSelect,
@@ -41,20 +42,26 @@ export default function TicketList({
      still open work. Derived on every render, not stored: a ticket archives
      itself as it ages and comes straight back if it is moved out of 'שולם'. The
      archive is not lost, only behind its own chip. */
-  const { active, archived } = useMemo(() => {
+  /* Taken off the web board by hand (boardHidden) — the same tickets leave the
+     list here, and wait behind their own chip, which is also where they are
+     found to be put back. An archived ticket stays in the archive whether or
+     not it was hidden: that is the older and more final of the two. */
+  const { active, archived, hidden } = useMemo(() => {
     const now = new Date();
+    const open = tickets.filter((x) => !isArchived(x, now));
     return {
-      active: tickets.filter((x) => !isArchived(x, now)),
+      active: open.filter((x) => !x.boardHidden),
       archived: tickets.filter((x) => isArchived(x, now)),
+      hidden: open.filter((x) => x.boardHidden),
     };
   }, [tickets]);
 
-  const pool = status === 'archive' ? archived : active;
+  const pool = status === 'archive' ? archived : status === 'hidden' ? hidden : active;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return pool.filter((x) => {
-      if (status !== 'all' && status !== 'archive' && x.st !== status) return false;
+      if (status !== 'all' && status !== 'archive' && status !== 'hidden' && x.st !== status) return false;
       if (!q) return true;
       return [x.k, x.title, x.plate, x.car, x.customer].some((f) =>
         (f ?? '').toLowerCase().includes(q),
@@ -71,6 +78,8 @@ export default function TicketList({
   const emptyMessage =
     status === 'archive'
       ? t('tickets.archiveEmpty')
+      : status === 'hidden'
+        ? t('tickets.hiddenEmpty')
       : tickets.length
         ? t('tickets.noMatch')
         : t('tickets.empty');
@@ -136,12 +145,22 @@ export default function TicketList({
             active={status === 'archive'}
             onPress={() => setStatus('archive')}
           />
+          <Chip
+            label={t('tickets.chip', { title: t('tickets.hidden'), n: hidden.length })}
+            dot={C.mist}
+            active={status === 'hidden'}
+            onPress={() => setStatus('hidden')}
+          />
         </ChipRow>
       </View>
 
       {status === 'archive' ? (
         <Text style={[s.dim, { textAlign: 'center', paddingTop: 10, paddingHorizontal: 12 }]}>
           {t('tickets.archiveHint')}
+        </Text>
+      ) : status === 'hidden' ? (
+        <Text style={[s.dim, { textAlign: 'center', paddingTop: 10, paddingHorizontal: 12 }]}>
+          {t('tickets.hiddenHint')}
         </Text>
       ) : null}
 

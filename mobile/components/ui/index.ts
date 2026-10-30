@@ -23,4 +23,5 @@ export { ReadOnly } from './ReadOnly';
 export { SectionHead } from './SectionHead';
 export { Sheet } from './Sheet';
 export { Stepper } from './Stepper';
+export { TextPrompt } from './TextPrompt';
 export { TotalRow } from './TotalRow';
