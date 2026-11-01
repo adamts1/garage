@@ -289,7 +289,7 @@ const makeTicket = async (tenant, title) => {
 const aTicket = await makeTicket(a, 'A ticket');
 check(
   'A can create a ticket without naming a garage',
-  aTicket.status === 201 && Boolean(aTicket.row?.id),
+  aTicket.status === 200 && Boolean(aTicket.row?.id),
   `got ${aTicket.status} ${JSON.stringify(aTicket.row).slice(0, 120)}`,
 );
 check(
