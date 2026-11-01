@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { COLUMNS, isArchived, type Status, type Ticket } from '@garage/shared';
+import { COLUMNS, isArchived, isCancelled, type Status, type Ticket } from '@garage/shared';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import { C, rtl, s } from '../../lib/theme';
 import { Chip, ChipRow } from '../ui';
@@ -239,6 +239,9 @@ function TicketCard({
         <Text style={[rtl, { fontSize: 17, fontWeight: '600', color: C.slate }]}>
           {ticket.car || t('tickets.unnamedCar')}
         </Text>
+        {isCancelled(ticket) && (
+          <Text style={{ fontSize: 14, fontWeight: '700', color: C.danger }}>{t('ticket.cancelled.tag')}</Text>
+        )}
       </View>
 
       <Text style={{ fontSize: 28, color: C.mist }}>‹</Text>

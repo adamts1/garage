@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isConfigured } from './supabase';
-import { createTicket, deleteTicket, listTickets, subscribeToTickets, updateTicket } from '@garage/shared';
+import { createTicket, listTickets, subscribeToTickets, updateTicket } from '@garage/shared';
 import type { Ticket } from '@garage/shared';
 
 export function useTickets() {
@@ -87,20 +87,9 @@ export function useTickets() {
     }
   }, [refetch, settleWrite]);
 
-  const removeTicket = useCallback(async (key: string) => {
-    setError(null);
-    setTickets((prev) => prev.filter((t) => t.k !== key));
+  /* No removeTicket. Nothing on the phone ever called it, and a work order is
+     never deleted now — the database refuses. Cancelling is done on the web,
+     where the invoice that may stand in its way is handled. */
 
-    writing.current++;
-    try {
-      await deleteTicket(key);
-    } catch (e: any) {
-      setError(e.message ?? String(e));
-      pending.current = true;
-    } finally {
-      await settleWrite();
-    }
-  }, [settleWrite]);
-
-  return { tickets, loading, error, refetch, saveTicket, addTicket, removeTicket };
+  return { tickets, loading, error, refetch, saveTicket, addTicket };
 }

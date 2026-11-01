@@ -44,7 +44,7 @@
   },
   "archive": {
     "title": "ארכיון",
-    "subtitle": "כרטיסים ששולמו, מהיום שלאחר התשלום",
+    "subtitle": "כרטיסים ששולמו, מהיום שלאחר התשלום, וכרטיסים שבוטלו",
     "search": "חיפוש בארכיון",
     "searchPlaceholder": "מספר כרטיס, לקוח, רכב או מספר רישוי",
     "empty": "אין כרטיסים בארכיון",
@@ -58,7 +58,11 @@
       "due": "תאריך יעד",
       "worker": "מכונאי",
       "amount": "סכום"
-    }
+    },
+    "status": "סטטוס",
+    "statusAll": "הכול",
+    "statusPaid": "שולם",
+    "cancelled": "בוטל"
   },
   "reports": {
     "title": "דוח לפי לקוחות",
@@ -465,10 +469,16 @@
     "noPhone": "אין טלפון ללקוח",
     "noPhoneTitle": "אין מספר טלפון ללקוח",
     "printTicket": "הדפס כרטיס עבודה",
-    "deleteTicket": "בטל כרטיס",
-    "deleted": "הכרטיס נמחק",
-    "confirmDelete": "למחוק את כרטיס {{key}}? הפעולה אינה הפיכה - התמונות וההיסטוריה יימחקו איתו.",
-    "confirmDeleteInvoiced": "לכרטיס {{key}} הופקה חשבונית מס. מחיקת הכרטיס לא מבטלת את המסמך - לשם כך יש להפיק חשבונית זיכוי. למחוק בכל זאת?",
+    "cancelTicket": "בטל כרטיס",
+    "cancelTitle": "ביטול כרטיס עבודה",
+    "cancelReason": "סיבת הביטול",
+    "cancelReasonRequired": "יש לכתוב סיבה לביטול",
+    "confirmCancel": "לבטל את כרטיס {{key}}? הכרטיס יישמר במערכת במצב בוטל, לא ניתן יהיה לערוך אותו או להחזיר אותו לעבודה.",
+    "cancelHasInvoice": "לכרטיס {{key}} יש חשבונית פעילה. יש להפיק חשבונית זיכוי לפני ביטול הכרטיס.",
+    "cancelled": "כרטיס {{key}} בוטל",
+    "statusCancelled": "בוטל",
+    "cancelledBanner": "הכרטיס בוטל ב-{{date}} ונשמר לקריאה בלבד.",
+    "cancelledReason": "סיבה: {{reason}}",
     "paymentTaken": "התשלום נקלט · {{method}} · {{total}}",
     "paidNoInvoicing": "התשלום נקלט. לא הופקה חשבונית - חיבור לתוכנת החשבוניות אינו מוגדר למוסך.",
     "closedNoInvoicing": "הכרטיס נסגר עם יתרה פתוחה. לא הופקה חשבונית מס - חיבור לתוכנת החשבוניות אינו מוגדר למוסך.",
@@ -785,12 +795,48 @@
       "city": "עיר",
       "address": "כתובת",
       "kind": "סוג",
-      "vehicles": "רכבים"
+      "vehicles": "רכבים",
+      "tickets": "כרטיסים"
     },
     "kinds": {
       "private": "פרטי",
       "business": "עסקי"
-    }
+    },
+    "deleteBlocked": "לא ניתן למחוק לקוח שיש לו כרטיסי עבודה"
+  },
+  "customer": {
+    "backToList": "כל הלקוחות",
+    "notFound": "הלקוח לא נמצא.",
+    "tabs": {
+      "label": "לקוח",
+      "tickets": "כרטיסי עבודה",
+      "vehicles": "רכבים"
+    },
+    "filter": "סטטוס",
+    "filters": {
+      "all": "הכול ({{count}})",
+      "open": "פתוחים ({{count}})",
+      "closed": "סגורים ({{count}})",
+      "cancelled": "בוטלו ({{count}})"
+    },
+    "status": {
+      "todo": "כניסה",
+      "appr": "ממתין לאישור",
+      "done": "מוכן",
+      "paid": "שולם",
+      "cancelled": "בוטל"
+    },
+    "fields": {
+      "key": "מספר",
+      "created": "נפתח",
+      "title": "תיאור",
+      "plate": "רכב",
+      "status": "סטטוס",
+      "amount": "סכום"
+    },
+    "noTickets": "אין כרטיסי עבודה ללקוח זה",
+    "noMatch": "אין כרטיסים בסטטוס הזה",
+    "noVehicles": "אין רכבים רשומים ללקוח זה"
   },
   "items": {
     "title": "פריטי מלאי",
@@ -878,7 +924,8 @@
     "syncingExpense": "מסנכרן מול הנהלת החשבונות…",
     "orderingExport": "מזמין קובץ להנהלת חשבונות…",
     "fetchingExport": "מוריד את הקובץ…",
-    "savingWorker": "שומר את פרטי העובד…"
+    "savingWorker": "שומר את פרטי העובד…",
+    "cancellingTicket": "מבטל את הכרטיס…"
   },
   "bookkeeping": {
     "include": "מה לכלול",

@@ -19,6 +19,8 @@ export interface UseTicketPageOptions {
   ticket: Ticket;
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
   onBack: () => void;
+  /** Cancels the ticket on the server; throws when it refuses. See useTickets. */
+  onCancelTicket: (key: string, reason: string) => Promise<void>;
   /** Reports unsaved edits up to the shell, which asks before any exit — the
    *  sidebar, Back, signing out — discards them. See app/useLeaveGuard. */
   onDirtyChange?: (dirty: boolean) => void;
@@ -48,7 +50,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
    Three things do NOT wait for the save button, and each for a reason:
 
-     - deleting the ticket, which asks its own question and is not an edit;
+     - cancelling the ticket, which asks its own questions and is not an edit;
      - closing and charging, which IS a save — it opens a drawer, takes money
        and writes a payment, so it commits whatever else is pending with it
        rather than leaving a paid ticket beside unsaved works;
@@ -60,7 +62,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
    on `customers`, not on `tickets`, so it is held beside the draft rather than
    inside it — otherwise every ticket read back from the server would look
    edited the moment the customer had a number. */
-export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: UseTicketPageOptions) {
+export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDirtyChange }: UseTicketPageOptions) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const run = useBusyRun();
@@ -435,23 +437,39 @@ export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: Use
     [dispatch, setTickets, ticket.k],
   );
 
-  /** Deleting a ticket had no confirmation at all — less protection than
-   *  deleting a supplier, for something that takes the invoices and photos
-   *  with it. */
-  const remove = useCallback(async () => {
+  /** Cancel, never delete: a numbered work order stays on file under its
+   *  customer. Asks for the reason (the database requires one), refuses up
+   *  front while there is an issued bill — the server refuses too, this just
+   *  says why before the round trip — and then confirms. */
+  const cancel = useCallback(async () => {
+    if (invoice?.status === 'issued') {
+      dispatch(showErrorKey('ticket.cancelHasInvoice', { key: ticket.k }));
+      return;
+    }
+    const reason = await prompt({ titleKey: 'ticket.cancelTitle', labelKey: 'ticket.cancelReason' });
+    if (reason === null) return;
+    if (!reason.trim()) {
+      dispatch(showErrorKey('ticket.cancelReasonRequired'));
+      return;
+    }
     const ok = await confirm({
-      bodyKey: invoice ? 'ticket.confirmDeleteInvoiced' : 'ticket.confirmDelete',
+      bodyKey: 'ticket.confirmCancel',
       values: { key: ticket.k },
       danger: true,
     });
     if (!ok) return;
-    setTickets((prev) => prev.filter((t) => t.k !== ticket.k));
-    dispatch(showSuccess('ticket.deleted'));
-    /* The edits went with the ticket. Cleared before navigating, or the shell
-       would ask about discarding changes to a ticket that no longer exists. */
+    try {
+      await run('busy.cancellingTicket', () => onCancelTicket(ticket.k, reason));
+    } catch (e) {
+      dispatch(showError(e));
+      return;
+    }
+    dispatch(showSuccess('ticket.cancelled', { key: ticket.k }));
+    /* Unsaved edits cannot land on a frozen ticket. Cleared before navigating,
+       or the shell would ask about discarding them. */
     onDirtyChange?.(false);
     onBack();
-  }, [confirm, dispatch, invoice, onBack, onDirtyChange, setTickets, ticket.k]);
+  }, [confirm, dispatch, invoice, onBack, onCancelTicket, onDirtyChange, prompt, run, ticket.k]);
 
   /** Opens the close-and-charge drawer and applies whatever it comes back with.
    *  A dismissed drawer resolves null and changes nothing.
@@ -588,7 +606,7 @@ export function useTicketPage({ ticket, setTickets, onBack, onDirtyChange }: Use
     /** What is still owed on an open חשבונית מס. Zero for every other document,
      *  which is what decides whether a payment can be recorded at all. */
     owed,
-    patch, setWorks, assign, save, discard, issue, collect, credit, remove, close, leave,
+    patch, setWorks, assign, save, discard, issue, collect, credit, cancel, close, leave,
     setBoardHidden,
   };
 }

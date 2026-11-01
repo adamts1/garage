@@ -1,4 +1,4 @@
-import { garageName, isArchived, listWorkers, signOut, subscribeToTable, workerMap, type Ticket, type Worker } from '@garage/shared';
+import { garageName, isArchived, isCancelled, listWorkers, signOut, subscribeToTable, workerMap, type Ticket, type Worker } from '@garage/shared';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -16,6 +16,7 @@ import SetupNotice from './app/SetupNotice';
    in the main bundle: it is the first paint for nearly everyone. */
 const ArchivePage = lazy(() => import('./pages/Archive').then((m) => ({ default: m.ArchivePage })));
 const CustomersPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomersPage })));
+const CustomerPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerPage })));
 const ExpensesPage = lazy(() => import('./pages/Expenses').then((m) => ({ default: m.ExpensesPage })));
 const InvoicesPage = lazy(() => import('./pages/Invoices').then((m) => ({ default: m.InvoicesPage })));
 const ItemsPage = lazy(() => import('./pages/Items').then((m) => ({ default: m.ItemsPage })));
@@ -40,7 +41,7 @@ function TicketRoute({ tickets, ...rest }: {
   const ticket = tickets.find((x) => x.k === key);
 
   /* A key that matches nothing is a real case now that the URL is typeable and
-     shareable — a deleted ticket, or a link from another garage. Say so rather
+     shareable — a mistyped number, or a link from another garage. Say so rather
      than rendering an empty panel. No loading branch: the routes render only
      once the tickets have arrived. */
   if (!ticket) {
@@ -57,7 +58,7 @@ export default function App() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { tickets, setTickets, loading, error } = useTickets();   // Supabase-backed, live
+  const { tickets, setTickets, cancel, loading, error } = useTickets();   // Supabase-backed, live
 
   /* Unsaved edits on an open ticket. Held here, above the routes, because every
      way out of that page — the sidebar, the browser's Back, signing out — starts
@@ -112,6 +113,10 @@ export default function App() {
      in sync. */
   const activeTickets = tickets.filter((x) => !isArchived(x));
   const archivedTickets = tickets.filter((x) => isArchived(x));
+  /* Money and workload are about jobs that happened. A cancelled ticket is kept
+     on file and listed under its customer and in the archive, but counts for
+     nothing in a report. */
+  const liveTickets = tickets.filter((x) => !isCancelled(x));
 
   const openTicket = (k: string) => navigate(ticketPath(k));
 
@@ -183,6 +188,7 @@ export default function App() {
                       workers={workers}
                       workerChips={workerChips}
                       onBack={() => navigate('/')}
+                      onCancelTicket={cancel}
                       onDirtyChange={leaveGuard.setUnsaved}
                     />
                   }
@@ -191,11 +197,15 @@ export default function App() {
                 <Route path="/invoices" element={<InvoicesPage onOpenTicket={openTicket} tickets={tickets} />} />
                 <Route path="/expenses" element={<ExpensesPage />} />
                 <Route path="/suppliers" element={<SuppliersPage />} />
-                <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/customers" element={<CustomersPage tickets={tickets} />} />
+                <Route
+                  path="/customers/:id"
+                  element={<CustomerPage tickets={tickets} onOpenTicket={openTicket} />}
+                />
                 <Route path="/workers" element={<WorkersPage />} />
                 <Route path="/items" element={<ItemsPage />} />
                 <Route path="/works" element={<WorksPage />} />
-                <Route path="/reports" element={<ReportsPage tickets={tickets} />} />
+                <Route path="/reports" element={<ReportsPage tickets={liveTickets} />} />
                 <Route
                   path="/archive"
                   element={

@@ -73,3 +73,13 @@ describe('a paid ticket on the board', () => {
     expect(isArchived(t, at('2026-08-05T10:00:00'))).toBe(false);
   });
 });
+
+/* A cancelled ticket is never deleted — it leaves the board for the archive at
+   once, and stays there, paid or not and whatever the clock says. */
+describe('a cancelled ticket', () => {
+  it('is in the archive the moment it is cancelled', () => {
+    const t = ticket({ st: 'cancelled', paidAt: null, cancelledAt: '2026-08-05T09:00:00' });
+
+    expect(isArchived(t, at('2026-08-05T09:00:01'))).toBe(true);
+  });
+});

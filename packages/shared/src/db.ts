@@ -426,6 +426,8 @@ const rowToTicket = (r: any): Ticket => ({
   doc: r.doc ?? undefined,
   reference: r.reference ?? undefined,
   boardHidden: r.board_hidden ?? undefined,
+  cancelledAt: r.cancelled_at ?? null,
+  cancelReason: r.cancel_reason ?? null,
   works: (r.works ?? [])
     .slice()
     .sort((a: any, b: any) => a.position - b.position)
@@ -585,9 +587,20 @@ export const updateTicket = async (t: Ticket, worksChanged: boolean) => {
   }
 };
 
-export const deleteTicket = async (key: string) => {
-  const { error } = await getClient().from('tickets').delete().eq('key', key);
-  if (error) throw error; // works + work_items go with it (on delete cascade)
+/* There is no deleteTicket. A work order, once numbered, is kept for good under
+   its customer; the database refuses the delete outright. Cancelling is the
+   way out: the tickets_guard_lifecycle trigger requires the reason, refuses a
+   ticket with an issued bill, stamps when and who, and freezes the row (works
+   and parts included) from then on. Returns the frozen ticket. */
+export const cancelTicket = async (key: string, reason: string): Promise<Ticket> => {
+  const { data, error } = await getClient()
+    .from('tickets')
+    .update({ status: 'cancelled', cancel_reason: reason.trim() })
+    .eq('key', key)
+    .select('*, works(*, work_items(*))')
+    .single();
+  if (error) throw error;
+  return rowToTicket(data);
 };
 
 /* ---------------- ticket photos ---------------- */

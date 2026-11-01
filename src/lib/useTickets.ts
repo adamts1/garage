@@ -9,7 +9,7 @@ import type { Ticket } from '@garage/shared';
 import { takePrefetched } from './prefetch';
 import { isConfigured } from './supabase';
 import {
-  createTicket, deleteTicket, listTickets, subscribeToTickets, updateTicket,
+  cancelTicket, createTicket, listTickets, subscribeToTickets, updateTicket,
 } from '@garage/shared';
 
 type Setter = (update: Ticket[] | ((prev: Ticket[]) => Ticket[])) => void;
@@ -80,9 +80,10 @@ export function useTickets() {
           await updateTicket(t, worksChanged);
         }
       }
-      for (const k of before.keys()) {
-        if (!after.has(k)) await deleteTicket(k);
-      }
+      /* A ticket missing from `next` is NOT deleted. It used to be, and that is
+         how "בטל כרטיס" erased a numbered work order. Tickets are never
+         deleted now (the database refuses), and cancelling goes through
+         cancel() below, which needs a reason and can be refused. */
     } catch (e: any) {
       setError(e.message ?? String(e));
       pending.current = true;   // our optimistic state may be a lie now - force a resync below
@@ -106,5 +107,23 @@ export function useTickets() {
     void persist(prev, next); // save second
   }, [persist]);
 
-  return { tickets, setTickets, loading, error, refetch };
+  /** Cancel, not delete. Not optimistic: the server can say no (no reason, an
+   *  issued invoice), and the caller needs to show why. Throws on refusal. */
+  const cancel = useCallback(async (key: string, reason: string) => {
+    writing.current++;
+    try {
+      const frozen = await cancelTicket(key, reason);
+      const next = current.current.map((t) => (t.k === key ? frozen : t));
+      current.current = next;
+      setLocal(next);
+    } finally {
+      writing.current--;
+      if (writing.current === 0 && pending.current) {
+        pending.current = false;
+        await refetch().catch(() => {});
+      }
+    }
+  }, [refetch]);
+
+  return { tickets, setTickets, cancel, loading, error, refetch };
 }

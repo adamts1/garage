@@ -331,6 +331,14 @@ export const workOrderHtml = (
     ? `<div class="box"><div class="sub-t">הערות</div>${notes}</div>`
     : '';
 
+  /* A cancelled ticket still prints — it is a kept record — but must never be
+     mistaken on paper for a live job. */
+  const cancelledBlock = t.st === 'cancelled'
+    ? `<div class="box"><div class="sub-t">הכרטיס בוטל${
+        t.cancelledAt ? ` ב-${esc(new Date(t.cancelledAt).toLocaleDateString('he-IL'))}` : ''
+      }</div><div class="note">${esc(t.cancelReason ?? '')}</div></div>`
+    : '';
+
   /* The garage's own paper. Each line is dropped when that garage has not
      filled it in, so a garage with nothing but a name prints exactly the header
      it printed before any of this existed. */
@@ -338,9 +346,10 @@ export const workOrderHtml = (
     ${letterheadHtml()}
 
     <div class="docbar">
-      <span class="docbar-k">כרטיס עבודה ${esc(t.k)}</span>
+      <span class="docbar-k">כרטיס עבודה ${esc(t.k)}${t.st === 'cancelled' ? ' · בוטל' : ''}</span>
       <span>${esc(printedOn())}${t.job ? ` · מספר עבודה ${esc(t.job)}` : ''}</span>
     </div>
+    ${cancelledBlock}
 
     <div class="box">
       <div class="cols">

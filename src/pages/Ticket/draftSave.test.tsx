@@ -3,6 +3,7 @@ import type { Customer, Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* The ticket page holds a draft, and the draft reaches the database only when
@@ -71,16 +72,19 @@ const renderPage = async (t: Ticket = ticket()) => {
   const setTickets = vi.fn();
   render(
     <Provider store={store}>
-      <CatalogProvider>
-        <TicketPage
-          ticket={t}
-          setTickets={setTickets}
-          workers={[]}
-          workerChips={{} as never}
-          onBack={() => {}}
-        />
-        <ModalHost />
-      </CatalogProvider>
+      <MemoryRouter>
+        <CatalogProvider>
+          <TicketPage
+            ticket={t}
+            setTickets={setTickets}
+            workers={[]}
+            workerChips={{} as never}
+            onBack={() => {}}
+            onCancelTicket={async () => {}}
+          />
+          <ModalHost />
+        </CatalogProvider>
+      </MemoryRouter>
     </Provider>,
   );
   await act(async () => { await Promise.resolve(); });
