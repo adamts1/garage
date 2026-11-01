@@ -15,7 +15,7 @@ import {
 } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { C, s } from '../../lib/theme';
-import { Checkbox, CreateRow, Field, FormActions, Sheet } from '../ui';
+import { Button, Checkbox, CheckboxBox, CreateRow, Field, FormActions, Sheet } from '../ui';
 import { seedFromQuery, workUid } from './catalog';
 
 export function WorkPicker({
@@ -29,7 +29,9 @@ export function WorkPicker({
    *  cannot carry it twice — see the note on `duplicate` below. */
   taken: string[];
   onClose: () => void;
-  onPick: (w: TicketWork) => void;
+  /** Everything ticked, in the order it was ticked — one tap of "add", not a
+   *  trip back into the sheet per work. */
+  onPick: (w: TicketWork[]) => void;
 }) {
   const { t } = useTranslation();
 
@@ -40,6 +42,7 @@ export function WorkPicker({
   const [defs, setDefs] = useState<WorkDef[] | null>(null);
   const [q, setQ] = useState('');
   const [mode, setMode] = useState<'search' | 'create'>('search');
+  const [picked, setPicked] = useState<WorkDef[]>([]);
 
   // the new-work form
   const [code, setCode] = useState('');
@@ -52,13 +55,20 @@ export function WorkPicker({
     if (visible && !defs) listWorkDefs().then(setDefs).catch(() => setDefs([]));
   }, [visible, defs]);
 
-  // Reopening the sheet starts on the list again, not on a half-typed form.
+  /* Reopening the sheet starts on the list again, not on a half-typed form —
+     and with nothing ticked: closing without "add" is a cancel. */
   useEffect(() => {
     if (!visible) {
       setMode('search');
       setQ('');
+      setPicked([]);
     }
   }, [visible]);
+
+  const isPicked = (d: WorkDef) => picked.some((p) => p.id === d.id);
+  const toggle = (d: WorkDef) =>
+    setPicked((prev) => (prev.some((p) => p.id === d.id) ? prev.filter((p) => p.id !== d.id) : [...prev, d]));
+  const pickedWorks = () => picked.map((d) => fromCatalog(d, workUid()));
 
   const query = q.trim();
   const shown = (defs ?? []).filter(
@@ -110,7 +120,10 @@ export function WorkPicker({
      with the button spinning is the price of never showing that state.
 
      A work that is NOT joining the catalog writes nothing, so it is still
-     instant — which is the case somebody in a hurry picks anyway. */
+     instant — which is the case somebody in a hurry picks anyway.
+
+     Whatever was ticked on the list before "new work" goes onto the ticket
+     with it: creating one is the end of the picking, not a reason to lose it. */
   const submitCreate = async () => {
     if (!name.trim() || !cleanCode || clash || saving) return;
 
@@ -123,7 +136,7 @@ export function WorkPicker({
     };
 
     if (!keep) {
-      onPick(fromCatalog({ id: `custom-${Date.now()}`, ...draft }, workUid()));
+      onPick([...pickedWorks(), fromCatalog({ id: `custom-${Date.now()}`, ...draft }, workUid())]);
       setMode('search');
       return;
     }
@@ -132,7 +145,7 @@ export function WorkPicker({
     try {
       const saved = await createWorkDef(draft);
       setDefs((prev) => [...(prev ?? []), saved]);
-      onPick(fromCatalog(saved, workUid()));
+      onPick([...pickedWorks(), fromCatalog(saved, workUid())]);
       setMode('search');
     } catch (e: any) {
       // Somebody else took the code between the check above and this write.
@@ -151,7 +164,19 @@ export function WorkPicker({
   const title = mode === 'create' ? t('works.form.title') : t('works.picker.title');
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={title}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      footer={
+        mode === 'search' && picked.length ? (
+          <Button
+            label={t('works.picker.addSelected', { count: picked.length })}
+            onPress={() => onPick(pickedWorks())}
+          />
+        ) : null
+      }
+    >
       {mode === 'create' ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
           <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }} keyboardShouldPersistTaps="handled">
@@ -255,14 +280,22 @@ export function WorkPicker({
                  Dropping it from the list instead would read as a catalog that
                  has lost the work somebody is looking straight at. */
               const already = onTicket.has(toCatalogCode(item.code));
+              const on = isPicked(item);
               return (
                 <Pressable
-                  style={[s.card, already && { opacity: 0.55, backgroundColor: C.bg }]}
+                  style={[
+                    s.card,
+                    on && { borderColor: C.ok },
+                    already && { opacity: 0.55, backgroundColor: C.bg },
+                  ]}
                   disabled={already}
-                  onPress={() => onPick(fromCatalog(item, workUid()))}
+                  onPress={() => toggle(item)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on, disabled: already }}
                 >
-                  <View style={s.rowBetween}>
-                    <Text style={s.h2}>{item.name}</Text>
+                  <View style={[s.row, { gap: 10 }]}>
+                    {already ? null : <CheckboxBox checked={on} />}
+                    <Text style={[s.h2, { flex: 1 }]}>{item.name}</Text>
                     <Text style={s.dim}>{item.code}</Text>
                   </View>
                   <Text style={s.dim}>

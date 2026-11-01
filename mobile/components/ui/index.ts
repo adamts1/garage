@@ -11,7 +11,7 @@
    everywhere. */
 
 export { Button, type ButtonSize, type ButtonVariant } from './Button';
-export { Checkbox } from './Checkbox';
+export { Box as CheckboxBox, Checkbox } from './Checkbox';
 export { Chip, ChipGroup, ChipRow, type ChipOption } from './Chip';
 export { ComboField } from './ComboField';
 export { CreateRow } from './CreateRow';
