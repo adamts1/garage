@@ -36,6 +36,20 @@
       "android": { "buildType": "app-bundle" }
     },
 
+    "adhoc-staging": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": { "APP_VARIANT": "staging" },
+      "autoIncrement": true
+    },
+
+    "adhoc": {
+      "distribution": "internal",
+      "environment": "production",
+      "env": { "APP_VARIANT": "production" },
+      "autoIncrement": true
+    },
+
     "production": {
       "distribution": "store",
       "autoIncrement": true,

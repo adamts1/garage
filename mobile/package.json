@@ -47,6 +47,8 @@
     "build:staging:android": "bash scripts/release.sh android --profile staging",
     "build:staging:play": "bash scripts/release.sh android --profile staging-play",
     "device": "eas device:create",
+    "adhoc:staging:ios": "bash scripts/release.sh ios --profile adhoc-staging",
+    "adhoc:ios": "bash scripts/release.sh ios --profile adhoc",
     "testflight": "bash scripts/release.sh ios --submit",
     "build:prod:ios": "bash scripts/release.sh ios",
     "build:prod:android": "bash scripts/release.sh android",
