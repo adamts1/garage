@@ -271,20 +271,25 @@ check(
  * never be commented out again.
  */
 
-const makeTicket = async (tenant, key, title) => {
-  const res = await rest('tickets', tenant.token, {
+/* Through create_ticket, the only way a signed-in user can open one since
+ * 20261101100000: a direct insert must carry the numbers the counter just
+ * handed out. The row is read back so the checks below see what was stored. */
+const makeTicket = async (tenant, title) => {
+  const res = await rest('rpc/create_ticket', tenant.token, {
     method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({ key, title, status: 'todo' }),
+    body: JSON.stringify({ t: { title, status: 'todo', customer_name: `${title} customer` } }),
   });
-  const body = await res.json();
-  return { status: res.status, row: Array.isArray(body) ? body[0] : body };
+  const made = await res.json();
+  const rows = made?.id
+    ? await (await rest(`tickets?id=eq.${made.id}&select=id,key,garage_id`, tenant.token)).json()
+    : [];
+  return { status: res.status, row: rows?.[0] };
 };
 
-const aTicket = await makeTicket(a, `ISO-A-${stamp}`, 'A ticket');
+const aTicket = await makeTicket(a, 'A ticket');
 check(
   'A can create a ticket without naming a garage',
-  aTicket.status === 201 && Boolean(aTicket.row?.id),
+  aTicket.status === 200 && Boolean(aTicket.row?.id),
   `got ${aTicket.status} ${JSON.stringify(aTicket.row).slice(0, 120)}`,
 );
 check(
@@ -293,7 +298,7 @@ check(
   `got ${aTicket.row?.garage_id}`,
 );
 
-await makeTicket(b, `ISO-B-${stamp}`, 'B ticket');
+await makeTicket(b, 'B ticket');
 
 const aTickets = await (await rest('tickets?select=key,garage_id', a.token)).json();
 check(
@@ -303,7 +308,7 @@ check(
 );
 check(
   "A cannot see B's ticket",
-  Array.isArray(aTickets) && !aTickets.some((t) => t.key === `ISO-B-${stamp}`),
+  Array.isArray(aTickets) && !aTickets.some((t) => t.garage_id === b.garage.id),
 );
 
 const bReadsA = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, b.token)).json();
@@ -330,6 +335,24 @@ check(
 await rest(`tickets?id=eq.${aTicket.row?.id}`, b.token, { method: 'DELETE' });
 const stillThere = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, a.token)).json();
 check("B cannot delete A's ticket", stillThere?.length === 1);
+
+/* Tickets are never deleted — not even by their own garage. 20261101090000. */
+await rest(`tickets?id=eq.${aTicket.row?.id}`, a.token, { method: 'DELETE' });
+const keptForGood = await (await rest(`tickets?id=eq.${aTicket.row?.id}&select=id`, a.token)).json();
+check('A cannot delete its own ticket', keptForGood?.length === 1);
+
+/* The number is the counter's, and only the counter's. 20261101100000. */
+const madeUp = await rest('tickets', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ key: `GAR-9${stamp}`, job: `W-9${stamp}`, title: 'made up', customer_name: 'x', status: 'todo' }),
+});
+check('a direct insert with a made-up number is refused', madeUp.status === 403, `got ${madeUp.status}`);
+
+const renumber = await rest(`tickets?id=eq.${aTicket.row?.id}`, a.token, {
+  method: 'PATCH',
+  body: JSON.stringify({ key: `GAR-RENUM-${stamp}` }),
+});
+check('a ticket cannot be renumbered', renumber.status === 403, `got ${renumber.status}`);
 
 const forgedTicket = await rest('tickets', b.token, {
   method: 'POST',
@@ -481,7 +504,7 @@ const rpc = (name, token, body) =>
  * once through the same counter row; a client-side max+1 would have collided. */
 const raceResults = await Promise.all(
   Array.from({ length: 10 }, (_, i) =>
-    rpc('create_ticket', a.token, { t: { title: `race-${i}`, status: 'todo' } }).then((r) => r.json()),
+    rpc('create_ticket', a.token, { t: { title: `race-${i}`, status: 'todo', customer_name: `race-${i}` } }).then((r) => r.json()),
   ),
 );
 const raceKeys = raceResults.map((r) => r.key).filter(Boolean);
@@ -494,7 +517,7 @@ check(
 /* create_ticket assigns the garage from the session, not the payload: a forged
  * garage_id in the body must be ignored, not honoured. */
 const forgedCreate = await (await rpc('create_ticket', b.token, {
-  t: { title: 'forge', status: 'todo', garage_id: a.garage.id },
+  t: { title: 'forge', status: 'todo', garage_id: a.garage.id, customer_name: 'forge' },
 })).json();
 const forgedId = forgedCreate.id;
 const forgedSeenByA = await (await rest(`tickets?id=eq.${forgedId}&select=id`, a.token)).json();
@@ -508,7 +531,7 @@ check(
  * non-numeric labor aborts the cast; no ticket may survive. */
 const beforeCount = (await (await rest('tickets?select=id', a.token)).json()).length;
 await rpc('create_ticket', a.token, {
-  t: { title: 'should roll back', status: 'todo' },
+  t: { title: 'should roll back', status: 'todo', customer_name: 'rollback' },
   works: [{ uid: 'ok', name: 'ok', labor: 1 }, { uid: 'bad', name: 'bad', labor: 'not-a-number' }],
 });
 const afterCount = (await (await rest('tickets?select=id', a.token)).json()).length;
@@ -574,20 +597,22 @@ check(
   `got ${Array.isArray(idHolder) ? idHolder.length : '?'}`,
 );
 
-/* A name with neither ת״ז nor phone is not an identity: it creates no customer
- * at all, rather than a fresh unmatchable row on every visit. */
+/* Every ticket belongs to a customer (20261101090000). A name with neither ת״ז
+ * nor phone used to open no record at all; it now opens one, because a ticket
+ * that belongs to nobody is what the rule forbids. A ticket with no name at all
+ * is refused, and takes no number. */
 const NAMELESS = 'בלי מזהה';
-for (let i = 0; i < 3; i++) {
-  await rpc('create_ticket', a.token, { t: { title: `anon-${i}`, customer_name: NAMELESS } });
-}
-const anon = await (await rest(
-  `customers?name=eq.${encodeURIComponent(NAMELESS)}&select=id`, a.token,
-)).json();
+const nameOnly = await (await rpc('create_ticket', a.token, {
+  t: { title: 'anon', customer_name: NAMELESS },
+})).json();
+const nameOnlyRow = await (await rest(`tickets?id=eq.${nameOnly?.id}&select=customer_id`, a.token)).json();
 check(
-  'a customer name with no ת״ז and no phone creates no customer record',
-  Array.isArray(anon) && anon.length === 0,
-  `got ${Array.isArray(anon) ? anon.length : '?'}`,
+  'a ticket with only a customer name is still attached to a customer',
+  Boolean(nameOnlyRow?.[0]?.customer_id),
+  `got ${JSON.stringify(nameOnlyRow)}`,
 );
+const noName = await rpc('create_ticket', a.token, { t: { title: 'nobody' } });
+check('a ticket with no customer is refused', noName.status >= 400, `got ${noName.status}`);
 
 /* An explicitly picked customer wins over derivation — this is what the intake
  * form's search box now sends. The case that matters is a customer with no
@@ -638,7 +663,7 @@ check(
  * packages/shared/src/types.ts must list exactly these four. */
 for (const st of ['todo', 'appr', 'done', 'paid']) {
   const r = await (await rpc('create_ticket', a.token, {
-    t: { title: `status-${st}`, status: st },
+    t: { title: `status-${st}`, status: st, customer_name: `status-${st}` },
   })).json();
   check(`create_ticket accepts the board status "${st}"`, Boolean(r?.key), JSON.stringify(r));
 }

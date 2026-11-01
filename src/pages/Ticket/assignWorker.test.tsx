@@ -71,6 +71,7 @@ const renderPage = async (t: Ticket = ticket()) => {
           workers={STAFF}
           workerChips={CHIPS}
           onBack={() => {}}
+          onCancelTicket={async () => {}}
         />
       </CatalogProvider>
     </Provider>,

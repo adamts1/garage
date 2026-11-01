@@ -41,9 +41,15 @@ export function useCustomers() {
   const confirm = useConfirm();
   const [rows, setRows] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  /* An empty list and a list not yet loaded look the same; the customer page
+     needs to tell "no such customer" from "not here yet". */
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
-    listCustomers().then(setRows).catch((e) => dispatch(showError(e)));
+    listCustomers()
+      .then(setRows)
+      .catch((e) => dispatch(showError(e)))
+      .finally(() => setLoaded(true));
   }, [dispatch]);
 
   /* The cars are promoted onto a customer by create_ticket, so this list grows
@@ -147,5 +153,5 @@ export function useCustomers() {
     [confirm, dispatch, load],
   );
 
-  return { rows, vehiclesByCustomer, create, update, remove };
+  return { rows, loaded, vehiclesByCustomer, create, update, remove };
 }

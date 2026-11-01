@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { setCurrentGarage, type Invoice, type Ticket } from '@garage/shared';
-import { printInvoice, printTicket } from './print';
+import { setCurrentGarage, type Customer, type Invoice, type Ticket } from '@garage/shared';
+import { printCustomerHistory, printInvoice, printTicket } from './print';
 
 /* These documents go to a customer, so what matters is that every figure the
    screen shows reaches the page, that nothing a customer typed can inject
@@ -377,5 +377,58 @@ describe('printInvoice', () => {
     const html = doc();
     expect(html).toContain('העברה בנקאית');
     expect(html).not.toContain('bank_transfer');
+  });
+});
+
+/* The work order fills its sheet: the works frame grows, so the totals and the
+   signatures sit at the foot of the page rather than half way down it. */
+describe('printTicket layout', () => {
+  it('lays the work order out as the full-page sheet', () => {
+    printTicket(ticket, totals);
+    const html = doc();
+    expect(html).toContain('class="sheet wo"');
+    expect(html).toContain('class="box tight grow"');
+  });
+
+  it('marks a cancelled ticket on paper', () => {
+    printTicket({ ...ticket, st: 'cancelled', cancelReason: 'הלקוח ויתר' }, totals);
+    const html = doc();
+    expect(html).toContain('בוטל');
+    expect(html).toContain('הלקוח ויתר');
+  });
+});
+
+describe('printCustomerHistory', () => {
+  const customer: Customer = {
+    id: 'c1', name: 'יוסי לוי', phone: '050-1234567', email: null,
+    address: null, city: 'חיפה', kind: 'private', id_number: '123456782',
+  };
+  const visits: Ticket[] = [
+    { ...ticket, k: 'GAR-10', createdAtISO: '2026-05-01T08:00:00Z', amount: 300 },
+    { ...ticket, k: 'GAR-12', createdAtISO: '2026-08-01T08:00:00Z', amount: 590 },
+    { ...ticket, k: 'GAR-11', st: 'cancelled', createdAtISO: '2026-06-01T08:00:00Z', amount: 999 },
+  ];
+
+  it('lists every visit with what was done, newest first', () => {
+    printCustomerHistory(customer, visits);
+    const html = doc();
+    expect(html).toContain('יוסי לוי');
+    expect(html).toContain('החלפת רפידות');
+    expect(html).toContain('רפידות קדמיות');
+    expect(html.indexOf('GAR-12')).toBeLessThan(html.indexOf('GAR-10'));
+  });
+
+  /* Kept on file, but not part of the work done for this customer. */
+  it('leaves cancelled tickets out, and out of the total', () => {
+    printCustomerHistory(customer, visits);
+    const html = doc();
+    expect(html).not.toContain('GAR-11');
+    expect(html).not.toContain('999');
+    expect(html).toContain('890');
+  });
+
+  it('escapes what a customer typed', () => {
+    printCustomerHistory({ ...customer, name: '<b>x</b>' }, []);
+    expect(doc()).not.toContain('<b>x</b>');
   });
 });

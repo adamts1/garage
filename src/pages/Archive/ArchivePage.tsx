@@ -1,7 +1,8 @@
-import { shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { isCancelled, shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Filter, FilterBar } from '../../components/FilterBar';
+import { Pill } from '../../components/Pill';
 import { PageHeader } from '../../components/PageHeader';
 import { Table, type Column } from '../../components/Table';
 import { IconClock } from '../../icons';
@@ -9,7 +10,8 @@ import { epicChip } from '../../lib/epic';
 import styles from './ArchivePage.module.css';
 
 export interface ArchivePageProps {
-  /** Already filtered to archived tickets — paid, and aged past the cutoff. */
+  /** Already filtered to archived tickets — paid and aged past the cutoff, or
+   *  cancelled. */
   tickets: Ticket[];
   /** Code → chip. Retired workers included: the archive is entirely history, so
    *  it is the view that most needs them to keep resolving. */
@@ -22,23 +24,23 @@ export interface ArchivePageProps {
 export default function ArchivePage({ tickets, workerChips, onOpenTicket }: ArchivePageProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'all' | 'paid' | 'cancelled'>('all');
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const kept = q
-      ? tickets.filter((ticket) =>
-          (ticket.k + ticket.title + ticket.plate + ticket.car + ticket.customer)
-            .toLowerCase()
-            .includes(q),
-        )
-      : tickets;
+    const kept = tickets.filter((ticket) =>
+      (status === 'all' || (status === 'cancelled') === isCancelled(ticket))
+      && (!q || (ticket.k + ticket.title + ticket.plate + ticket.car + ticket.customer)
+        .toLowerCase()
+        .includes(q)),
+    );
 
     /* Newest settled first, done here rather than through the table's own sort:
        the ordering is on createdAtISO, which no column renders, and a
        `defaultSort` naming a key with no column silently does nothing. Clicking
        a header still re-sorts from here. */
     return [...kept].sort((a, b) => (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? ''));
-  }, [tickets, query]);
+  }, [tickets, query, status]);
 
   const columns: Column<Ticket>[] = [
     {
@@ -57,7 +59,12 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         const epic = epicChip(ticket.epic);
         return (
           <>
-            <div className={styles.title}>{ticket.title || t('common.untitled')}</div>
+            <div className={styles.title}>
+              {ticket.title || t('common.untitled')}
+              {isCancelled(ticket) && (
+                <> <Pill tone="danger" title={ticket.cancelReason ?? undefined}>{t('archive.cancelled')}</Pill></>
+              )}
+            </div>
             <span className={styles.epic} style={{ background: epic.bg, color: epic.c }}>
               {epic.t}
             </span>
@@ -130,6 +137,15 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('archive.searchPlaceholder')}
             />
+          )}
+        </Filter>
+        <Filter label="archive.status">
+          {(id) => (
+            <select id={id} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+              <option value="all">{t('archive.statusAll')}</option>
+              <option value="paid">{t('archive.statusPaid')}</option>
+              <option value="cancelled">{t('archive.cancelled')}</option>
+            </select>
           )}
         </Filter>
       </FilterBar>

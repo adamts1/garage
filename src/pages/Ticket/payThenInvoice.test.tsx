@@ -87,6 +87,7 @@ const renderPage = async () => {
           workers={[]}
           workerChips={{} as never}
           onBack={() => {}}
+          onCancelTicket={async () => {}}
         />
         <ModalHost />
       </CatalogProvider>

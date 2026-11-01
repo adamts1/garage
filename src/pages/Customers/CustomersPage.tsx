@@ -1,6 +1,7 @@
-import { customerKind, type Customer } from '@garage/shared';
-import { useState } from 'react';
+import { customerKind, type Customer, type Ticket } from '@garage/shared';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { CrudForm } from '../../components/CrudForm';
 import { SelectField, TextField } from '../../components/Field';
@@ -11,13 +12,24 @@ import {
   blankCustomer, CUSTOMER_KINDS, toDraft, useCustomers, type CustomerDraft,
 } from './useCustomers';
 
-export default function CustomersPage() {
+export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
   const { t } = useTranslation();
 
   /* A customer's kind is stored as a code; this is where it becomes a word.
      The code is shared with the phone app, the Hebrew for it is this app's. */
   const kindLabel = (kind: string) => t(`customers.kinds.${customerKind(kind)}`);
   const { rows, vehiclesByCustomer, create, update, remove } = useCustomers();
+
+  /* Work orders per customer, cancelled ones included: every one of them keeps
+     the customer on file (the database refuses the delete), so the button is
+     disabled up front rather than left to fail. */
+  const ticketCount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ticket of tickets) {
+      if (ticket.customerId) map.set(ticket.customerId, (map.get(ticket.customerId) ?? 0) + 1);
+    }
+    return map;
+  }, [tickets]);
 
   /* One open panel at a time. Several would turn the table into a list of
      lists, and the reason to open one is to look at that customer's cars. */
@@ -61,7 +73,9 @@ export default function CustomersPage() {
       key: 'name',
       header: 'customers.fields.name',
       sortValue: (c) => c.name,
-      render: cell('name', (c) => <span className={styles.name}>{c.name}</span>),
+      render: cell('name', (c) => (
+        <Link className={styles.name} to={`/customers/${c.id}`}>{c.name}</Link>
+      )),
     },
     {
       key: 'phone',
@@ -125,6 +139,13 @@ export default function CustomersPage() {
       },
     },
     {
+      key: 'tickets',
+      header: 'customers.fields.tickets',
+      width: 100,
+      sortValue: (c) => ticketCount.get(c.id) ?? 0,
+      render: (c) => ticketCount.get(c.id) ?? 0,
+    },
+    {
       key: 'actions',
       width: 170,
       render: (c) => (
@@ -149,7 +170,13 @@ export default function CustomersPage() {
               <Button size="sm" onClick={() => { setEditingId(c.id); setEdit(toDraft(c)); }}>
                 {t('common.edit')}
               </Button>
-              <Button variant="ghostDanger" size="sm" onClick={() => void remove(c)}>
+              <Button
+                variant="ghostDanger"
+                size="sm"
+                disabled={(ticketCount.get(c.id) ?? 0) > 0}
+                title={(ticketCount.get(c.id) ?? 0) > 0 ? t('customers.deleteBlocked') : undefined}
+                onClick={() => void remove(c)}
+              >
                 {t('common.delete')}
               </Button>
             </>

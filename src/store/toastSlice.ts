@@ -89,6 +89,8 @@ export const showInfo = (key: string, values?: Toast['values']) =>
  * "customers_garage_id_number_key" in front of somebody at a service desk. */
 const CONSTRAINT_KEYS: Record<string, string> = {
   customers_garage_id_number_key: 'errors.idNumberTaken',
+  // ON DELETE RESTRICT: a customer with work orders stays on file.
+  tickets_customer_id_fkey: 'customers.deleteBlocked',
 };
 
 /** `e` is whatever landed in a catch block. Errors carry their own text — there
