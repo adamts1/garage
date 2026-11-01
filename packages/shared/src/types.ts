@@ -8,7 +8,14 @@ import type { TicketWork } from './catalog';
    and not ready, which is what כניסה says, and a board nobody drags cards
    across is a board that lies. A blocker is still recordable — `blocked` is a
    note on the ticket, no longer a column. */
-export type Status = 'todo' | 'appr' | 'done' | 'paid';
+export type BoardStatus = 'todo' | 'appr' | 'done' | 'paid';
+
+/* 'cancelled' is a status but not a column. A work order is never deleted —
+   the rule is that every number, once given, stays on file under its customer
+   — so "בטל כרטיס" freezes the ticket instead: off the board, read-only, kept
+   with when and why. The database enforces all of it; see
+   20261101090000_tickets_cancel_not_delete.sql. */
+export type Status = BoardStatus | 'cancelled';
 export type Priority = 'urgent' | 'high' | 'med' | 'low';
 export type GroupBy = 'none' | 'who' | 'prio' | 'epic';
 
@@ -114,7 +121,15 @@ export interface Ticket {
    *  view, which is where it is put back from. Undefined on a row read before
    *  the column existed — ticketToRow then leaves the column alone. */
   boardHidden?: boolean;
+
+  /** When it was cancelled and why (tickets.cancelled_at / cancel_reason).
+   *  Stamped by the database when the status becomes 'cancelled'; never sent
+   *  by ticketToRow — cancelTicket is the only way in. */
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
 }
+
+export const isCancelled = (t: Pick<Ticket, 'st'>): boolean => t.st === 'cancelled';
 
 /* A paid ticket stays on the board for the rest of the day it was paid, and is
    in the archive the next morning.
@@ -140,6 +155,8 @@ const startOfDay = (d: Date): Date =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 export const isArchived = (t: Ticket, now: Date = new Date()): boolean => {
+  // Off the board the moment it is cancelled, and kept in the archive for good.
+  if (t.st === 'cancelled') return true;
   if (t.st !== 'paid') return false;
 
   const paid = t.paidAt ? new Date(t.paidAt) : null;
@@ -157,7 +174,7 @@ export const isArchived = (t: Ticket, now: Date = new Date()): boolean => {
 /* The board, left to right. `wip` caps a column and is optional — no column
    sets one now that "בעבודה" is gone, but the board still honours it, so a
    garage that wants a ceiling on open jobs has somewhere to put it. */
-export const COLUMNS: { id: Status; title: string; dot: string; wip?: number }[] = [
+export const COLUMNS: { id: BoardStatus; title: string; dot: string; wip?: number }[] = [
   { id: 'todo', title: 'כניסה', dot: '#748cab' },
   { id: 'appr', title: 'ממתין לאישור', dot: '#1d2d44' },
   { id: 'done', title: 'מוכן', dot: '#4f7a5b' },   // מוכן, טרם שולם

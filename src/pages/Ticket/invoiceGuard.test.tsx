@@ -82,6 +82,7 @@ const renderPage = async (t: Ticket = ticket()) => {
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}
+            onCancelTicket={async () => {}}
           />
           {/* The issue dialog and the cancel prompt now come from the registry,
               so the host has to be mounted for either to appear at all. */}

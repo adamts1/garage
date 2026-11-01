@@ -1,0 +1,122 @@
+.head {
+  margin-bottom: 16px;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted-d);
+  text-decoration: none;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+/* The פרטי / עסקי pill, as in the customers table. */
+.kind {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+}
+
+.facts dt {
+  font-size: 13px;
+  color: var(--muted-d);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: start;
+}
+
+.table {
+  margin-top: 12px;
+}
+
+.key {
+  font-weight: 800;
+  color: var(--muted-d);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.plate {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+/* When and why, under the בוטל pill. */
+.reason {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.empty {
+  margin-top: 16px;
+  color: var(--muted-d);
+}
+
+.vehicles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.vehicle {
+  display: grid;
+  grid-template-columns: 110px minmax(140px, 1fr) 2fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.meta {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .vehicle {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

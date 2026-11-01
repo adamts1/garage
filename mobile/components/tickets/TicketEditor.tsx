@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { listWorkers, waMessage, waNumber, workOrderHtml, worksSummary } from '@garage/shared';
+import { isCancelled, listWorkers, waMessage, waNumber, workOrderHtml, worksSummary } from '@garage/shared';
 import type { Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
@@ -116,6 +116,10 @@ export default function TicketEditor({
   const works = draft.works ?? [];
   const sum = worksSummary(works);
   const closed = draft.st === 'done' || draft.st === 'paid';
+  /* Frozen by the database: any write to it is refused. The phone shows it,
+     prints it, and offers nothing else — touches on the tab content are
+     switched off rather than threading a read-only flag through every tab. */
+  const cancelled = isCancelled(draft);
   const notesCount = [draft.notes, draft.blocked].filter(Boolean).length;
 
   /* The checklist is a prefix: the schema stores `done` as a count, not a flag
@@ -254,11 +258,28 @@ export default function TicketEditor({
         contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 140 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Button
-          label={closed ? t('ticket.whatsapp.ready') : t('ticket.whatsapp.quote')}
-          onPress={sendWhatsApp}
-          color={C.whatsapp}
-        />
+        {cancelled && (
+          <View style={{ backgroundColor: C.dangerBg, borderRadius: 10, padding: 12, gap: 4 }}>
+            <Text style={[s.body, { color: C.danger, fontWeight: '700' }]}>
+              {t('ticket.cancelled.banner', {
+                date: draft.cancelledAt ? new Date(draft.cancelledAt).toLocaleDateString('he-IL') : '',
+              })}
+            </Text>
+            {draft.cancelReason ? (
+              <Text style={[s.body, { color: C.danger }]}>
+                {t('ticket.cancelled.reason', { reason: draft.cancelReason })}
+              </Text>
+            ) : null}
+          </View>
+        )}
+
+        {!cancelled && (
+          <Button
+            label={closed ? t('ticket.whatsapp.ready') : t('ticket.whatsapp.quote')}
+            onPress={sendWhatsApp}
+            color={C.whatsapp}
+          />
+        )}
 
         <Button
           label={t('ticket.print.action')}
@@ -267,55 +288,61 @@ export default function TicketEditor({
           busy={printing}
         />
 
-        <Button
-          label={t(ticket?.boardHidden ? 'ticket.board.show' : 'ticket.board.hide')}
-          onPress={toggleBoardHidden}
-          variant="outline"
-        />
+        {!cancelled && (
+          <Button
+            label={t(ticket?.boardHidden ? 'ticket.board.show' : 'ticket.board.hide')}
+            onPress={toggleBoardHidden}
+            variant="outline"
+          />
+        )}
 
         <TabBar tabs={TABS} active={tab} onSelect={setTab} />
 
-        {tab === 'works' && <WorksSection works={works} onChange={setWorks} />}
-        {tab === 'details' && (
-          <DetailsTab draft={draft} onSet={set} onStatus={changeStatus} workers={workers} />
-        )}
-        {tab === 'photos' && <PhotosTab photos={photos} />}
-        {tab === 'history' && (
-          <ChecklistTab subtasks={draft.subtasks} done={draft.done} onToggle={toggleSubtask} />
-        )}
-        {tab === 'notes' && <NotesTab draft={draft} onSet={set} />}
+        <View pointerEvents={cancelled ? 'none' : 'auto'} style={{ gap: 12, opacity: cancelled ? 0.75 : 1 }}>
+          {tab === 'works' && <WorksSection works={works} onChange={setWorks} />}
+          {tab === 'details' && (
+            <DetailsTab draft={draft} onSet={set} onStatus={changeStatus} workers={workers} />
+          )}
+          {tab === 'photos' && <PhotosTab photos={photos} />}
+          {tab === 'history' && (
+            <ChecklistTab subtasks={draft.subtasks} done={draft.done} onToggle={toggleSubtask} />
+          )}
+          {tab === 'notes' && <NotesTab draft={draft} onSet={set} />}
+        </View>
       </ScrollView>
 
-      <View
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          flexDirection: 'row-reverse',
-          alignItems: 'center',
-          gap: 10,
-          padding: 12,
-          paddingBottom: insets.bottom + 10,
-          backgroundColor: C.card,
-          borderTopWidth: 1,
-          borderTopColor: C.line,
-        }}
-      >
-        <Button
-          label={t('ticket.finish')}
-          onPress={() => saveWith({ st: 'done', done: draft.subtasks.length })}
-          busy={saving}
-          style={{ flex: 1 }}
-        />
-        <Button
-          label={t('common.save')}
-          onPress={() => saveWith()}
-          variant="outline"
-          disabled={!dirty || saving}
-          style={{ flex: 1 }}
-        />
-      </View>
+      {!cancelled && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            gap: 10,
+            padding: 12,
+            paddingBottom: insets.bottom + 10,
+            backgroundColor: C.card,
+            borderTopWidth: 1,
+            borderTopColor: C.line,
+          }}
+        >
+          <Button
+            label={t('ticket.finish')}
+            onPress={() => saveWith({ st: 'done', done: draft.subtasks.length })}
+            busy={saving}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label={t('common.save')}
+            onPress={() => saveWith()}
+            variant="outline"
+            disabled={!dirty || saving}
+            style={{ flex: 1 }}
+          />
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }

@@ -1,9 +1,10 @@
 import {
-  assignableWorkers, COLUMNS, money, VAT, waMessage, waNumber, workerChip,
+  assignableWorkers, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
 import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
 import { WorksStep } from '../../features/works';
 import {
@@ -22,6 +23,8 @@ export interface TicketPageProps {
   /** Code → chip, retired workers included: this page shows history. */
   workerChips: WorkerMap;
   onBack: () => void;
+  /** Cancels the ticket; throws when the server refuses. */
+  onCancelTicket: (key: string, reason: string) => Promise<void>;
   /** Told whenever the page gains or loses unsaved edits, so the shell can ask
    *  before any way out of the page throws them away. */
   onDirtyChange?: (dirty: boolean) => void;
@@ -44,10 +47,10 @@ const Val = ({ children }: { children?: string | number | null }) =>
     : <>{children}</>;
 
 export default function TicketPage({
-  ticket, setTickets, workers, workerChips, onBack, onDirtyChange,
+  ticket, setTickets, workers, workerChips, onBack, onCancelTicket, onDirtyChange,
 }: TicketPageProps) {
   const { t } = useTranslation();
-  const page = useTicketPage({ ticket, setTickets, onBack, onDirtyChange });
+  const page = useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDirtyChange });
   const { photos, invoice, busy, totals, works, dirty } = page;
 
   /* Everything on this screen reads the DRAFT, not the row. The row is what the
@@ -60,6 +63,10 @@ export default function TicketPage({
 
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
   const column = COLUMNS.find((c) => c.id === draft.st);
+  /* Kept for good, changed never: the database refuses any write to it, so the
+     page offers none. Everything below the header sits in a disabled fieldset
+     rather than threading a flag through every control. */
+  const cancelled = isCancelled(ticket);
   const closed = isClosed(draft);
   const settled = isSettled(draft);
   const wa = waNumber(draft.phone);
@@ -81,9 +88,12 @@ export default function TicketPage({
           <div>
             <div className="tp-title">
               <h2>{t('ticket.title', { number: ticket.k.split('-')[1] })}</h2>
-              <span className="tp-status" style={{ '--dot': column?.dot } as CSSProperties}>
+              <span
+                className={`tp-status${cancelled ? ' cancelled' : ''}`}
+                style={{ '--dot': column?.dot } as CSSProperties}
+              >
                 <i className="tp-status-dot" />
-                {column?.title}
+                {cancelled ? t('ticket.statusCancelled') : column?.title}
               </span>
             </div>
             <div className="tp-sub">
@@ -97,6 +107,7 @@ export default function TicketPage({
               <span className="tp-assign">
                 <span className="tp-assign-chip" style={{ background: chip.bg }}>{chip.ini}</span>
                 <select
+                  disabled={cancelled}
                   className="tp-assign-select"
                   aria-label={t('ticket.assignWorker')}
                   value={draft.who ?? ''}
@@ -139,7 +150,16 @@ export default function TicketPage({
         </nav>
       </header>
 
-      <div className="tp-grid">
+      {cancelled && (
+        <div className="tp-cancelled" role="status">
+          <b>{t('ticket.cancelledBanner', {
+            date: ticket.cancelledAt ? new Date(ticket.cancelledAt).toLocaleDateString('he-IL') : '',
+          })}</b>
+          <span>{t('ticket.cancelledReason', { reason: ticket.cancelReason ?? '' })}</span>
+        </div>
+      )}
+
+      <fieldset className="tp-grid tp-frozen" disabled={cancelled}>
         {/* ------- main column ------- */}
         <div className="tp-main">
           <div className="tp-row" id="tp-details">
@@ -162,7 +182,15 @@ export default function TicketPage({
             <section className="card">
               <h3 className="card-title"><IconCustomers /> {t('ticket.customer')}</h3>
               <dl className="kv">
-                <dt>{t('ticket.fields.name')}</dt><dd><b>{draft.customer}</b></dd>
+                <dt>{t('ticket.fields.name')}</dt>
+                <dd>
+                  {/* Every ticket of theirs, cancelled ones included, is one
+                      click away — the customer page is where the full record
+                      lives. */}
+                  {draft.customerId
+                    ? <Link className="kv-link" to={`/customers/${draft.customerId}`}><b>{draft.customer}</b></Link>
+                    : <b>{draft.customer}</b>}
+                </dd>
                 <dt>{t('ticket.fields.phone')}</dt>
                 <dd>
                   {draft.phone
@@ -498,7 +526,7 @@ export default function TicketPage({
             </button>
           </section>
         </aside>
-      </div>
+      </fieldset>
 
       {lightbox && (
         <div
@@ -517,24 +545,40 @@ export default function TicketPage({
 
       {/* The save button used to scroll the page to the works table. Nothing on
           this screen saved anything, because everything already had. */}
-      <footer className="tp-foot">
-        <button className="btn danger" onClick={() => void page.remove()}>
-          <IconTrash /> {t('ticket.deleteTicket')}
-        </button>
-        <div className="foot-spacer" />
-        {dirty && <span className="tp-unsaved" role="status">{t('ticket.unsaved')}</span>}
-        <button className="btn ghost" onClick={page.discard} disabled={!dirty || busy}>
-          {t('ticket.discard')}
-        </button>
-        <button className="btn ghost" onClick={() => void page.leave()}>{t('common.close')}</button>
-        <button
-          className="btn primary lg"
-          onClick={() => void page.save()}
-          disabled={!dirty || busy}
-        >
-          {t('common.save')} <span className="arrow">←</span>
-        </button>
-      </footer>
+      {cancelled ? (
+        <footer className="tp-foot">
+          {/* The one action left: a kept record has to be printable. It sits
+              here because the panel's own print button is inside the frozen
+              fieldset. */}
+          <button
+            className="btn ghost"
+            onClick={() => warnIfBlocked(printTicket(draft, totals, { photoCount: photos.length }))}
+          >
+            <IconPrint /> {t('ticket.printTicket')}
+          </button>
+          <div className="foot-spacer" />
+          <button className="btn ghost" onClick={() => void page.leave()}>{t('common.close')}</button>
+        </footer>
+      ) : (
+        <footer className="tp-foot">
+          <button className="btn danger" onClick={() => void page.cancel()}>
+            <IconTrash /> {t('ticket.cancelTicket')}
+          </button>
+          <div className="foot-spacer" />
+          {dirty && <span className="tp-unsaved" role="status">{t('ticket.unsaved')}</span>}
+          <button className="btn ghost" onClick={page.discard} disabled={!dirty || busy}>
+            {t('ticket.discard')}
+          </button>
+          <button className="btn ghost" onClick={() => void page.leave()}>{t('common.close')}</button>
+          <button
+            className="btn primary lg"
+            onClick={() => void page.save()}
+            disabled={!dirty || busy}
+          >
+            {t('common.save')} <span className="arrow">←</span>
+          </button>
+        </footer>
+      )}
     </div>
   );
 }
