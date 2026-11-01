@@ -40,14 +40,16 @@
       "distribution": "internal",
       "environment": "preview",
       "env": { "APP_VARIANT": "staging" },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": { "buildType": "apk" }
     },
 
     "adhoc": {
       "distribution": "internal",
       "environment": "production",
       "env": { "APP_VARIANT": "production" },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": { "buildType": "apk" }
     },
 
     "production": {

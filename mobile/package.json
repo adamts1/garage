@@ -49,6 +49,7 @@
     "device": "eas device:create",
     "adhoc:staging:ios": "bash scripts/release.sh ios --profile adhoc-staging",
     "adhoc:ios": "bash scripts/release.sh ios --profile adhoc",
+    "adhoc:android": "bash scripts/release.sh android --profile adhoc",
     "testflight": "bash scripts/release.sh ios --submit",
     "build:prod:ios": "bash scripts/release.sh ios",
     "build:prod:android": "bash scripts/release.sh android",
