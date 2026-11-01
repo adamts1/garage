@@ -17,9 +17,10 @@
    version of this inline and now uses it too. */
 
 import {
+  customerHistoryHtml, customerHistoryTitle,
   esc, groupInvoiceLines, letterheadHtml, money, payMethodHe, renderPrintDoc, row,
   workOrderHtml, workOrderTitle,
-  type Invoice, type InvoiceGroup, type InvoiceLine, type TicketTotals, type Ticket, type TicketWork,
+  type Customer, type Invoice, type InvoiceGroup, type InvoiceLine, type TicketTotals, type Ticket, type TicketWork,
 } from '@garage/shared';
 
 /* Re-exported: both were declared here before the move, and the expense sheet
@@ -54,6 +55,10 @@ export const printTicket = (
   totals: TicketTotals,
   opts: { photoCount?: number } = {},
 ): boolean => openDoc(workOrderTitle(t), workOrderHtml(t, totals, opts));
+
+/** One customer's visits, cancelled tickets left out (by the builder). */
+export const printCustomerHistory = (c: Customer, tickets: readonly Ticket[]): boolean =>
+  openDoc(customerHistoryTitle(c), customerHistoryHtml(c, tickets));
 
 /* ---------------- invoice ---------------- */
 

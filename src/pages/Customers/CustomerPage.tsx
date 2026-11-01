@@ -2,10 +2,13 @@ import { customerKind, isCancelled, shekel, type Ticket } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
+import { Button } from '../../components/Button';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { Pill, type PillTone } from '../../components/Pill';
 import { Table, type Column } from '../../components/Table';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
+import { IconPrint } from '../../icons';
+import { printCustomerHistory, warnIfBlocked } from '../../lib/print';
 import styles from './CustomerPage.module.css';
 import { useCustomers } from './useCustomers';
 
@@ -129,10 +132,17 @@ export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProp
     <>
       <div className={styles.head}>
         <Link className={styles.back} to="/customers">→ {t('customer.backToList')}</Link>
-        <h2 className={styles.name}>
-          {customer.name}
-          <span className={styles.kind}>{t(`customers.kinds.${customerKind(customer.kind)}`)}</span>
-        </h2>
+        <div className={styles.titleRow}>
+          <h2 className={styles.name}>
+            {customer.name}
+            <span className={styles.kind}>{t(`customers.kinds.${customerKind(customer.kind)}`)}</span>
+          </h2>
+          {/* Every visit, whatever the filter below shows — but never a
+              cancelled ticket: the history is the work that was done. */}
+          <Button onClick={() => warnIfBlocked(printCustomerHistory(customer, theirs))}>
+            <IconPrint /> {t('customer.printHistory')}
+          </Button>
+        </div>
         <dl className={styles.facts}>
           <div><dt>{t('customers.fields.phone')}</dt><dd dir="ltr">{customer.phone || t('common.none')}</dd></div>
           <div><dt>{t('customers.fields.id_number')}</dt><dd dir="ltr">{customer.id_number || t('common.none')}</dd></div>
