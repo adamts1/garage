@@ -85,6 +85,19 @@ UDID *before* the build, and a phone that was not registered at build time gets
 `לא ניתן לוודא את שלמותו` and nothing else. That does not work for a garage's staff,
 whose phones we never touch. So `staging` is `distribution: "store"` on iOS.
 
+**iOS — ad hoc, when TestFlight is not an option.** For one known phone (ours, or
+a customer's before the app is live), register it first, then build:
+
+```bash
+npm run device                 # prints a link; open it on the phone, install the profile
+npm run adhoc:staging:ios      # staging database
+npm run adhoc:ios              # PRODUCTION database — real garages
+```
+
+EAS asks which registered devices to include and prints an install link. The phone
+needs Developer Mode on (Settings → Privacy & Security). A phone registered after
+the build cannot install it: rebuild.
+
 **Android — a link, or the store.** Nothing there refuses to install an app the
 platform did not sign, so both work and they are kept as separate profiles:
 

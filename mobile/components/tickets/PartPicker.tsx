@@ -15,7 +15,7 @@ import {
 } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { C, s } from '../../lib/theme';
-import { Checkbox, CreateRow, Field, FormActions, Sheet } from '../ui';
+import { Button, Checkbox, CheckboxBox, CreateRow, Field, FormActions, Sheet } from '../ui';
 import { seedFromQuery } from './catalog';
 
 export function PartPicker({
@@ -32,13 +32,15 @@ export function PartPicker({
    *  — that is the stepper's job. */
   taken: string[];
   onClose: () => void;
-  onPick: (p: PartRow) => void;
+  /** Everything ticked, in the order it was ticked — see WorkPicker. */
+  onPick: (p: PartRow[]) => void;
 }) {
   const { t } = useTranslation();
 
   const [items, setItems] = useState<Item[] | null>(null);
   const [q, setQ] = useState('');
   const [mode, setMode] = useState<'search' | 'create'>('search');
+  const [picked, setPicked] = useState<Item[]>([]);
 
   // the new-part form
   const [sku, setSku] = useState('');
@@ -56,8 +58,15 @@ export function PartPicker({
     if (!workUid) {
       setMode('search');
       setQ('');
+      setPicked([]);
     }
   }, [workUid]);
+
+  const isPicked = (i: Item) => picked.some((p) => p.id === i.id);
+  const toggle = (i: Item) =>
+    setPicked((prev) => (prev.some((p) => p.id === i.id) ? prev.filter((p) => p.id !== i.id) : [...prev, i]));
+  const pickedParts = (): PartRow[] =>
+    picked.map((i) => ({ sku: i.sku, name: i.name, qty: 1, price: i.price }));
 
   const query = q.trim();
   const shown = (items ?? []).filter(
@@ -91,14 +100,14 @@ export function PartPicker({
 
   /* Into the items table first, onto the work after — the ordering WorkPicker
      explains. Stock starts at 0: a part invented mid-ticket is one nobody has
-     counted. */
+     counted. Anything already ticked goes on with it, as in WorkPicker. */
   const submitCreate = async () => {
     if (!name.trim() || !cleanSku || clash || saving) return;
 
     const part = { sku: cleanSku, name: name.trim(), price: Number(price) || 0 };
 
     if (!keep) {
-      onPick({ ...part, qty: 1 });
+      onPick([...pickedParts(), { ...part, qty: 1 }]);
       setMode('search');
       return;
     }
@@ -107,7 +116,7 @@ export function PartPicker({
     try {
       const saved = await createItem({ ...part, stock: 0 });
       setItems((prev) => [...(prev ?? []), saved]);
-      onPick({ sku: saved.sku, name: saved.name, price: saved.price, qty: 1 });
+      onPick([...pickedParts(), { sku: saved.sku, name: saved.name, price: saved.price, qty: 1 }]);
       setMode('search');
     } catch (e: any) {
       if (isDuplicateCodeError(e)) {
@@ -189,7 +198,19 @@ export function PartPicker({
   }
 
   return (
-    <Sheet visible={Boolean(workUid)} onClose={onClose} title={t('parts.picker.title')}>
+    <Sheet
+      visible={Boolean(workUid)}
+      onClose={onClose}
+      title={t('parts.picker.title')}
+      footer={
+        picked.length ? (
+          <Button
+            label={t('parts.picker.addSelected', { count: picked.length })}
+            onPress={() => onPick(pickedParts())}
+          />
+        ) : null
+      }
+    >
       <View style={{ padding: 12 }}>
         <TextInput
           style={s.input}
@@ -220,13 +241,21 @@ export function PartPicker({
           }
           renderItem={({ item }) => {
             const already = onWork.has(toCatalogCode(item.sku));
+            const on = isPicked(item);
             return (
               <Pressable
-                style={[s.card, already && { opacity: 0.55, backgroundColor: C.bg }]}
+                style={[
+                  s.card,
+                  on && { borderColor: C.ok },
+                  already && { opacity: 0.55, backgroundColor: C.bg },
+                ]}
                 disabled={already}
-                onPress={() => onPick({ sku: item.sku, name: item.name, qty: 1, price: item.price })}
+                onPress={() => toggle(item)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on, disabled: already }}
               >
-                <View style={s.rowBetween}>
+                <View style={[s.row, { gap: 10 }]}>
+                  {already ? null : <CheckboxBox checked={on} />}
                   <Text style={[s.h2, { flex: 1 }]}>{item.name}</Text>
                   <Text style={[s.dim, { fontWeight: '700', color: C.ink }]}>₪{item.price}</Text>
                 </View>

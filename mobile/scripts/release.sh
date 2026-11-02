@@ -100,7 +100,10 @@ printf '    platform %s%s%s\n' "$GREEN" "$PLATFORM" "$OFF"
 printf '    profile  %s%s%s\n' "$GREEN" "$PROFILE" "$OFF"
 printf '    branch   %s%s%s\n' "$GREEN" "$BRANCH" "$OFF"
 printf '    commit   %s\n' "$COMMIT"
-if [[ "$PROFILE" == "production" ]]; then
+# Read from the profile, not its name: `adhoc` is production too.
+VARIANT="$(node -p "require('./eas.json').build?.['$PROFILE']?.env?.APP_VARIANT ?? ''" 2>/dev/null || true)"
+[[ -z "$VARIANT" ]] && die "No profile '$PROFILE' with env.APP_VARIANT in eas.json."
+if [[ "$VARIANT" == "production" ]]; then
   printf '    database %sPRODUCTION%s — real garages\n' "$RED" "$OFF"
 else
   printf '    database %sstaging%s\n' "$YELLOW" "$OFF"
