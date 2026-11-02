@@ -25,7 +25,7 @@ module.exports = {
     // The slug is the EAS project's identity, not the app's — it stays fixed
     // across variants so both keep reporting into the same EAS project.
     slug: 'garage-mobile',
-    name: IS_PROD ? 'מוסך' : 'מוסך (Staging)',
+    name: IS_PROD ? 'Garagiox' : 'Garagiox (Staging)',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
