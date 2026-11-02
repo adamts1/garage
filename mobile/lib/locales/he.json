@@ -244,7 +244,8 @@
       "create": "עבודה חדשה",
       "createNamed": "צור עבודה חדשה: \"{{query}}\"",
       "meta": "עבודה ₪{{labor}} · {{hours}} שע׳ · {{parts}} חלקים",
-      "taken": "כבר בכרטיס"
+      "taken": "כבר בכרטיס",
+      "addSelected": "הוסף לכרטיס ({{count}})"
     },
     "form": {
       "title": "עבודה חדשה",
@@ -273,7 +274,8 @@
       "empty": "לא נמצאו חלקים",
       "create": "פריט חדש",
       "createNamed": "צור פריט חדש: \"{{query}}\"",
-      "taken": "כבר בעבודה"
+      "taken": "כבר בעבודה",
+      "addSelected": "הוסף לעבודה ({{count}})"
     },
     "form": {
       "title": "פריט חדש",

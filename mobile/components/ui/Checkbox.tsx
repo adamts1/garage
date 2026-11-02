@@ -33,7 +33,9 @@ export function Checkbox({
   );
 }
 
-function Box({ checked }: { checked: boolean }) {
+/** The square alone, for a row that is itself the press target — a picker's
+ *  catalog row, where a nested Pressable would split the tap. */
+export function Box({ checked }: { checked: boolean }) {
   return (
     <View
       style={{

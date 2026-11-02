@@ -49,8 +49,8 @@ export function WorksSection({
      lie about. Same rule as the web's WorksStep. */
   const canPrice = isGarageAdmin();
 
-  const addWork = (w: TicketWork) => {
-    onChange([...works, w]);
+  const addWorks = (ws: TicketWork[]) => {
+    onChange([...works, ...ws]);
     setPickWork(false);
   };
 
@@ -63,7 +63,7 @@ export function WorksSection({
       onChange([...works, { uid, code: '', name: text, labor: 0, items: [], custom: true }]);
       setOpenWork(uid);   // open, so the price and the parts are right there
     } else if (freeFor) {
-      addPart(freeFor, { sku: '', name: text, qty: 1, price: 0 });
+      addParts(freeFor, [{ sku: '', name: text, qty: 1, price: 0 }]);
     }
     setFreeFor(null);
   };
@@ -73,8 +73,8 @@ export function WorksSection({
 
   const removeWork = (uid: string) => onChange(works.filter((w) => w.uid !== uid));
 
-  const addPart = (uid: string, part: PartRow) => {
-    patchWork(uid, { items: [...(works.find((w) => w.uid === uid)?.items ?? []), part] });
+  const addParts = (uid: string, parts: PartRow[]) => {
+    patchWork(uid, { items: [...(works.find((w) => w.uid === uid)?.items ?? []), ...parts] });
     setPickPartFor(null);
   };
 
@@ -189,13 +189,13 @@ export function WorksSection({
         visible={pickWork}
         taken={works.map((w) => w.code)}
         onClose={() => setPickWork(false)}
-        onPick={addWork}
+        onPick={addWorks}
       />
       <PartPicker
         workUid={pickPartFor}
         taken={works.find((w) => w.uid === pickPartFor)?.items.map((p) => p.sku) ?? []}
         onClose={() => setPickPartFor(null)}
-        onPick={(part) => pickPartFor && addPart(pickPartFor, part)}
+        onPick={(parts) => pickPartFor && addParts(pickPartFor, parts)}
       />
     </>
   );
