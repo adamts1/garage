@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
+import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, matchVehiclesByPlate, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
 import type { Ticket } from './types';
 
 const cust = (over: Partial<CustomerIdentity>): CustomerIdentity => ({
@@ -129,6 +129,31 @@ describe('matchCustomers', () => {
   it('caps the list, so the box stays a shortcut', () => {
     const many = Array.from({ length: 30 }, (_, i) => cust({ id: `x${i}`, name: `לקוח ${i}` }));
     expect(matchCustomers(many, 'לקוח')).toHaveLength(CUSTOMER_MATCH_LIMIT);
+  });
+});
+
+describe('matchVehiclesByPlate', () => {
+  const vehicles = [
+    { id: 'v1', plate: '12-345-67' },
+    { id: 'v2', plate: '9876543' },
+    { id: 'v3', plate: null },
+  ];
+
+  it('matches a plate however the hyphens were typed on either side', () => {
+    expect(matchVehiclesByPlate(vehicles, '1234567').map((v) => v.id)).toEqual(['v1']);
+    expect(matchVehiclesByPlate(vehicles, '987-65').map((v) => v.id)).toEqual(['v2']);
+    expect(matchVehiclesByPlate(vehicles, '345').map((v) => v.id)).toEqual(['v1']);
+  });
+
+  it('will not search on a fragment, nor on a name', () => {
+    expect(matchVehiclesByPlate(vehicles, '12')).toEqual([]);
+    expect(matchVehiclesByPlate(vehicles, '')).toEqual([]);
+    expect(matchVehiclesByPlate(vehicles, 'רונית')).toEqual([]);
+  });
+
+  it('caps the list', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ id: `x${i}`, plate: `100-${i}-00` }));
+    expect(matchVehiclesByPlate(many, '100')).toHaveLength(CUSTOMER_MATCH_LIMIT);
   });
 });
 
