@@ -474,6 +474,10 @@ const ticketToRow = (t: Ticket) => ({
   plate: t.plate,
   car: t.car,
   customer_name: t.customer,
+  /* Written on update too, so a ticket can be moved to another customer. The
+     database checks the customer is this garage's and refuses the move once
+     the ticket is billed (tickets_customer_follows_invoice). */
+  customer_id: t.customerId ?? null,
   amount: t.amount,
   done: t.done,
   subtasks: t.subtasks,
