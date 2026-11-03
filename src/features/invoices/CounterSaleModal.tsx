@@ -84,15 +84,24 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     setRows((rs) => rs.map((r) => (r.uid === uid ? { ...r, ...over } : r)));
 
   const addFromCatalogue = async () => {
-    const part: PartDef | null = await pickPart({ taken: rows.map((r) => r.sku ?? '').filter(Boolean) });
-    if (!part) return;
+    const parts: PartDef[] | null = await pickPart({ taken: rows.map((r) => r.sku ?? '').filter(Boolean) });
+    if (!parts?.length) return;
     setRows((rs) => {
       /* The blank row a fresh dialog starts with is a placeholder, not a line.
-         Filling it beats leaving an empty row above the part just picked. */
+         Filling it with the first part beats leaving an empty row above them. */
       const empty = rs.find((r) => !r.desc.trim() && !r.unit_price);
-      const filled: Row = { uid: empty?.uid ?? nextUid(), sku: part.sku, desc: part.name, qty: 1, unit_price: part.price };
-      return empty ? rs.map((r) => (r.uid === empty.uid ? filled : r)) : [...rs, filled];
+      /* nextUid() reads `seq` from this render, so calling it once per part
+         would hand every one the same key. Numbered off it in one go instead. */
+      const lines: Row[] = parts.map((part, i) => ({
+        uid: i === 0 && empty ? empty.uid : `r${seq + i}`,
+        sku: part.sku, desc: part.name, qty: 1, unit_price: part.price,
+      }));
+      const [first, ...rest] = lines;
+      return empty
+        ? [...rs.map((r) => (r.uid === empty.uid ? first : r)), ...rest]
+        : [...rs, ...lines];
     });
+    setSeq((n) => n + parts.length);
   };
 
   const priced = rows.filter((r) => r.desc.trim() && r.qty > 0);

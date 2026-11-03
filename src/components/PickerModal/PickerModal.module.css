@@ -29,7 +29,7 @@
   display: grid;
   /* minmax(0, …) on the name: a grid track defaults to its content's width, so a
      long name would push the code column rather than wrap. */
-  grid-template-columns: 150px minmax(0, 1fr) auto auto;
+  grid-template-columns: 22px 150px minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -45,6 +45,24 @@
 
 .on {
   background: var(--primary-soft);
+}
+
+/* Ticked. The box, not the row colour, says so: the row colour is already the
+   keyboard cursor. */
+.check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--surface);
+}
+.picked .check {
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .empty {

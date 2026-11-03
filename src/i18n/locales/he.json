@@ -281,7 +281,8 @@
     }
   },
   "picker": {
-    "keys": "↑↓ ניווט · Enter בחירה · Esc סגירה",
+    "keys": "לחיצה מסמנת · ↑↓ ניווט · Enter הוספה · Esc סגירה",
+    "addPicked": "הוסף נבחרים ({{count}})",
     "enterToCreate": "לחץ Enter כדי ליצור חדש",
     "backToSearch": "חזרה לחיפוש",
     "work": {

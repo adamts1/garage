@@ -53,14 +53,19 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
     async (initialQuery = '') => {
       // What the ticket already carries, so the picker cannot offer it again
       // and cannot create a work under a code that is on it.
-      const def = await pickWork({ initialQuery, taken: works.map((w) => w.code) });
-      if (!def) return;
+      const defs = await pickWork({ initialQuery, taken: works.map((w) => w.code) });
+      if (!defs) return;
       // The picker filters, but the answer arrives asynchronously — a second
       // one under the same code must not land while the first is settling.
-      if (def.code && works.some((w) => w.code === def.code)) return;
-      const uid = nextUid();
-      setWorks([...works, fromCatalog(def, uid)]);   // brings the work's parts with it
-      setSelectedUid(uid);
+      const added: TicketWork[] = [];
+      for (const def of defs) {
+        if (def.code && [...works, ...added].some((w) => w.code === def.code)) continue;
+        added.push(fromCatalog(def, nextUid()));   // brings the work's parts with it
+      }
+      if (!added.length) return;
+      setWorks([...works, ...added]);
+      // The last one in, so "add a part" lands on the work just added.
+      setSelectedUid(added[added.length - 1].uid);
     },
     [pickWork, setWorks, works],
   );
@@ -97,10 +102,12 @@ export function useWorksStep({ works, setWorks }: UseWorksStepOptions) {
 
   const addPart = useCallback(async () => {
     if (!current) return;
-    const part = await pickPart({ taken: current.items.map((i) => i.sku) });
-    if (!part) return;
-    if (current.items.some((i) => i.sku === part.sku)) return;
-    patchWork(current.uid, { items: [...current.items, { ...part, qty: 1 }] });
+    const parts = await pickPart({ taken: current.items.map((i) => i.sku) });
+    if (!parts) return;
+    const fresh = parts.filter((p, i) =>
+      !current.items.some((x) => x.sku === p.sku) && parts.findIndex((q) => q.sku === p.sku) === i);
+    if (!fresh.length) return;
+    patchWork(current.uid, { items: [...current.items, ...fresh.map((p) => ({ ...p, qty: 1 }))] });
   }, [current, patchWork, pickPart]);
 
   /* The part-side twin of addFreeWork: a line on the selected work that is not
