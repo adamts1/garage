@@ -19,9 +19,15 @@ export interface PickerModalProps<T> {
   /** i18n key for the create button. */
   createLabel: string;
   initialQuery?: string;
-  onPick: (item: T) => void;
-  /** Called with whatever was typed, so the create form can start from it. */
-  onCreate: (typed: string) => void;
+  /** Rows already ticked when the picker opens — the ones carried through a
+   *  detour into the create form and back. */
+  initialPicked?: readonly T[];
+  /** Everything chosen, in the order it was ticked. Never empty. */
+  onPick: (items: T[]) => void;
+  /** Called with whatever was typed, so the create form can start from it, and
+   *  with what is ticked so far, so the new one can join them rather than
+   *  replace them. */
+  onCreate: (typed: string, picked: T[]) => void;
   onClose: () => void;
   isTop?: boolean;
   stacked?: boolean;
@@ -31,15 +37,31 @@ export interface PickerModalProps<T> {
  * The search half of a picker: type, arrow through the results, Enter to take
  * one — or, when nothing matches, Enter to create.
  *
+ * Several at once, too: a click ticks a row instead of taking it, and the
+ * ticked rows go in together — a brake job is pads, discs and fluid, and the
+ * picker used to be opened three times for it. The phone's pickers have always
+ * worked this way. Enter with nothing ticked still takes the highlighted row
+ * outright, so the keyboard path for a single line is unchanged.
+ *
  * Works and parts had a copy of this each, identical down to the keyboard
  * handling and drifting only in their strings.
  */
 export default function PickerModal<T>({
   title, searchPlaceholder, items, itemKey, match, renderRow, emptyKey, createLabel,
-  initialQuery = '', onPick, onCreate, onClose, isTop = true, stacked = false,
+  initialQuery = '', initialPicked = [], onPick, onCreate, onClose, isTop = true, stacked = false,
 }: PickerModalProps<T>) {
   const { t } = useTranslation();
   const [query, setQuery] = useState(initialQuery);
+  /* By key, and holding the item itself: a ticked row filtered out by the next
+     search is still ticked. */
+  const [picked, setPicked] = useState<T[]>(() => [...initialPicked]);
+  const isPicked = (item: T) => picked.some((p) => itemKey(p) === itemKey(item));
+  const toggle = (item: T) =>
+    setPicked((prev) =>
+      prev.some((p) => itemKey(p) === itemKey(item))
+        ? prev.filter((p) => itemKey(p) !== itemKey(item))
+        : [...prev, item],
+    );
   const [cursor, setCursor] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -68,8 +90,11 @@ export default function PickerModal<T>({
     }
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (results.length > 0) onPick(results[active]);
-    else onCreate(query.trim());
+    /* Nothing matches: the screen says "Enter to create", so it creates — with
+       whatever is ticked carried along, not dropped. */
+    if (results.length === 0) onCreate(query.trim(), picked);
+    else if (picked.length > 0) onPick(picked);
+    else onPick([results[active]]);
   };
 
   return (
@@ -81,8 +106,11 @@ export default function PickerModal<T>({
       actions={
         <>
           <span className={styles.hint}>{t('picker.keys')}</span>
-          <Button variant="primary" onClick={() => onCreate(query.trim())}>
+          <Button onClick={() => onCreate(query.trim(), picked)}>
              {t(createLabel)} ＋
+          </Button>
+          <Button variant="primary" disabled={picked.length === 0} onClick={() => onPick(picked)}>
+            {t('picker.addPicked', { count: picked.length })}
           </Button>
         </>
       }
@@ -98,17 +126,23 @@ export default function PickerModal<T>({
       />
 
       <div className={styles.list}>
-        {results.map((item, i) => (
-          <button
-            type="button"
-            key={itemKey(item)}
-            className={`${styles.row}${i === active ? ` ${styles.on}` : ''}`}
-            onMouseEnter={() => setCursor(i)}
-            onClick={() => onPick(item)}
-          >
-            {renderRow(item)}
-          </button>
-        ))}
+        {results.map((item, i) => {
+          const on = isPicked(item);
+          return (
+            <button
+              type="button"
+              key={itemKey(item)}
+              role="checkbox"
+              aria-checked={on}
+              className={`${styles.row}${i === active ? ` ${styles.on}` : ''}${on ? ` ${styles.picked}` : ''}`}
+              onMouseEnter={() => setCursor(i)}
+              onClick={() => toggle(item)}
+            >
+              <span className={styles.check} aria-hidden>{on ? '✓' : ''}</span>
+              {renderRow(item)}
+            </button>
+          );
+        })}
 
         {results.length === 0 && (
           <div className={styles.empty}>

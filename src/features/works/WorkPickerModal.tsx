@@ -14,7 +14,7 @@ import styles from './pickers.module.css';
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-/** Reached through `usePickWork()`. Resolves the chosen work, or null. */
+/** Reached through `usePickWork()`. Resolves the chosen works, or null. */
 export default function WorkPickerModal({ props, isTop, stacked, onClose }: ModalComponentProps) {
   const { t } = useTranslation();
   const { works, addWork } = useCatalog();
@@ -38,13 +38,17 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [items, setItems] = useState<PartRow[]>([]);
+  /* What was ticked before "new work" was pressed. The search list unmounts
+     while the form is up, so it is held here and goes in with the new one. */
+  const [carried, setCarried] = useState<WorkDef[]>([]);
 
-  const answer = (def: WorkDef | null) => {
-    settleModal(resultId, def);
+  const answer = (defs: WorkDef[] | null) => {
+    settleModal(resultId, defs);
     onClose();
   };
 
-  const startCreate = (typed: string) => {
+  const startCreate = (typed: string, picked: WorkDef[]) => {
+    setCarried(picked);
     const looksLikeCode = /^[A-Za-z0-9\-_]+$/.test(typed);
     setCode(looksLikeCode ? toCatalogCode(typed) : '');
     setName(looksLikeCode ? '' : typed);
@@ -56,9 +60,12 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
   /* Opens the part picker over this dialog. The modal stack is what makes that
      work: this one stays mounted underneath, so the half-built work survives. */
   const addItem = async () => {
-    const part = await pickPart({ taken: items.map((i) => i.sku) });
-    if (!part) return;
-    setItems((prev) => (prev.some((i) => i.sku === part.sku) ? prev : [...prev, { ...part, qty: 1 }]));
+    const parts = await pickPart({ taken: items.map((i) => i.sku) });
+    if (!parts) return;
+    setItems((prev) => [
+      ...prev,
+      ...parts.filter((p) => !prev.some((i) => i.sku === p.sku)).map((p) => ({ ...p, qty: 1 })),
+    ]);
   };
 
   const patch = (sku: string, next: Partial<PartRow>) =>
@@ -90,7 +97,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
       items,
     };
     addWork(def);   // joins the catalogue
-    answer(def);
+    answer([...carried, def]);
   };
 
   if (mode === 'search') {
@@ -104,6 +111,7 @@ export default function WorkPickerModal({ props, isTop, stacked, onClose }: Moda
         emptyKey="picker.work.empty"
         createLabel="picker.work.create"
         initialQuery={initialQuery}
+        initialPicked={carried}
         isTop={isTop}
         stacked={stacked}
         onPick={answer}

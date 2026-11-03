@@ -12,7 +12,7 @@ import styles from './pickers.module.css';
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-/** Reached through `usePickPart()`. Resolves the chosen part, or null. */
+/** Reached through `usePickPart()`. Resolves the chosen parts, or null. */
 export default function ItemPickerModal({ props, isTop, stacked, onClose }: ModalComponentProps) {
   const { t } = useTranslation();
   const { parts, addPart } = useCatalog();
@@ -30,17 +30,20 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  /* Ticked before "new part" was pressed — see WorkPickerModal. */
+  const [carried, setCarried] = useState<PartDef[]>([]);
 
   const available = useMemo(() => parts.filter((p) => !taken.includes(p.sku)), [parts, taken]);
 
-  const answer = (part: PartDef | null) => {
-    settleModal(resultId, part);
+  const answer = (parts: PartDef[] | null) => {
+    settleModal(resultId, parts);
     onClose();
   };
 
   /** Whatever was typed seeds the form: a code-shaped string is a SKU, anything
    *  else is a name. */
-  const startCreate = (typed: string) => {
+  const startCreate = (typed: string, picked: PartDef[]) => {
+    setCarried(picked);
     const looksLikeSku = /^[A-Za-z0-9\-_]+$/.test(typed);
     setSku(looksLikeSku ? toCatalogCode(typed) : '');
     setName(looksLikeSku ? '' : typed);
@@ -69,7 +72,7 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
       price: Number(price) || 0,
     };
     addPart(part);   // joins the parts catalogue
-    answer(part);
+    answer([...carried, part]);
   };
 
   if (mode === 'search') {
@@ -83,6 +86,7 @@ export default function ItemPickerModal({ props, isTop, stacked, onClose }: Moda
         emptyKey="picker.part.empty"
         createLabel="picker.part.create"
         initialQuery={initialQuery}
+        initialPicked={carried}
         isTop={isTop}
         stacked={stacked}
         onPick={answer}

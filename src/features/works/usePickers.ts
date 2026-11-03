@@ -2,9 +2,10 @@ import type { PartDef, WorkDef } from '@garage/shared';
 import { useCallback } from 'react';
 import { useModalResult } from '../../store';
 
-/** Opens the work picker and resolves the chosen work, or null if dismissed. */
+/** Opens the work picker and resolves the chosen works — one or several, in
+ *  the order they were ticked — or null if dismissed. */
 export function usePickWork() {
-  const open = useModalResult<WorkDef>();
+  const open = useModalResult<WorkDef[]>();
   return useCallback(
     (options: { initialQuery?: string; taken?: string[] } = {}) =>
       open('workPicker', {
@@ -18,9 +19,9 @@ export function usePickWork() {
   );
 }
 
-/** Opens the part picker and resolves the chosen part, or null if dismissed. */
+/** Opens the part picker and resolves the chosen parts, or null if dismissed. */
 export function usePickPart() {
-  const open = useModalResult<PartDef>();
+  const open = useModalResult<PartDef[]>();
   return useCallback(
     (options: { initialQuery?: string; taken?: string[] } = {}) =>
       open('partPicker', {
