@@ -16,7 +16,10 @@
    the outgoing message a function of the app's language setting. */
 
 import { garageName } from './auth';
-import { VAT, workTotal, worksSummary, type PartRow, type TicketWork } from './catalog';
+import {
+  VAT, clampDiscount, laborNet, partLineTotal, partUnitNet, workTotal, worksSummary,
+  type PartRow, type TicketWork,
+} from './catalog';
 import type { TicketPhoto } from './db';
 import { money } from './money';
 import { OTHER_PAY_METHOD, payMethod, payMethodHe } from './payment';
@@ -81,15 +84,23 @@ const photoLines = (photos: readonly TicketPhoto[]): string[] => {
    The labour line shows only where there are parts beside it. On a work with
    none, the work's own price IS its labour, and repeating the same number
    underneath reads as a second charge. */
+/* Prices are after the discount, with the percentage named beside them — the
+   same figures the printed sheet totals, so the two agree. */
+const discTag = (pct?: number): string => {
+  const d = clampDiscount(pct);
+  return d ? ` (הנחה ${d}%)` : '';
+};
+
 const partLine = (p: PartRow): string =>
   p.qty > 1
-    ? `   ◦ ${p.name} ×${p.qty} (${money(p.price)} ליח׳) - ${money(p.qty * p.price)}`
-    : `   ◦ ${p.name} - ${money(p.price)}`;
+    ? `   ◦ ${p.name} ×${p.qty} (${money(partUnitNet(p))} ליח׳) - ${money(partLineTotal(p))}${discTag(p.discount)}`
+    : `   ◦ ${p.name} - ${money(partLineTotal(p))}${discTag(p.discount)}`;
 
 const workLines = (w: TicketWork): string[] => [
-  `• ${w.name} - ${money(workTotal(w))}`,
+  /* With no parts the header is the labour, so its discount is named there. */
+  `• ${w.name} - ${money(workTotal(w))}${w.items.length ? '' : discTag(w.laborDiscount)}`,
   ...(w.items.length
-    ? [...(w.labor ? [`   ◦ עבודה: ${money(w.labor)}`] : []), ...w.items.map(partLine)]
+    ? [...(w.labor ? [`   ◦ עבודה: ${money(laborNet(w))}${discTag(w.laborDiscount)}`] : []), ...w.items.map(partLine)]
     : []),
 ];
 

@@ -81,9 +81,9 @@ export default function TicketPage({
      page offers none. Everything below the header sits in a disabled fieldset
      rather than threading a flag through every control. */
   const cancelled = isCancelled(ticket);
-  /* A live bill freezes the vehicle — the database enforces it, this only
-     stops offering an edit it would refuse. */
-  const vehicleLocked = cancelled || invoice?.status === 'issued';
+  /* A live bill freezes the vehicle and the works — the database enforces
+     both, this only stops offering an edit it would refuse. */
+  const billLocked = cancelled || invoice?.status === 'issued';
   const closed = isClosed(draft);
   const settled = isSettled(draft);
   const wa = waNumber(draft.phone);
@@ -199,15 +199,15 @@ export default function TicketPage({
                         aria-label={t(label)}
                         placeholder="-"
                         value={draft[field] ?? ''}
-                        disabled={vehicleLocked}
-                        title={vehicleLocked ? t('ticket.vehicleLocked') : undefined}
+                        disabled={billLocked}
+                        title={billLocked ? t('ticket.vehicleLocked') : undefined}
                         onChange={(e) => page.patch({ [field]: e.target.value })}
                       />
                     </dd>
                   </Fragment>
                 ))}
               </dl>
-              {vehicleLocked && !cancelled && (
+              {billLocked && !cancelled && (
                 <div className="tp-note">{t('ticket.vehicleLocked')}</div>
               )}
             </section>
@@ -287,11 +287,19 @@ export default function TicketPage({
               </span>
             </div>
 
-            <WorksStep
-              works={works}
-              setWorks={page.setWorks}
-              combinedEmpty      /* one toolbox empty-state instead of two */
-            />
+            {/* Frozen with the vehicle once billed: the invoice was built from
+                these lines, and the database refuses a change to them
+                (works_follow_ticket_lock). */}
+            <fieldset className="tp-frozen" disabled={billLocked}>
+              <WorksStep
+                works={works}
+                setWorks={page.setWorks}
+                combinedEmpty      /* one toolbox empty-state instead of two */
+              />
+            </fieldset>
+            {billLocked && !cancelled && (
+              <div className="tp-note">{t('ticket.worksLocked')}</div>
+            )}
           </section>
 
           <section className="card" id="tp-photos">
@@ -373,6 +381,13 @@ export default function TicketPage({
                 <span>{t('ticket.subtotal')}</span>
                 <b>{money(totals.labour + totals.items)}</b>
               </div>
+              {/* Said, not subtracted: the lines above are already after it. */}
+              {totals.discount > 0 && (
+                <div>
+                  <span>{t('ticket.discountIncluded')}</span>
+                  <b>-{money(totals.discount)}</b>
+                </div>
+              )}
               <div>
                 <span>{t('ticket.vat', { percent: Math.round(VAT * 100) })}</span>
                 <b>{money(totals.vat)}</b>

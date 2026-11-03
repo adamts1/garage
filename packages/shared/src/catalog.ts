@@ -15,7 +15,10 @@ export interface PartRow {
   sku: string;
   name: string;
   qty: number;
+  /** List price per unit, before any discount. */
   price: number;
+  /** Percent off `price`, 0–100. Per line on a ticket; the catalog has none. */
+  discount?: number;
 }
 
 export interface WorkDef {
@@ -33,6 +36,8 @@ export interface TicketWork {
   code: string;
   name: string;
   labor: number;
+  /** Percent off `labor`, 0–100. Set on the ticket, never on the catalog. */
+  laborDiscount?: number;
   items: PartRow[];
   custom?: boolean;       // true when it isn't in the catalog
   /** What was actually done, in the mechanic's words.
@@ -82,17 +87,58 @@ export const VAT = 0.18;
 export type PartDef = Omit<PartRow, 'qty'>;
 
 
+/* Discounts.
+
+   A percentage per line — on a work's labour, and on each part — taken off the
+   price before VAT. The discounted UNIT price is rounded to the agora, and the
+   line is that times the quantity. Rounding the unit rather than the line is
+   what lets the invoice carry it: a provider line is unit × quantity, so the
+   unit has to be a price that exists. issue-invoice computes it the same way
+   (supabase/functions/issue-invoice: netUnit) and the two must not drift. */
+
+/** 0–100, whatever was typed. Blank, negative or nonsense is no discount. */
+export const clampDiscount = (pct: unknown): number => {
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, 100);
+};
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** A unit price after a percent discount, to the agora. */
+export const discounted = (price: number, pct?: number): number => {
+  const d = clampDiscount(pct);
+  return d ? round2(price * (1 - d / 100)) : price;
+};
+
+/** What one unit of a part costs on this ticket. */
+export const partUnitNet = (p: PartRow) => discounted(p.price, p.discount);
+/** A part's line: quantity × the discounted unit price. */
+export const partLineTotal = (p: PartRow) => p.qty * partUnitNet(p);
+/** A work's labour after its discount. */
+export const laborNet = (w: TicketWork) => discounted(w.labor, w.laborDiscount);
+
 export const partsTotal = (w: TicketWork) =>
-  w.items.reduce((sum, i) => sum + i.qty * i.price, 0);
+  w.items.reduce((sum, i) => sum + partLineTotal(i), 0);
 
-export const workTotal = (w: TicketWork) => w.labor + partsTotal(w);
+export const workTotal = (w: TicketWork) => laborNet(w) + partsTotal(w);
 
+/** How much the discounts took off, before VAT. Zero on a ticket without any. */
+export const worksDiscount = (works: readonly TicketWork[]) =>
+  works.reduce(
+    (s, w) =>
+      s + (w.labor - laborNet(w))
+        + w.items.reduce((t, i) => t + i.qty * (i.price - partUnitNet(i)), 0),
+    0,
+  );
+
+/** Every figure is after discounts; `discount` says how much they took off. */
 export const worksSummary = (works: TicketWork[]) => {
   const parts = works.reduce((s, w) => s + partsTotal(w), 0);
-  const labor = works.reduce((s, w) => s + w.labor, 0);
+  const labor = works.reduce((s, w) => s + laborNet(w), 0);
   const net = parts + labor;
   const vat = Math.round(net * VAT);
-  return { parts, labor, net, vat, total: net + vat };
+  return { parts, labor, net, vat, total: net + vat, discount: worksDiscount(works) };
 };
 
 export const fromCatalog = (def: WorkDef, uid: string): TicketWork => ({

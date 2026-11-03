@@ -16,7 +16,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { isCancelled, listWorkers, waMessage, waNumber, workOrderHtml, worksSummary } from '@garage/shared';
+import {
+  isCancelled, listWorkers, ticketHasLiveBill, waMessage, waNumber, workOrderHtml, worksSummary,
+} from '@garage/shared';
 import type { Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
@@ -68,6 +70,19 @@ export default function TicketEditor({
      called a different number of times from one render to the next — which is
      not a subtle bug, it is the screen refusing to open. */
   const [printing, setPrinting] = useState(false);
+  /* Billed on the web: the vehicle, works and parts are frozen from then on.
+     Asked once per ticket opened, and again after each save in case the bill
+     landed meanwhile. Unknown counts as not billed — the database still has
+     the last word, and a failed check must not lock a ticket that is open. */
+  const [billed, setBilled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setBilled(false);
+    ticketHasLiveBill(ticketKey)
+      .then((b) => { if (alive) setBilled(b); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [ticketKey, ticket?.st, ticket?.paid]);
 
   /* The draft is keyed to the ticket: switching which ticket the pane shows
      (tablet) must drop the previous draft, or the new ticket would open showing
@@ -299,9 +314,24 @@ export default function TicketEditor({
         <TabBar tabs={TABS} active={tab} onSelect={setTab} />
 
         <View pointerEvents={cancelled ? 'none' : 'auto'} style={{ gap: 12, opacity: cancelled ? 0.75 : 1 }}>
-          {tab === 'works' && <WorksSection works={works} onChange={setWorks} />}
+          {tab === 'works' && (
+            <>
+              {billed && !cancelled && (
+                <Text style={[s.dim, { fontSize: 13 }]}>{t('ticket.worksLocked')}</Text>
+              )}
+              <View pointerEvents={billed ? 'none' : 'auto'} style={{ gap: 12, opacity: billed ? 0.75 : 1 }}>
+                <WorksSection works={works} onChange={setWorks} />
+              </View>
+            </>
+          )}
           {tab === 'details' && (
-            <DetailsTab draft={draft} onSet={set} onStatus={changeStatus} workers={workers} />
+            <DetailsTab
+              draft={draft}
+              onSet={set}
+              onStatus={changeStatus}
+              workers={workers}
+              vehicleLocked={billed}
+            />
           )}
           {tab === 'photos' && <PhotosTab photos={photos} />}
           {tab === 'history' && (

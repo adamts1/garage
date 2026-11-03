@@ -13,12 +13,15 @@ export function DetailsTab({
   onSet,
   onStatus,
   workers,
+  vehicleLocked = false,
 }: {
   draft: Ticket;
   onSet: <K extends keyof Ticket>(field: K, value: Ticket[K]) => void;
   /** Status is not a plain field — landing in done/paid also closes the checklist. */
   onStatus: (status: Status) => void;
   workers: Worker[];
+  /** The ticket is billed: the database refuses a change to its vehicle. */
+  vehicleLocked?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -55,16 +58,17 @@ export function DetailsTab({
         <Text style={[s.dim, { fontSize: 11 }]}>{t('ticket.customerLocked')}</Text>
         <View style={s.row}>
           <Field label={t('ticket.fields.car')} flex>
-            <TextInput style={s.input} value={draft.car} onChangeText={(v) => onSet('car', v)} />
+            <TextInput style={s.input} editable={!vehicleLocked} value={draft.car} onChangeText={(v) => onSet('car', v)} />
           </Field>
           <Field label={t('ticket.fields.plate')} flex>
-            <TextInput style={s.input} value={draft.plate} onChangeText={(v) => onSet('plate', v)} />
+            <TextInput style={s.input} editable={!vehicleLocked} value={draft.plate} onChangeText={(v) => onSet('plate', v)} />
           </Field>
         </View>
         <View style={s.row}>
           <Field label={t('ticket.fields.km')} flex>
             <TextInput
               style={s.input}
+              editable={!vehicleLocked}
               keyboardType="numeric"
               value={draft.km ?? ''}
               onChangeText={(v) => onSet('km', v)}
@@ -73,6 +77,7 @@ export function DetailsTab({
           <Field label={t('ticket.fields.year')} flex>
             <TextInput
               style={s.input}
+              editable={!vehicleLocked}
               keyboardType="numeric"
               value={draft.year ?? ''}
               onChangeText={(v) => onSet('year', v)}
@@ -87,6 +92,7 @@ export function DetailsTab({
         <Field label={t('ticket.fields.vehicleCode')}>
           <TextInput
             style={s.input}
+            editable={!vehicleLocked}
             value={draft.vehicleCode ?? ''}
             onChangeText={(v) => onSet('vehicleCode', v)}
           />

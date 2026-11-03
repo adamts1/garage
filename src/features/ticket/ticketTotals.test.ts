@@ -22,7 +22,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({ k: 'GAR-1', st: 'todo', ...
 
 describe('ticketTotals', () => {
   it('is all zeroes for a ticket with no works', () => {
-    expect(ticketTotals([])).toEqual({ labour: 0, items: 0, vat: 0, total: 0 });
+    expect(ticketTotals([])).toEqual({ labour: 0, items: 0, vat: 0, total: 0, discount: 0 });
   });
 
   it('sums labour across works', () => {
