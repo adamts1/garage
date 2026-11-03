@@ -193,6 +193,7 @@ export default function BoardPage({
       <span className={styles.plate}>{ticket.plate}</span>
       <div className={styles.cardTitle}>{ticket.title}</div>
       <div className={styles.cardCar}>{ticket.car}</div>
+      <CardCustomer ticket={ticket} />
     </div>
   );
 
@@ -337,8 +338,22 @@ export default function BoardPage({
           <span className={styles.plate}>{ghost.plate}</span>
           <div className={styles.cardTitle}>{ghost.title}</div>
           <div className={styles.cardCar}>{ghost.car}</div>
+          <CardCustomer ticket={ghost} />
         </div>
       )}
+    </div>
+  );
+}
+
+/* Who the car belongs to, so the counter can call without opening the ticket.
+   Plain text, not a tel: link — the card is a drag handle, and a click on it
+   opens the ticket. The phone app, where a tap is not a drag, dials instead. */
+function CardCustomer({ ticket }: { ticket: Ticket }) {
+  if (!ticket.customer && !ticket.phone) return null;
+  return (
+    <div className={styles.cardCustomer}>
+      {ticket.customer && <span>{ticket.customer}</span>}
+      {ticket.phone && <span dir="ltr">{ticket.phone}</span>}
     </div>
   );
 }

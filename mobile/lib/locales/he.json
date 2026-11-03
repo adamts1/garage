@@ -71,6 +71,7 @@
     "empty": "אין קריאות",
     "error": "שגיאה: {{message}}",
     "unnamedCar": "רכב ללא שם",
+    "callCustomer": "חיוג אל {{phone}}",
     "detail": {
       "title": "בחר קריאה מהרשימה",
       "hint": "או הקש + כדי לפתוח כרטיס עבודה חדש"
