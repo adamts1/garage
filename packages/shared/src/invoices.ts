@@ -9,7 +9,7 @@
 
    See docs/PRODUCTION.md §4a and migration 20260727000000_invoices.sql. */
 
-import type { TicketWork } from './catalog';
+import { discounted, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
 
 /* Four documents, two of which are bills.
@@ -109,6 +109,22 @@ export const listInvoices = async (): Promise<Invoice[]> => {
     .order('issued_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(rowToInvoice);
+};
+
+/** Whether a ticket carries a live bill — a חשבונית מס or מס-קבלה still
+ *  'issued'. Such a ticket's vehicle, works and parts are frozen by the
+ *  database (tickets_vehicle_follows_invoice, works_follow_ticket_lock); this
+ *  lets a screen stop offering the edit instead of failing on save. The web
+ *  reads it off the invoices it already loads; the phone asks with this. */
+export const ticketHasLiveBill = async (ticketKey: string): Promise<boolean> => {
+  const { count, error } = await getClient()
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('ticket_key', ticketKey)
+    .in('doc_type', ['invoice_receipt', 'tax_invoice'])
+    .eq('status', 'issued');
+  if (error) throw error;
+  return (count ?? 0) > 0;
 };
 
 /* Can this garage issue a document at all?
@@ -448,14 +464,17 @@ export const groupInvoiceLines = (
     const group: InvoiceGroup = { name: w.name, labour: null, parts: [] };
 
     // `> 0`, and the fallback name, exactly as the issuing function has them.
-    if (Number(w.labor) > 0) {
-      const line = take(w.name || 'עבודה', 1, Number(w.labor));
+    // After the discount, as issue-invoice bills it (see catalog.ts).
+    const labour = discounted(Number(w.labor), w.laborDiscount);
+    if (labour > 0) {
+      const line = take(w.name || 'עבודה', 1, labour);
       if (!line) return null;
       group.labour = line;
     }
     for (const p of w.items) {
-      if (Number(p.price) === 0) continue;
-      const line = take(p.name || 'חלק', Number(p.qty) || 1, Number(p.price));
+      const unit = discounted(Number(p.price), p.discount);
+      if (unit === 0) continue;
+      const line = take(p.name || 'חלק', Number(p.qty) || 1, unit);
       if (!line) return null;
       group.parts.push(line);
     }

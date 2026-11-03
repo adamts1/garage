@@ -1,21 +1,24 @@
-import { VAT, partsTotal, type Ticket, type TicketWork } from '@garage/shared';
+import { VAT, laborNet, partsTotal, worksDiscount, type Ticket, type TicketWork } from '@garage/shared';
 
 export interface TicketTotals {
-  /** Labour only, before VAT. */
+  /** Labour only, after discounts, before VAT. */
   labour: number;
   /** Every work's parts, before VAT. */
   items: number;
   vat: number;
   /** labour + items + vat, unrounded. */
   total: number;
+  /** What the line discounts took off, before VAT. Already out of the figures
+   *  above — this only says how much. */
+  discount: number;
 }
 
 /** What the summary panel, the printed ticket and the issue dialog all show. */
 export function ticketTotals(works: readonly TicketWork[]): TicketTotals {
-  const labour = works.reduce((s, w) => s + w.labor, 0);
+  const labour = works.reduce((s, w) => s + laborNet(w), 0);
   const items = works.reduce((s, w) => s + partsTotal(w), 0);
   const vat = (labour + items) * VAT;
-  return { labour, items, vat, total: labour + items + vat };
+  return { labour, items, vat, total: labour + items + vat, discount: worksDiscount(works) };
 }
 
 /**

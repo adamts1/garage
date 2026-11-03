@@ -36,20 +36,33 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-interface WorkItem { name: string; qty: number; price: number }
-interface Work { name: string; labor: number; work_items: WorkItem[] }
+interface WorkItem { name: string; qty: number; price: number; discount?: number | null }
+interface Work { name: string; labor: number; labor_discount?: number | null; work_items: WorkItem[] }
+
+/** A unit price after a percent discount, to the agora. The provider gets the
+ *  discounted price and nothing else — no discount field, no list price — so
+ *  the document shows what was charged. Must match `discounted` in
+ *  packages/shared/src/catalog.ts, which the screens and the print use. */
+function netUnit(price: unknown, pct: unknown): number {
+  const p = Number(price);
+  const d = Math.min(Math.max(Number(pct) || 0, 0), 100);
+  return d ? Math.round(p * (1 - d / 100) * 100) / 100 : p;
+}
 
 /** Build invoice lines from the ticket's OWN works: one line per work's labour,
- *  one per part. Prices are pre-VAT (as stored). Returns lines + pre-VAT subtotal. */
+ *  one per part, each after its discount. Prices are pre-VAT (as stored).
+ *  Returns lines + pre-VAT subtotal. */
 function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number } {
   const items: InvoiceItem[] = [];
   for (const w of works ?? []) {
-    if (Number(w.labor) > 0) {
-      items.push({ description: w.name || 'עבודה', unitprice: Number(w.labor), quantity: 1 });
+    const labour = netUnit(w.labor, w.labor_discount);
+    if (labour > 0) {
+      items.push({ description: w.name || 'עבודה', unitprice: labour, quantity: 1 });
     }
     for (const p of w.work_items ?? []) {
-      if (Number(p.price) !== 0) {
-        items.push({ description: p.name || 'חלק', unitprice: Number(p.price), quantity: Number(p.qty) || 1 });
+      const unit = netUnit(p.price, p.discount);
+      if (unit !== 0) {
+        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1 });
       }
     }
   }
@@ -134,7 +147,7 @@ Deno.serve(async (req) => {
       // Caller's JWT -> RLS guarantees this is their garage's ticket, or nothing.
       const { data: ticket, error: tErr } = await userClient
         .from('tickets')
-        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, work_items(name, qty, price))')
+        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, labor_discount, work_items(name, qty, price, discount))')
         .eq('id', ticketId)
         .maybeSingle();
       if (tErr) return json({ error: tErr.message }, 400);
