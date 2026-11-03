@@ -15,7 +15,9 @@
    window; the phone wrapper calls the print API. Neither belongs here. */
 
 import { garageLetterhead, garagePrintName } from './auth';
-import { VAT, workTotal, type TicketWork } from './catalog';
+import {
+  VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, type TicketWork,
+} from './catalog';
 import type { Customer } from './db';
 import { money } from './money';
 import type { Ticket } from './types';
@@ -138,6 +140,7 @@ const CSS = `
 
   /* What the customer owes, said once and said loudly. */
   .sums{width:330px;margin-right:auto;margin-top:9px}
+  .disc{font-size:9.5px;font-weight:700;color:#555;white-space:nowrap}
   .grand{display:flex;border:1.5px solid #1d2d44;border-radius:9px;overflow:hidden;margin-top:7px}
   .grand-l{flex:1;background:#1d2d44;color:#fff;font-size:13px;font-weight:800;
         padding:8px 12px;text-align:center}
@@ -288,6 +291,16 @@ export interface TicketTotals {
    The per-work note prints too. It is written against the work on the ticket
    screen and it is what was actually done; leaving it off the sheet meant the
    only account of the work was its name. */
+/* A discounted price prints as the list price with the percentage under it,
+   and the line total beside it is already after the discount — so the sheet
+   shows both what it would have cost and what it does. */
+const priceCell = (price: number, pct?: number): string => {
+  const d = clampDiscount(pct);
+  return `<td class="n">${esc(money(price))}`
+    + (d ? `<div class="disc">הנחה ${d}%</div>` : '')
+    + `</td>`;
+};
+
 const workBlock = (w: TicketWork, index: number): string => {
   const note = w.notes?.trim();
   const lines = [
@@ -297,8 +310,8 @@ const workBlock = (w: TicketWork, index: number): string => {
       + `<td class="desc">${esc(p.name)}</td>`
       + `<td class="n">${esc(val(p.sku))}</td>`
       + `<td class="n">${p.qty}</td>`
-      + `<td class="n">${esc(money(p.price))}</td>`
-      + `<td class="n">${esc(money(p.qty * p.price))}</td>`
+      + priceCell(p.price, p.discount)
+      + `<td class="n">${esc(money(partLineTotal(p)))}</td>`
       + `</tr>`),
     ...(note ? [`<tr class="note"><td></td><td class="txt" colspan="5">${esc(note)}</td></tr>`] : []),
   ].join('');
@@ -309,7 +322,7 @@ const workBlock = (w: TicketWork, index: number): string => {
     + `<td class="name">${esc(w.name)}</td>`
     + `<td class="n">${esc(val(w.code))}</td>`
     + `<td class="n">${w.items.length ? `${w.items.length} חלקים` : '-'}</td>`
-    + `<td class="n">${esc(money(w.labor))}</td>`
+    + priceCell(w.labor, w.laborDiscount)
     + `<td class="n">${esc(money(workTotal(w)))}</td>`
     + `</tr>`
     + lines
@@ -359,6 +372,8 @@ export const workOrderHtml = (
   opts: { photoCount?: number } = {},
 ): string => {
   const works = t.works ?? [];
+  /* Told, not subtracted: the totals above it are already after discounts. */
+  const discount = worksDiscount(works);
 
   const lines = works.length
     ? works.map(workBlock).join('')
@@ -442,6 +457,7 @@ export const workOrderHtml = (
           ${row('סה״כ עבודה', money(totals.labour))}
           ${row('סה״כ חלקים', money(totals.items))}
           ${row('סכום ביניים', money(totals.labour + totals.items))}
+          ${discount > 0 ? row('מזה הנחה', `-${money(discount)}`) : ''}
           ${row(`מע״מ ${Math.round(VAT * 100)}%`, money(totals.vat))}
         </table>` : ''}
         <div class="grand">

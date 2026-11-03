@@ -1,5 +1,6 @@
 import {
-  isGarageAdmin, money, toCatalogCode, workTotal, type PartRow, type TicketWork,
+  clampDiscount, isGarageAdmin, money, partLineTotal, partsTotal as workPartsTotal, toCatalogCode,
+  workTotal, type PartRow, type TicketWork,
 } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -53,6 +54,29 @@ function NoteCell({ initial, label, placeholder, onCommit }: {
       title={draft || placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (draft !== initial) onCommit(draft); }}
+    />
+  );
+}
+
+/* A percentage, 0–100, on a labour or a part line. Blank and zero are the same
+   answer — no discount — and both are stored as nothing, so a line that never
+   had one does not read back as edited. Open to every member: the price itself
+   stays admin-only, the discount off it does not. */
+function DiscountCell({ value, label, onChange }: {
+  value: number | undefined;
+  label: string;
+  onChange: (pct: number | undefined) => void;
+}) {
+  return (
+    <CellInput
+      type="number"
+      min={0}
+      max={100}
+      step="any"
+      placeholder="0"
+      value={value ?? ''}
+      aria-label={label}
+      onChange={(e) => onChange(clampDiscount(e.target.value) || undefined)}
     />
   );
 }
@@ -155,6 +179,18 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
         ),
     },
     {
+      key: 'laborDiscount',
+      header: 'works.fields.discount',
+      width: 68,
+      render: (w) => (
+        <DiscountCell
+          value={w.laborDiscount}
+          label={t('works.fields.laborDiscount')}
+          onChange={(laborDiscount) => step.patchWork(w.uid, { laborDiscount })}
+        />
+      ),
+    },
+    {
       key: 'parts',
       header: 'works.fields.parts',
       width: 54,
@@ -236,11 +272,23 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
       ),
     },
     {
+      key: 'discount',
+      header: 'works.fields.discount',
+      width: 68,
+      render: (i, index) => (
+        <DiscountCell
+          value={i.discount}
+          label={t('works.fields.partDiscount')}
+          onChange={(discount) => current && step.patchPart(current.uid, index, { discount })}
+        />
+      ),
+    },
+    {
       key: 'total',
       header: 'works.fields.total',
       /* Room for ₪123,456.00 in bold. At 96 anything from ₪1,000 was clipped. */
       width: 132,
-      render: (i) => <strong>{money(i.qty * i.price)}</strong>,
+      render: (i) => <strong>{money(partLineTotal(i))}</strong>,
     },
     {
       key: 'actions',
@@ -283,7 +331,7 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
   }
 
   const worksTotal = works.reduce((s, w) => s + workTotal(w), 0);
-  const partsTotal = current ? current.items.reduce((s, i) => s + i.qty * i.price, 0) : 0;
+  const partsTotal = current ? workPartsTotal(current) : 0;
 
   return (
     <div className={styles.step}>

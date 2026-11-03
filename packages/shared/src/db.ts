@@ -4,7 +4,7 @@
 
 import { getClient, getProjectUrl, invokeError } from './client';
 import type { Ticket, Worker } from './types';
-import type { PartRow, TicketWork, WorkDef } from './catalog';
+import { clampDiscount, type PartRow, type TicketWork, type WorkDef } from './catalog';
 
 /* ---------------- a code that is already taken ----------------
 
@@ -437,6 +437,7 @@ const rowToTicket = (r: any): Ticket => ({
         code: w.code ?? '',
         name: w.name,
         labor: Number(w.labor),
+        ...(Number(w.labor_discount) > 0 && { laborDiscount: Number(w.labor_discount) }),
         custom: w.custom,
         notes: w.notes ?? undefined,
         items: (w.work_items ?? [])
@@ -448,6 +449,9 @@ const rowToTicket = (r: any): Ticket => ({
               name: p.name,
               qty: Number(p.qty),
               price: Number(p.price),
+              /* Only when there is one, so a ticket without discounts reads
+                 back exactly as it was written and does not look edited. */
+              ...(Number(p.discount) > 0 && { discount: Number(p.discount) }),
             }),
           ),
       }),
@@ -520,6 +524,7 @@ const worksPayload = (works: TicketWork[]) =>
     code: w.code,
     name: w.name,
     labor: w.labor,
+    labor_discount: clampDiscount(w.laborDiscount),
     custom: w.custom ?? false,
     // Trimmed to nothing collapses to null in the RPC, so a note cleared in the
     // UI does not come back as an empty string next time the ticket is opened.
@@ -530,6 +535,7 @@ const worksPayload = (works: TicketWork[]) =>
       name: p.name,
       qty: p.qty,
       price: p.price,
+      discount: clampDiscount(p.discount),
       position: j,
     })),
   }));

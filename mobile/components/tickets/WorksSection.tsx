@@ -8,8 +8,11 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   VAT,
+  clampDiscount,
   isGarageAdmin,
+  laborNet,
   money,
+  partLineTotal,
   workTotal,
   worksSummary,
   type PartRow,
@@ -35,6 +38,11 @@ export function WorksSection({
   const [pickPartFor, setPickPartFor] = useState<string | null>(null); // work uid
   const [pricing, setPricing] = useState<{ uid: string; index: number; part: PartRow } | null>(null);
   const [laborFor, setLaborFor] = useState<TicketWork | null>(null);
+  /* A percent discount being typed: on a work's labour (index null) or on one
+     of its parts. Open to every member, unlike the labour price itself. */
+  const [discountFor, setDiscountFor] = useState<
+    { uid: string; index: number | null; name: string; value: number } | null
+  >(null);
   /* Free text: 'work' for a new work, or the uid of the work a part goes on. */
   const [freeFor, setFreeFor] = useState<'work' | string | null>(null);
 
@@ -103,6 +111,17 @@ export function WorksSection({
     setLaborFor(null);
   };
 
+  /* Over 100 is 100, and zero is stored as nothing — a line that never had a
+     discount must not read back as edited. */
+  const applyDiscount = (pct: number) => {
+    if (discountFor) {
+      const d = clampDiscount(pct) || undefined;
+      if (discountFor.index === null) patchWork(discountFor.uid, { laborDiscount: d });
+      else patchPart(discountFor.uid, discountFor.index, { discount: d });
+    }
+    setDiscountFor(null);
+  };
+
   return (
     <>
       <SectionHead
@@ -126,6 +145,10 @@ export function WorksSection({
           onPatchPart={(i, patch) => patchPart(w.uid, i, patch)}
           onEditPrice={(i, p) => setPricing({ uid: w.uid, index: i, part: p })}
           onEditLabor={() => setLaborFor(w)}
+          onEditLaborDiscount={() =>
+            setDiscountFor({ uid: w.uid, index: null, name: w.name, value: w.laborDiscount ?? 0 })}
+          onEditPartDiscount={(i, p) =>
+            setDiscountFor({ uid: w.uid, index: i, name: p.name, value: p.discount ?? 0 })}
           onNotes={(notes) => patchWork(w.uid, { notes })}
           onRemovePart={(i) => removePart(w.uid, i)}
           onRemove={() => removeWork(w.uid)}
@@ -139,6 +162,10 @@ export function WorksSection({
       {works.length ? (
         <View style={[s.card, { gap: 6 }]}>
           <TotalRow label={t('works.totals.net')} value={money(sum.net)} />
+          {/* Said, not subtracted: the net above is already after it. */}
+          {sum.discount > 0 ? (
+            <TotalRow label={t('works.totals.discount')} value={`-${money(sum.discount)}`} />
+          ) : null}
           <TotalRow
             label={t('works.totals.vat', { percent: Math.round(VAT * 100) })}
             value={money(sum.vat)}
@@ -171,6 +198,15 @@ export function WorksSection({
         placeholder={t('works.freePlaceholder')}
         onCancel={() => setFreeFor(null)}
         onSubmit={addFreeText}
+      />
+
+      <NumberPrompt
+        visible={Boolean(discountFor)}
+        title={t('works.discountTitle')}
+        subtitle={discountFor?.name}
+        value={discountFor?.value ?? 0}
+        onCancel={() => setDiscountFor(null)}
+        onSubmit={applyDiscount}
       />
 
       <NumberPrompt
@@ -212,6 +248,8 @@ function WorkCard({
   onPatchPart,
   onEditPrice,
   onEditLabor,
+  onEditLaborDiscount,
+  onEditPartDiscount,
   onNotes,
   onRemovePart,
   onRemove,
@@ -226,6 +264,8 @@ function WorkCard({
   onPatchPart: (idx: number, patch: Partial<PartRow>) => void;
   onEditPrice: (idx: number, part: PartRow) => void;
   onEditLabor: () => void;
+  onEditLaborDiscount: () => void;
+  onEditPartDiscount: (idx: number, part: PartRow) => void;
   onNotes: (notes: string) => void;
   onRemovePart: (idx: number) => void;
   onRemove: () => void;
@@ -277,6 +317,22 @@ function WorkCard({
             <Text style={[s.dim, { fontSize: 11, paddingBottom: 6 }]}>{t('works.adminOnly')}</Text>
           ) : null}
 
+          {/* The discount on that labour, for anyone to set. The price above
+              stays the list price; what it comes to is beside the percentage. */}
+          <Pressable
+            onPress={onEditLaborDiscount}
+            style={[s.rowBetween, { paddingVertical: 6 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('works.discountTitle')}
+          >
+            <Text style={[s.body, { fontSize: 13 }]}>{t('works.laborDiscount')}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink, ...rtl }}>
+              {w.laborDiscount
+                ? `${w.laborDiscount}% · ${money(laborNet(w))}`
+                : t('works.noDiscount')}
+            </Text>
+          </Pressable>
+
           {/* What was actually done, against the work it was done on. Open to
               everyone: it records labour, it does not price it.
 
@@ -307,16 +363,28 @@ function WorkCard({
                 { paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.line, gap: 10 },
               ]}
             >
-              <Text
-                style={[s.body, { flex: 1, fontSize: 14, fontWeight: '600', textAlign: 'right' }]}
-                numberOfLines={2}
-              >
-                {p.name}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[s.body, { fontSize: 14, fontWeight: '600', textAlign: 'right' }]}
+                  numberOfLines={2}
+                >
+                  {p.name}
+                </Text>
+                <Pressable
+                  onPress={() => onEditPartDiscount(i, p)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('works.discountTitle')}
+                >
+                  <Text style={[s.dim, { fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 2 }]}>
+                    {p.discount ? t('works.discountTag', { pct: p.discount }) : t('works.addDiscount')}
+                  </Text>
+                </Pressable>
+              </View>
               <Stepper value={p.qty} onChange={(n) => onPatchPart(i, { qty: n })} />
               <Pressable onPress={() => onEditPrice(i, p)} style={{ width: 90, alignItems: 'center' }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink, ...rtl }}>
-                  {money(p.qty * p.price)}
+                  {money(partLineTotal(p))}
                 </Text>
               </Pressable>
               <Pressable
