@@ -7,7 +7,7 @@
    present in both. */
 
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLUMNS, isArchived, isCancelled, type Status, type Ticket } from '@garage/shared';
@@ -194,7 +194,7 @@ export default function TicketList({
   );
 }
 
-/** One ticket in the list: the plate, big, and what the car is. */
+/** One ticket in the list: the plate, big, what the car is, and whose it is. */
 function TicketCard({
   ticket,
   onPress,
@@ -239,6 +239,33 @@ function TicketCard({
         <Text style={[rtl, { fontSize: 17, fontWeight: '600', color: C.slate }]}>
           {ticket.car || t('tickets.unnamedCar')}
         </Text>
+        {!!ticket.customer && (
+          <Text style={[rtl, { fontSize: 15, fontWeight: '600', color: C.slate }]}>
+            {ticket.customer}
+          </Text>
+        )}
+        {/* Dials straight from the list — the call to say the car is ready is
+            the reason most people open a ticket at all. Its own Pressable, so
+            the tap rings the customer instead of opening the ticket. */}
+        {!!ticket.phone && (
+          <Pressable
+            onPress={() => void Linking.openURL(`tel:${ticket.phone}`)}
+            accessibilityRole="link"
+            accessibilityLabel={t('tickets.callCustomer', { phone: ticket.phone })}
+            hitSlop={8}
+          >
+            {({ pressed }) => (
+              <Text
+                style={{
+                  fontSize: 16, fontWeight: '700', color: C.ink,
+                  textDecorationLine: 'underline', opacity: pressed ? 0.6 : 1,
+                }}
+              >
+                {ticket.phone}
+              </Text>
+            )}
+          </Pressable>
+        )}
         {isCancelled(ticket) && (
           <Text style={{ fontSize: 14, fontWeight: '700', color: C.danger }}>{t('ticket.cancelled.tag')}</Text>
         )}

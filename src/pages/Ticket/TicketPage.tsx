@@ -2,7 +2,7 @@ import {
   assignableWorkers, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
-import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { Fragment, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
@@ -39,6 +39,20 @@ const STEPS = [
 const scrollTo = (id: string) =>
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+/** The vehicle card, in the order the intake form asks for it. */
+const VEHICLE_FIELDS: {
+  field: 'plate' | 'car' | 'year' | 'km' | 'vehicleCode';
+  label: string;
+  ltr?: boolean;
+  numeric?: boolean;
+}[] = [
+  { field: 'plate', label: 'ticket.fields.plate', ltr: true },
+  { field: 'car', label: 'ticket.fields.model' },
+  { field: 'year', label: 'ticket.fields.year', ltr: true, numeric: true },
+  { field: 'km', label: 'ticket.fields.km', ltr: true, numeric: true },
+  { field: 'vehicleCode', label: 'ticket.fields.vehicleCode', ltr: true },
+];
+
 /** '-' for anything the intake form never filled in, so blanks read as blank,
  *  not as data. */
 const Val = ({ children }: { children?: string | number | null }) =>
@@ -67,6 +81,9 @@ export default function TicketPage({
      page offers none. Everything below the header sits in a disabled fieldset
      rather than threading a flag through every control. */
   const cancelled = isCancelled(ticket);
+  /* A live bill freezes the vehicle — the database enforces it, this only
+     stops offering an edit it would refuse. */
+  const vehicleLocked = cancelled || invoice?.status === 'issued';
   const closed = isClosed(draft);
   const settled = isSettled(draft);
   const wa = waNumber(draft.phone);
@@ -165,18 +182,34 @@ export default function TicketPage({
           <div className="tp-row" id="tp-details">
             <section className="card">
               <h3 className="card-title"><IconCar /> {t('ticket.vehicle')}</h3>
+              {/* Editable like the phone's details tab, until the ticket is
+                  billed: the invoice was printed with this plate and this
+                  reading, and the database refuses to let the two disagree
+                  (tickets_vehicle_follows_invoice). A save also carries the
+                  edit into the customer's own vehicle record. */}
               <dl className="kv">
-                <dt>{t('ticket.fields.plate')}</dt>
-                <dd>{draft.plate ? <span className="plate">{draft.plate}</span> : <Val>{null}</Val>}</dd>
-                <dt>{t('ticket.fields.model')}</dt><dd><Val>{draft.car}</Val></dd>
-                <dt>{t('ticket.fields.year')}</dt><dd><Val>{draft.year}</Val></dd>
-                <dt>{t('ticket.fields.km')}</dt>
-                <dd><Val>{draft.km ? t('ticket.kmValue', { km: draft.km }) : null}</Val></dd>
-                {/* Read back from the ticket at last, so what is printed can be
-                    checked against what is on screen. */}
-                <dt>{t('ticket.fields.vehicleCode')}</dt>
-                <dd><Val>{draft.vehicleCode}</Val></dd>
+                {VEHICLE_FIELDS.map(({ field, label, ltr, numeric }) => (
+                  <Fragment key={field}>
+                    <dt>{t(label)}</dt>
+                    <dd>
+                      <input
+                        className="kv-input"
+                        dir={ltr ? 'ltr' : 'auto'}
+                        inputMode={numeric ? 'numeric' : undefined}
+                        aria-label={t(label)}
+                        placeholder="-"
+                        value={draft[field] ?? ''}
+                        disabled={vehicleLocked}
+                        title={vehicleLocked ? t('ticket.vehicleLocked') : undefined}
+                        onChange={(e) => page.patch({ [field]: e.target.value })}
+                      />
+                    </dd>
+                  </Fragment>
+                ))}
               </dl>
+              {vehicleLocked && !cancelled && (
+                <div className="tp-note">{t('ticket.vehicleLocked')}</div>
+              )}
             </section>
 
             <section className="card">
