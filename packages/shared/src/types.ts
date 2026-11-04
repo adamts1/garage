@@ -77,6 +77,12 @@ export interface Ticket {
    *  somebody picked them and filled the phone in. The server still checks the
    *  id belongs to the caller's garage before honouring it. */
   customerId?: string | null;
+
+  /** The car this work order was for — one per plate per garage. Resolved from
+   *  the plate by the database (tickets_resolve_car) and only ever read back;
+   *  ticketToRow does not send it. Its history is every ticket with this id.
+   *  NULL before 20261104090000 and on a ticket with no plate. */
+  carId?: string | null;
   km?: string;
   year?: string;
 

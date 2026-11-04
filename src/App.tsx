@@ -17,6 +17,7 @@ import SetupNotice from './app/SetupNotice';
 const ArchivePage = lazy(() => import('./pages/Archive').then((m) => ({ default: m.ArchivePage })));
 const CustomersPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomersPage })));
 const CustomerPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerPage })));
+const CarPage = lazy(() => import('./pages/Car').then((m) => ({ default: m.CarPage })));
 const ExpensesPage = lazy(() => import('./pages/Expenses').then((m) => ({ default: m.ExpensesPage })));
 const InvoicesPage = lazy(() => import('./pages/Invoices').then((m) => ({ default: m.InvoicesPage })));
 const ItemsPage = lazy(() => import('./pages/Items').then((m) => ({ default: m.ItemsPage })));
@@ -202,6 +203,7 @@ export default function App() {
                   path="/customers/:id"
                   element={<CustomerPage tickets={tickets} onOpenTicket={openTicket} />}
                 />
+                <Route path="/cars/:id" element={<CarPage tickets={tickets} onOpenTicket={openTicket} />} />
                 <Route path="/workers" element={<WorkersPage />} />
                 <Route path="/items" element={<ItemsPage />} />
                 <Route path="/works" element={<WorksPage />} />

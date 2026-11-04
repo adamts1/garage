@@ -84,6 +84,34 @@ describe('missingRequired', () => {
    so picking them and typing a number used to open a second copy. The id now
    rides along — and has to stop riding the moment the form stops describing
    that person. */
+describe('a plate already on file', () => {
+  it('fills the blanks from that car and keeps what was typed', async () => {
+    vi.resetModules();
+    vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
+    vi.doMock('@garage/shared', async (importActual) => ({
+      ...(await importActual<typeof import('@garage/shared')>()),
+      listCustomers: vi.fn(async () => []),
+      listVehicles: vi.fn(async () => [{
+        id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
+        year: '2022', km: '3000', vehicle_code: '4111',
+      }]),
+      subscribeToTable: vi.fn(() => () => {}),
+    }));
+    const { useNewTicket: fresh } = await import('./useNewTicket');
+    const { result } = renderHook(() => fresh({ tickets: [], setTickets: vi.fn(), onDone: vi.fn() }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.set('licensePlate', '12-345-678'); result.current.set('model', 'נירו EV'); });
+    act(() => result.current.fillKnownPlate());
+
+    expect(result.current.form).toMatchObject({
+      manufacturer: 'קיה', model: 'נירו EV', year: '2022', vehicleCode: '4111', km: '',
+    });
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
+  });
+});
+
 describe('the picked customer id', () => {
   const dana: Customer = {
     id: 'cust-1', name: 'דנה', phone: null, id_number: null,
