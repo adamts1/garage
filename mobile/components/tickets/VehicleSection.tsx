@@ -13,9 +13,12 @@ import type { TicketForm } from './newTicket';
 export function VehicleSection({
   form,
   onSet,
+  onPlateDone,
 }: {
   form: TicketForm;
   onSet: <K extends keyof TicketForm>(key: K, value: TicketForm[K]) => void;
+  /** The plate field was left — a plate already on file fills the car's blanks. */
+  onPlateDone: () => void;
 }) {
   const { t } = useTranslation();
 
@@ -28,6 +31,7 @@ export function VehicleSection({
           style={s.input}
           value={form.licensePlate}
           onChangeText={(v) => onSet('licensePlate', v)}
+          onEndEditing={onPlateDone}
         />
       </Field>
 

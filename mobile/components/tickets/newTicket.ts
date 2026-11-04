@@ -15,12 +15,14 @@ import {
   intakeFlags,
   isUsablePhone,
   nextTicketNumbers,
+  plateKey,
   subtasksFromWorks,
   titleFromWorks,
   worksSummary,
   EMPTY_FIELD,
   type Ticket,
   type TicketWork,
+  type Vehicle,
 } from '@garage/shared';
 
 export interface TicketForm {
@@ -168,5 +170,23 @@ export function buildNewTicket({
     vehicleCode: form.vehicleCode,
     notes: form.details || undefined,
     createdAt: now.toLocaleDateString('he-IL'),
+  };
+}
+
+/** A plate typed by hand that is already on file is that car, with that car's
+ *  details — one plate, one description (2026-11-04). Fills what is still blank
+ *  and leaves alone what was typed; the database does the same on save
+ *  (tickets_resolve_car). The km is this visit's reading and is never copied.
+ *  Same rule as the web form's fillKnownPlate. */
+export function fillFromKnownPlate(form: TicketForm, vehicles: readonly Vehicle[]): TicketForm {
+  const k = plateKey(form.licensePlate);
+  const known = k ? vehicles.find((v) => plateKey(v.plate) === k) : undefined;
+  if (!known) return form;
+  return {
+    ...form,
+    manufacturer: form.manufacturer || known.manufacturer || '',
+    model: form.model || known.model || '',
+    year: form.year || known.year || '',
+    vehicleCode: form.vehicleCode || known.vehicle_code || '',
   };
 }
