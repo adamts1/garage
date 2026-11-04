@@ -1,6 +1,6 @@
 import {
   EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, idNumberConflict,
-  intakeFlags, isUsablePhone, listCustomers, listVehicles, matchCustomers, nextTicketNumbers,
+  intakeFlags, isUsablePhone, listCustomers, listVehicles, matchCustomers, matchVehiclesByPlate, nextTicketNumbers,
   phoneConflict,
   subscribeToTable, subtasksFromWorks, titleFromWorks, worksSummary,
   type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
@@ -170,6 +170,18 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     [customers, form.customerSearch],
   );
 
+  /* The car half of the same box: a known plate, and whose it is. A vehicle
+     whose owner is not loaded (yet) is left out rather than offered without a
+     customer to fill. */
+  const plateMatches = useMemo(() => {
+    const byId = new Map(customers.map((c) => [c.id, c]));
+    return matchVehiclesByPlate(vehicles, form.customerSearch)
+      .flatMap((vehicle) => {
+        const owner = byId.get(vehicle.customer_id);
+        return owner ? [{ vehicle, customer: owner }] : [];
+      });
+  }, [customers, vehicles, form.customerSearch]);
+
   const fillVehicle = useCallback((v: Vehicle) => {
     setForm((prev) => ({
       ...prev,
@@ -210,6 +222,13 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     fillVehicle(v);
     setVehicleChoices([]);
   }, [fillVehicle]);
+
+  /** Picking by plate: the owner, and that car — not a question about which of
+   *  their cars it was. */
+  const pickPlate = useCallback((c: Customer, v: Vehicle) => {
+    pickCustomer(c);
+    pickVehicle(v);
+  }, [pickCustomer, pickVehicle]);
 
   const totals = useMemo(() => worksSummary(works), [works]);
 
@@ -365,8 +384,8 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
 
   return {
     form, set, works, setWorks,
-    matches, showMatches, setShowMatches,
-    vehicleChoices, pickCustomer, pickVehicle,
+    matches, plateMatches, showMatches, setShowMatches,
+    vehicleChoices, pickCustomer, pickVehicle, pickPlate,
     totals, canSave, missing, invalid, touch,
     conflict, idConflict, adoptConflict, adoptIdConflict, submit,
   };

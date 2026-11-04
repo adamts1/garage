@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The module reaches lib/supabase, which builds a client against window on import.
-import type { Customer } from '@garage/shared';
+import type { Customer, Vehicle } from '@garage/shared';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { emptyForm, missingRequired, useNewTicket, type TicketForm } from './useNewTicket';
@@ -115,6 +115,18 @@ describe('the picked customer id', () => {
     act(() => result.current.set('address', 'הרצל 1'));
     act(() => result.current.set('licensePlate', '12-345-67'));
     expect(result.current.form.customerId).toBe('cust-1');
+  });
+
+  it('is set by picking a plate, and that car is filled without asking which', () => {
+    const car = (id: string, plate: string, manufacturer: string): Vehicle => ({
+      id, customer_id: 'cust-1', plate, manufacturer, model: null, year: null, km: '1000', vehicle_code: null,
+    });
+    const { result } = setup();
+    act(() => result.current.pickPlate(dana, car('v2', '98-765-43', 'מאזדה')));
+    expect(result.current.form.customerId).toBe('cust-1');
+    expect(result.current.form.licensePlate).toBe('98-765-43');
+    expect(result.current.form.manufacturer).toBe('מאזדה');
+    expect(result.current.vehicleChoices).toEqual([]);
   });
 });
 

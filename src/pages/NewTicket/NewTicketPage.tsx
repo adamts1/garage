@@ -115,8 +115,21 @@ export default function NewTicketPage({
 
           {form.showMatches && form.form.customerSearch.trim() && (
             <ul className={styles.suggestions}>
-              {form.matches.length ? (
-                form.matches.map((c) => (
+              {form.matches.length || form.plateMatches.length ? (
+                [...form.plateMatches.map(({ vehicle: v, customer: c }) => (
+                  <li key={`v:${v.id}`}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => form.pickPlate(c, v)}
+                    >
+                      <span className={styles.suggestName}>{v.plate} · {c.name}</span>
+                      <span className={styles.suggestMeta}>
+                        {[[v.manufacturer, v.model].filter(Boolean).join(' '), c.phone].filter(Boolean).join(' · ')}
+                      </span>
+                    </button>
+                  </li>
+                )), ...form.matches.map((c) => (
                   <li key={c.id}>
                     <button
                       type="button"
@@ -132,7 +145,7 @@ export default function NewTicketPage({
                       </span>
                     </button>
                   </li>
-                ))
+                ))]
               ) : (
                 <li className={styles.suggestEmpty}>{t('newTicket.noCustomerMatch')}</li>
               )}
