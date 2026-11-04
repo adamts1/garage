@@ -1217,6 +1217,15 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
   font-weight: 800;
 }
 .kv-link { color: var(--slate); font-weight: 700; text-decoration: none; }
+
+/* customer card: link to the record, and moving the ticket to someone else */
+.tp-customer-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .kv-link:hover { text-decoration: underline; }
 
 /* works card header: title on one side, count chip on the other.
