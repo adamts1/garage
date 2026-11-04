@@ -20,6 +20,7 @@
     "test": "vitest run",
     "onboard": "node --env-file=.env.local scripts/onboard-garage.mjs",
     "onboard:prod": "node --env-file=.env.production.local scripts/onboard-garage.mjs",
+    "backup:prod": "bash scripts/backup-prod.sh",
     "dupes": "node --env-file=.env.local scripts/duplicate-customers.mjs",
     "seed:demo": "node --env-file=.env.local scripts/seed-demo.mjs",
     "seed:catalog": "node --env-file=.env.local scripts/seed-catalog.mjs",
