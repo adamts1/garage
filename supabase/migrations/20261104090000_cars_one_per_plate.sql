@@ -32,7 +32,8 @@
 -- 5. A customer's details, corrected anywhere, reach that customer's open
 --    tickets the same way. Same exception for billed and cancelled ones.
 --
--- Existing data: blanks between rows of one plate are merged. A real conflict
+-- Existing data: blanks between rows of one plate are merged, and open
+-- tickets take the car's description. A real conflict
 -- — two different makes, models, years or codes for one plate — stops the
 -- migration and names the plates, rather than picking a winner. (Production
 -- had none on 2026-11-04; one plate was shared, by blanks only.)
@@ -180,6 +181,20 @@ update public.tickets t
    set car_id = c.id
   from public.cars c
  where c.garage_id = t.garage_id and c.plate_key = public.plate_key(t.plate);
+
+-- Open work orders take the car's description now, so a plate does not
+-- appear under two descriptions on the board from day one. Only where the car
+-- knows what it is; billed and cancelled tickets keep what was printed, and
+-- the km stays that visit's.
+update public.tickets t
+   set car          = case when coalesce(c.manufacturer, c.model) is not null
+                           then public.car_label(c.manufacturer, c.model, c.year)
+                           else t.car end,
+       year         = coalesce(c.year, t.year),
+       vehicle_code = coalesce(c.vehicle_code, t.vehicle_code)
+  from public.cars c
+ where t.car_id = c.id
+   and public.ticket_is_open(t.id, t.status);
 
 -- One link per customer and car: "12-345-67" and "1234567" on one customer
 -- were one car typed twice. The details are on the car now; the extra row goes.

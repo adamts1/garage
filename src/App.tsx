@@ -18,6 +18,7 @@ const ArchivePage = lazy(() => import('./pages/Archive').then((m) => ({ default:
 const CustomersPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomersPage })));
 const CustomerPage = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerPage })));
 const CarPage = lazy(() => import('./pages/Car').then((m) => ({ default: m.CarPage })));
+const CarsPage = lazy(() => import('./pages/Cars').then((m) => ({ default: m.CarsPage })));
 const ExpensesPage = lazy(() => import('./pages/Expenses').then((m) => ({ default: m.ExpensesPage })));
 const InvoicesPage = lazy(() => import('./pages/Invoices').then((m) => ({ default: m.InvoicesPage })));
 const ItemsPage = lazy(() => import('./pages/Items').then((m) => ({ default: m.ItemsPage })));
@@ -203,6 +204,7 @@ export default function App() {
                   path="/customers/:id"
                   element={<CustomerPage tickets={tickets} onOpenTicket={openTicket} />}
                 />
+                <Route path="/cars" element={<CarsPage tickets={tickets} />} />
                 <Route path="/cars/:id" element={<CarPage tickets={tickets} onOpenTicket={openTicket} />} />
                 <Route path="/workers" element={<WorkersPage />} />
                 <Route path="/items" element={<ItemsPage />} />

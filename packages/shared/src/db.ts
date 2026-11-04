@@ -121,6 +121,22 @@ export interface CarOwner {
   phone: string | null;
 }
 
+/** Every car in the garage with who drives it — the vehicles screen. */
+export const listCars = async (): Promise<(Car & { owners: CarOwner[] })[]> => {
+  const { data, error } = await getClient()
+    .from('cars')
+    .select('id, plate, manufacturer, model, year, km, vehicle_code, vehicles(customers(id, name, phone))')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  // A many-to-one embed: PostgREST returns the customer as an object, not a list.
+  return ((data ?? []) as unknown as (Car & { vehicles: { customers: CarOwner | null }[] })[]).map(
+    ({ vehicles, ...car }) => ({
+      ...car,
+      owners: (vehicles ?? []).map((v) => v.customers).filter((c): c is CarOwner => Boolean(c)),
+    }),
+  );
+};
+
 export const getCar = async (id: string): Promise<{ car: Car; owners: CarOwner[] } | null> => {
   const { data, error } = await getClient()
     .from('cars')

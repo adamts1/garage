@@ -2,7 +2,7 @@ import { garageName, isGarageAdmin, signedInAs, type Worker } from '@garage/shar
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  IconBoard, IconBox, IconCard, IconClock, IconCustomers, IconDoc, IconParts,
+  IconBoard, IconBox, IconCar, IconCard, IconClock, IconCustomers, IconDoc, IconParts,
   IconPin, IconReports, IconToolbox, IconWrench,
 } from '../icons';
 
@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { key: 'nav.expenses', path: '/expenses', Icon: IconCard },
   { key: 'nav.suppliers', path: '/suppliers', Icon: IconBox },
   { key: 'nav.customers', path: '/customers', Icon: IconCustomers },
+  { key: 'nav.cars', path: '/cars', Icon: IconCar },
   /* The staff screen shows every colleague's email and is the only place a role
      is changed, so it is an admin's. The page redirects as well — hiding a link
      does nothing about an address somebody types. */
