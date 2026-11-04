@@ -183,7 +183,10 @@ export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProp
             <div className={styles.vehicles}>
               {cars.map((v) => (
                 <div key={v.id} className={styles.vehicle}>
-                  <b className={styles.plate}>{v.plate}</b>
+                  {/* The car's own page: its whole history, every owner's visits. */}
+                  {v.car_id
+                    ? <Link className={styles.plate} to={`/cars/${v.car_id}`}><b>{v.plate}</b></Link>
+                    : <b className={styles.plate}>{v.plate}</b>}
                   <span>{[v.manufacturer, v.model].filter(Boolean).join(' ') || t('common.none')}</span>
                   <span className={styles.meta}>
                     {[v.year, v.km && t('newTicket.kmValue', { km: v.km }), v.vehicle_code]

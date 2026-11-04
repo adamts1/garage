@@ -526,6 +526,7 @@
     "customerNameRequired": "שם הלקוח לא יכול להיות ריק.",
     "customerPhoneInvalid": "מספר הטלפון קצר מדי.",
     "openCustomer": "לדף הלקוח",
+    "openCar": "היסטוריית הרכב",
     "switchCustomer": "העברה ללקוח אחר",
     "switchCustomerClose": "סגירה",
     "switchCustomerSearch": "חיפוש לפי שם, טלפון או מספר רישוי",
@@ -857,6 +858,23 @@
     "noMatch": "אין כרטיסים בסטטוס הזה",
     "noVehicles": "אין רכבים רשומים ללקוח זה",
     "printHistory": "הדפס היסטוריית טיפולים"
+  },
+  "car": {
+    "title": "רכב",
+    "notFound": "הרכב לא נמצא.",
+    "back": "חזרה",
+    "owners": "לקוחות הרכב",
+    "noOwners": "אין לקוח מקושר לרכב",
+    "history": "היסטוריית טיפולים",
+    "noTickets": "אין כרטיסי עבודה לרכב זה",
+    "fields": {
+      "make": "יצרן ודגם",
+      "year": "שנה",
+      "km": "ק״מ אחרון",
+      "vehicleCode": "קוד דגם",
+      "customer": "לקוח",
+      "km_visit": "ק״מ"
+    }
   },
   "items": {
     "title": "פריטי מלאי",

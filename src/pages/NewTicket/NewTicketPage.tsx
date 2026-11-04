@@ -244,7 +244,13 @@ export default function NewTicketPage({
             <IconCar /> {t('newTicket.vehicleDetails')}
           </h3>
           <div className={styles.row2}>
-            <TextField dense label="newTicket.fields.plate" {...field('licensePlate')} {...required('licensePlate')} />
+            <TextField
+              dense
+              label="newTicket.fields.plate"
+              {...field('licensePlate')}
+              {...required('licensePlate')}
+              onBlur={() => { form.touch('licensePlate'); form.fillKnownPlate(); }}
+            />
             {/* A list, not a menu: `list` offers the known makes while the input
                 stays free text, so a grey import or a thirty-year-old model is
                 typed straight into the same field. See VEHICLE_CATALOG. */}

@@ -181,8 +181,9 @@ export function matchCustomers<C extends CustomerIdentity>(
 }
 
 /** A plate as compared: letters and digits only, lower-cased. Plates are typed
- *  with hyphens, spaces or neither, and "12-345-67" has to find "1234567". */
-const plateKey = (plate: string | null | undefined): string =>
+ *  with hyphens, spaces or neither, and "12-345-67" has to find "1234567".
+ *  The database's public.plate_key() is the same rule — one car per key. */
+export const plateKey = (plate: string | null | undefined): string =>
   (plate ?? '').toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
 
 /** Fewer characters than this is a fragment of half the plates on file. */

@@ -226,6 +226,12 @@ export default function TicketPage({
               {billLocked && !cancelled && (
                 <div className="tp-note">{t('ticket.vehicleLocked')}</div>
               )}
+              {/* Every work order for this plate, whoever brought it in. */}
+              {draft.carId && (
+                <div className="tp-customer-actions">
+                  <Link className="kv-link" to={`/cars/${draft.carId}`}>{t('ticket.openCar')}</Link>
+                </div>
+              )}
             </section>
 
             <section className="card">
