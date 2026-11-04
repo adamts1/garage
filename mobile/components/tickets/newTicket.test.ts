@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Ticket, TicketWork } from '@garage/shared';
-import { buildNewTicket, EMPTY_FORM, isDirty, missingFields, type TicketForm } from './newTicket';
+import type { Ticket, TicketWork, Vehicle } from '@garage/shared';
+import { buildNewTicket, EMPTY_FORM, fillFromKnownPlate, isDirty, missingFields, type TicketForm } from './newTicket';
 
 const form = (over: Partial<TicketForm> = {}): TicketForm => ({
   ...EMPTY_FORM,
@@ -135,5 +135,30 @@ describe('buildNewTicket', () => {
      display instead. */
   it('leaves the title empty when no works name the ticket', () => {
     expect(buildNewTicket({ form: form(), works: [], existing, now }).title).toBe('');
+  });
+});
+
+describe('fillFromKnownPlate', () => {
+  const known: Vehicle = {
+    id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
+    year: '2022', km: '3000', vehicle_code: '4111',
+  };
+  const blank = { ...EMPTY_FORM, licensePlate: '12-345-678' };
+
+  it('fills the blanks from the car on file, however the plate was typed', () => {
+    expect(fillFromKnownPlate(blank, [known])).toMatchObject({
+      manufacturer: 'קיה', model: 'נירו', year: '2022', vehicleCode: '4111',
+    });
+  });
+
+  it('keeps what was typed, and never copies the km', () => {
+    const out = fillFromKnownPlate({ ...blank, model: 'נירו EV' }, [known]);
+    expect(out.model).toBe('נירו EV');
+    expect(out.km).toBe('');
+  });
+
+  it('leaves an unknown plate alone', () => {
+    const f = { ...EMPTY_FORM, licensePlate: '99-999-99' };
+    expect(fillFromKnownPlate(f, [known])).toBe(f);
   });
 });

@@ -160,7 +160,7 @@
   },
   "create": {
     "title": "כרטיס עבודה חדש",
-    "searchPlaceholder": "חיפוש לקוח קיים לפי שם או טלפון",
+    "searchPlaceholder": "חיפוש לקוח קיים לפי שם, טלפון או מספר רישוי",
     "noCustomerMatch": "לא נמצא לקוח תואם",
     "pickVehicle": "בחר רכב ללקוח:",
     "customerSection": "פרטי לקוח",
