@@ -98,7 +98,60 @@ export interface Vehicle {
   year: string | null;
   km: string | null;
   vehicle_code: string | null;
+  /** The car this link is to. Its details above are a mirror of the car's. */
+  car_id?: string | null;
 }
+
+/** One car per plate per garage — the thing a service history is about.
+ *  Customers reach it through `vehicles`, tickets through `tickets.car_id`.
+ *  See 20261104090000_cars_one_per_plate.sql. */
+export interface Car {
+  id: string;
+  plate: string;
+  manufacturer: string | null;
+  model: string | null;
+  year: string | null;
+  km: string | null;
+  vehicle_code: string | null;
+}
+
+export interface CarOwner {
+  id: string;
+  name: string;
+  phone: string | null;
+}
+
+/** Every car in the garage with who drives it — the vehicles screen. */
+export const listCars = async (): Promise<(Car & { owners: CarOwner[] })[]> => {
+  const { data, error } = await getClient()
+    .from('cars')
+    .select('id, plate, manufacturer, model, year, km, vehicle_code, vehicles(customers(id, name, phone))')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  // A many-to-one embed: PostgREST returns the customer as an object, not a list.
+  return ((data ?? []) as unknown as (Car & { vehicles: { customers: CarOwner | null }[] })[]).map(
+    ({ vehicles, ...car }) => ({
+      ...car,
+      owners: (vehicles ?? []).map((v) => v.customers).filter((c): c is CarOwner => Boolean(c)),
+    }),
+  );
+};
+
+export const getCar = async (id: string): Promise<{ car: Car; owners: CarOwner[] } | null> => {
+  const { data, error } = await getClient()
+    .from('cars')
+    .select('id, plate, manufacturer, model, year, km, vehicle_code, vehicles(customers(id, name, phone))')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  // A many-to-one embed: PostgREST returns the customer as an object, not a list.
+  const { vehicles, ...car } = data as unknown as Car & { vehicles: { customers: CarOwner | null }[] };
+  return {
+    car,
+    owners: (vehicles ?? []).map((v) => v.customers).filter((c): c is CarOwner => Boolean(c)),
+  };
+};
 
 export const listVehicles = async (): Promise<Vehicle[]> => {
   const { data, error } = await getClient()
@@ -398,6 +451,7 @@ const rowToTicket = (r: any): Ticket => ({
      "which customer" cannot be re-derived from a denormalised name. NULL on
      tickets that predate resolution — the page falls back to the phone. */
   customerId: r.customer_id ?? null,
+  carId: r.car_id ?? null,
   amount: Number(r.amount),
   done: r.done,
   subtasks: r.subtasks ?? [],
@@ -474,6 +528,10 @@ const ticketToRow = (t: Ticket) => ({
   plate: t.plate,
   car: t.car,
   customer_name: t.customer,
+  /* Written on update too, so a ticket can be moved to another customer. The
+     database checks the customer is this garage's and refuses the move once
+     the ticket is billed (tickets_customer_follows_invoice). */
+  customer_id: t.customerId ?? null,
   amount: t.amount,
   done: t.done,
   subtasks: t.subtasks,

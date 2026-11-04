@@ -180,6 +180,28 @@ export function matchCustomers<C extends CustomerIdentity>(
     .slice(0, CUSTOMER_MATCH_LIMIT);
 }
 
+/** A plate as compared: letters and digits only, lower-cased. Plates are typed
+ *  with hyphens, spaces or neither, and "12-345-67" has to find "1234567".
+ *  The database's public.plate_key() is the same rule — one car per key. */
+export const plateKey = (plate: string | null | undefined): string =>
+  (plate ?? '').toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
+
+/** Fewer characters than this is a fragment of half the plates on file. */
+const PLATE_SEARCH_MIN_CHARS = 3;
+
+/** The other half of the intake search: the car, for the customer who arrives
+ *  and is known by the plate rather than by name. Returns vehicles, not
+ *  customers, because picking one should fill that car — not ask which of the
+ *  owner's cars it was. Capped like the customer matches. */
+export function matchVehiclesByPlate<V extends { plate: string | null }>(
+  vehicles: readonly V[],
+  query: string,
+): V[] {
+  const q = plateKey(query);
+  if (q.length < PLATE_SEARCH_MIN_CHARS) return [];
+  return vehicles.filter((v) => plateKey(v.plate).includes(q)).slice(0, CUSTOMER_MATCH_LIMIT);
+}
+
 /** The key a ticket rolls up under in the customer report.
  *
  *  `tickets.customer_id` first — the row the ticket was actually resolved to,

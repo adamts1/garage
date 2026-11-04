@@ -115,8 +115,21 @@ export default function NewTicketPage({
 
           {form.showMatches && form.form.customerSearch.trim() && (
             <ul className={styles.suggestions}>
-              {form.matches.length ? (
-                form.matches.map((c) => (
+              {form.matches.length || form.plateMatches.length ? (
+                [...form.plateMatches.map(({ vehicle: v, customer: c }) => (
+                  <li key={`v:${v.id}`}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => form.pickPlate(c, v)}
+                    >
+                      <span className={styles.suggestName}>{v.plate} · {c.name}</span>
+                      <span className={styles.suggestMeta}>
+                        {[[v.manufacturer, v.model].filter(Boolean).join(' '), c.phone].filter(Boolean).join(' · ')}
+                      </span>
+                    </button>
+                  </li>
+                )), ...form.matches.map((c) => (
                   <li key={c.id}>
                     <button
                       type="button"
@@ -132,7 +145,7 @@ export default function NewTicketPage({
                       </span>
                     </button>
                   </li>
-                ))
+                ))]
               ) : (
                 <li className={styles.suggestEmpty}>{t('newTicket.noCustomerMatch')}</li>
               )}
@@ -231,7 +244,13 @@ export default function NewTicketPage({
             <IconCar /> {t('newTicket.vehicleDetails')}
           </h3>
           <div className={styles.row2}>
-            <TextField dense label="newTicket.fields.plate" {...field('licensePlate')} {...required('licensePlate')} />
+            <TextField
+              dense
+              label="newTicket.fields.plate"
+              {...field('licensePlate')}
+              {...required('licensePlate')}
+              onBlur={() => { form.touch('licensePlate'); form.fillKnownPlate(); }}
+            />
             {/* A list, not a menu: `list` offers the known makes while the input
                 stays free text, so a grey import or a thirty-year-old model is
                 typed straight into the same field. See VEHICLE_CATALOG. */}

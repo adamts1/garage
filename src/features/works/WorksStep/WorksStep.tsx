@@ -235,9 +235,15 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'name',
       header: 'works.fields.part',
-      render: (i) => (
+      /* Editable by everyone, like the part's price. The name is this ticket's
+         copy — renaming it here never touches the item in the catalog. */
+      render: (i, index) => (
         <div className={styles.nameCell}>
-          {i.name}
+          <CellInput
+            value={i.name}
+            aria-label={t('works.fields.part')}
+            onChange={(e) => current && step.patchPart(current.uid, index, { name: e.target.value })}
+          />
           {/* No SKU means it was typed in, not picked from the catalog. */}
           {!i.sku && <span className={styles.badge}>{t('works.freeBadge')}</span>}
         </div>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The module reaches lib/supabase, which builds a client against window on import.
-import type { Customer } from '@garage/shared';
+import type { Customer, Vehicle } from '@garage/shared';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { emptyForm, missingRequired, useNewTicket, type TicketForm } from './useNewTicket';
@@ -84,6 +84,34 @@ describe('missingRequired', () => {
    so picking them and typing a number used to open a second copy. The id now
    rides along — and has to stop riding the moment the form stops describing
    that person. */
+describe('a plate already on file', () => {
+  it('fills the blanks from that car and keeps what was typed', async () => {
+    vi.resetModules();
+    vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
+    vi.doMock('@garage/shared', async (importActual) => ({
+      ...(await importActual<typeof import('@garage/shared')>()),
+      listCustomers: vi.fn(async () => []),
+      listVehicles: vi.fn(async () => [{
+        id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
+        year: '2022', km: '3000', vehicle_code: '4111',
+      }]),
+      subscribeToTable: vi.fn(() => () => {}),
+    }));
+    const { useNewTicket: fresh } = await import('./useNewTicket');
+    const { result } = renderHook(() => fresh({ tickets: [], setTickets: vi.fn(), onDone: vi.fn() }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.set('licensePlate', '12-345-678'); result.current.set('model', 'נירו EV'); });
+    act(() => result.current.fillKnownPlate());
+
+    expect(result.current.form).toMatchObject({
+      manufacturer: 'קיה', model: 'נירו EV', year: '2022', vehicleCode: '4111', km: '',
+    });
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
+  });
+});
+
 describe('the picked customer id', () => {
   const dana: Customer = {
     id: 'cust-1', name: 'דנה', phone: null, id_number: null,
@@ -115,6 +143,18 @@ describe('the picked customer id', () => {
     act(() => result.current.set('address', 'הרצל 1'));
     act(() => result.current.set('licensePlate', '12-345-67'));
     expect(result.current.form.customerId).toBe('cust-1');
+  });
+
+  it('is set by picking a plate, and that car is filled without asking which', () => {
+    const car = (id: string, plate: string, manufacturer: string): Vehicle => ({
+      id, customer_id: 'cust-1', plate, manufacturer, model: null, year: null, km: '1000', vehicle_code: null,
+    });
+    const { result } = setup();
+    act(() => result.current.pickPlate(dana, car('v2', '98-765-43', 'מאזדה')));
+    expect(result.current.form.customerId).toBe('cust-1');
+    expect(result.current.form.licensePlate).toBe('98-765-43');
+    expect(result.current.form.manufacturer).toBe('מאזדה');
+    expect(result.current.vehicleChoices).toEqual([]);
   });
 });
 

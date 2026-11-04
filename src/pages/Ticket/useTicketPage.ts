@@ -1,5 +1,5 @@
 import {
-  collectInvoice, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, isBill, isGarageAdmin, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -241,9 +241,45 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
       }
 
       const next: Ticket = { ...draft, ...over };
+      /* Moved to another customer: what was typed into the ת״ז box was about
+         the one it is leaving, and the details now are the new one's own. */
+      const moved = (next.customerId ?? null) !== (ticket.customerId ?? null);
+
+      /* The same two the intake form insists on: the name says who, the phone
+         is how they are found on the next visit. */
+      if (next.customer !== ticket.customer && !next.customer.trim()) {
+        dispatch(showErrorKey('ticket.customerNameRequired'));
+        return false;
+      }
+      if (next.phone !== ticket.phone && !isUsablePhone(next.phone ?? '')) {
+        dispatch(showErrorKey('ticket.customerPhoneInvalid'));
+        return false;
+      }
+
       setBusy(true);
       try {
-        if (idDirty) {
+        /* A correction of this customer's details is a correction of the
+           customer, not of this visit only — the next ticket should open with
+           it. Written first, so a refusal leaves the ticket as it was. Other
+           tickets keep the details they were opened with. */
+        if (!moved && customer) {
+          const fix: Partial<Omit<Customer, 'id'>> = {};
+          if (next.customer.trim() !== ticket.customer.trim()) fix.name = next.customer.trim();
+          if ((next.phone ?? '') !== (ticket.phone ?? '')) fix.phone = next.phone?.trim() || null;
+          if ((next.email ?? '') !== (ticket.email ?? '')) fix.email = next.email?.trim() || null;
+          /* The ticket holds one address line, the record a street and a city.
+             The line as typed goes to the street, and the city is cleared so
+             the next intake does not print it twice. */
+          if ((next.address ?? '') !== (ticket.address ?? '')) {
+            fix.address = next.address?.trim() || null;
+            fix.city = null;
+          }
+          if (Object.keys(fix).length) {
+            await updateCustomer(customer.id, fix);
+            await loadCustomers();
+          }
+        }
+        if (idDirty && !moved) {
           if (!customer) {
             dispatch(showErrorKey('ticket.noCustomerRecord'));
             return false;
@@ -278,6 +314,45 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
       }
     },
     [customer, dispatch, draft, idConflict, idDirty, idNumber, loadCustomers, setTickets, ticket],
+  );
+
+  /** Move the ticket to another customer — an existing one, or one created here
+   *  from a name and a phone. A save of its own, like close-and-charge: other
+   *  pending edits go with it. The car follows in the database
+   *  (tickets_customer_moves_vehicle). */
+  const switchCustomer = useCallback(
+    async (to: Customer | { name: string; phone: string }) => {
+      const ok = await confirm({
+        bodyKey: 'ticket.confirmSwitchCustomer',
+        values: { from: ticket.customer, to: to.name.trim() },
+      });
+      if (!ok) return false;
+      let target: Customer;
+      if ('id' in to) {
+        target = to;
+      } else {
+        try {
+          target = await createCustomer({
+            name: to.name.trim(), phone: to.phone.trim(),
+            email: null, address: null, city: null, kind: 'private', id_number: null,
+          });
+        } catch (e) {
+          dispatch(showError(e));
+          return false;
+        }
+        await loadCustomers();
+      }
+      // The new record's ת״ז, so the box does not read as an edit of it.
+      setIdNumber(normalizeIdNumber(target.id_number));
+      return save({
+        customerId: target.id,
+        customer: target.name,
+        phone: target.phone ?? '',
+        email: target.email ?? '',
+        address: addressLabel({ address: target.address ?? '', city: target.city ?? '' }),
+      });
+    },
+    [confirm, dispatch, loadCustomers, save, ticket.customer],
   );
 
   /** Back to where it was on the server. The one way out of an edit that is not
@@ -598,7 +673,7 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
 
   return {
     draft, photos, invoice, busy, totals, works, dirty,
-    customer, idNumber, setIdNumber, idConflict,
+    customer, customers, idNumber, setIdNumber, idConflict, switchCustomer,
     /* What is still creditable, and whether this user may. Both are needed to
        decide the button: a fully credited invoice offers nothing to anybody,
        and a member may not credit at all. */

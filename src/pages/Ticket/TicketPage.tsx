@@ -5,6 +5,7 @@ import {
 import { Fragment, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import SwitchCustomer from '../../features/ticket/SwitchCustomer/SwitchCustomer';
 import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
 import { WorksStep } from '../../features/works';
 import {
@@ -53,6 +54,20 @@ const VEHICLE_FIELDS: {
   { field: 'vehicleCode', label: 'ticket.fields.vehicleCode', ltr: true },
 ];
 
+/** The customer's details as this ticket holds them. The ת״ז is not among
+ *  them: it lives on the customer record and has its own field below. */
+const CUSTOMER_FIELDS: {
+  field: 'customer' | 'phone' | 'email' | 'address';
+  label: string;
+  ltr?: boolean;
+  type?: string;
+}[] = [
+  { field: 'customer', label: 'ticket.fields.name' },
+  { field: 'phone', label: 'ticket.fields.phone', ltr: true, type: 'tel' },
+  { field: 'email', label: 'ticket.fields.email', ltr: true, type: 'email' },
+  { field: 'address', label: 'ticket.fields.address' },
+];
+
 /** '-' for anything the intake form never filled in, so blanks read as blank,
  *  not as data. */
 const Val = ({ children }: { children?: string | number | null }) =>
@@ -74,6 +89,7 @@ export default function TicketPage({
 
   const [step, setStep] = useState('tp-details');
   const [lightbox, setLightbox] = useState<TicketPhoto | null>(null);
+  const [switching, setSwitching] = useState(false);
 
   const itemCount = works.reduce((s, w) => s + w.items.length, 0);
   const column = COLUMNS.find((c) => c.id === draft.st);
@@ -210,33 +226,39 @@ export default function TicketPage({
               {billLocked && !cancelled && (
                 <div className="tp-note">{t('ticket.vehicleLocked')}</div>
               )}
+              {/* Every work order for this plate, whoever brought it in. */}
+              {draft.carId && (
+                <div className="tp-customer-actions">
+                  <Link className="kv-link" to={`/cars/${draft.carId}`}>{t('ticket.openCar')}</Link>
+                </div>
+              )}
             </section>
 
             <section className="card">
               <h3 className="card-title"><IconCustomers /> {t('ticket.customer')}</h3>
+              {/* Editable while the ticket is open, frozen with the vehicle once
+                  billed (tickets_customer_follows_invoice). A correction here
+                  reaches the customer record too — see save(). Every ticket of
+                  theirs, cancelled ones included, is on the customer page. */}
               <dl className="kv">
-                <dt>{t('ticket.fields.name')}</dt>
-                <dd>
-                  {/* Every ticket of theirs, cancelled ones included, is one
-                      click away — the customer page is where the full record
-                      lives. */}
-                  {draft.customerId
-                    ? <Link className="kv-link" to={`/customers/${draft.customerId}`}><b>{draft.customer}</b></Link>
-                    : <b>{draft.customer}</b>}
-                </dd>
-                <dt>{t('ticket.fields.phone')}</dt>
-                <dd>
-                  {draft.phone
-                    ? <a className="kv-link" href={`tel:${draft.phone}`} dir="ltr">{draft.phone}</a>
-                    : <Val>{null}</Val>}
-                </dd>
-                <dt>{t('ticket.fields.email')}</dt>
-                <dd>
-                  {draft.email
-                    ? <a className="kv-link" href={`mailto:${draft.email}`} dir="ltr">{draft.email}</a>
-                    : <Val>{null}</Val>}
-                </dd>
-                <dt>{t('ticket.fields.address')}</dt><dd><Val>{draft.address}</Val></dd>
+                {CUSTOMER_FIELDS.map(({ field, label, ltr, type }) => (
+                  <Fragment key={field}>
+                    <dt>{t(label)}</dt>
+                    <dd>
+                      <input
+                        className="kv-input"
+                        type={type}
+                        dir={ltr ? 'ltr' : 'auto'}
+                        aria-label={t(label)}
+                        placeholder="-"
+                        value={draft[field] ?? ''}
+                        disabled={billLocked}
+                        title={billLocked ? t('ticket.customerLocked') : undefined}
+                        onChange={(e) => page.patch({ [field]: e.target.value })}
+                      />
+                    </dd>
+                  </Fragment>
+                ))}
 
                 {/* The one editable thing about the customer on this screen.
                     It is a column on `customers`, not on the ticket — a person
@@ -275,6 +297,31 @@ export default function TicketPage({
               )}
               {!page.customer && (
                 <div className="tp-note">{t('ticket.noCustomerRecord')}</div>
+              )}
+              {billLocked && !cancelled && (
+                <div className="tp-note">{t('ticket.customerLocked')}</div>
+              )}
+              {!billLocked && page.customer && (
+                <div className="tp-note">{t('ticket.customerEditHint')}</div>
+              )}
+
+              <div className="tp-customer-actions">
+                {draft.customerId && (
+                  <Link className="kv-link" to={`/customers/${draft.customerId}`}>{t('ticket.openCustomer')}</Link>
+                )}
+                {!billLocked && !switching && (
+                  <button type="button" className="btn ghost" onClick={() => setSwitching(true)}>
+                    {t('ticket.switchCustomer')}
+                  </button>
+                )}
+              </div>
+              {!billLocked && switching && (
+                <SwitchCustomer
+                  customers={page.customers}
+                  currentId={draft.customerId ?? null}
+                  onPick={page.switchCustomer}
+                  onClose={() => setSwitching(false)}
+                />
               )}
             </section>
           </div>

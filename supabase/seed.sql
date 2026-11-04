@@ -150,6 +150,11 @@ INSERT INTO "public"."ticket_photos" ("id", "ticket_id", "path", "caption", "cre
 	('91aea470-b05f-4143-8578-ffe364bab64c', '73d8510a-6d12-4344-bff3-f5cee3b6f838', 'GAR-317/1784539902165-awabbg.jpg', NULL, '2026-07-20 09:31:51.174852+00');
 
 
+/* The dump predates cars (20261104090000): its vehicles rows carry no car_id,
+   and with triggers off nothing fills one in. Loosened for the load and put
+   back below, once every row has its car. */
+ALTER TABLE "public"."vehicles" ALTER COLUMN "car_id" DROP NOT NULL;
+
 --
 -- Data for Name: vehicles; Type: TABLE DATA; Schema: public; Owner: postgres
 --
@@ -264,5 +269,41 @@ UPDATE "public"."tickets"
    SET "closed_at" = COALESCE("paid_at", "created_at") - (("ctid"::text::point)[1]::int % 5) * interval '24 days'
  WHERE "status" IN ('done', 'paid')
    AND "closed_at" IS NULL;
+
+/* One car per plate, from the seeded vehicles and tickets — the backfill in
+   20261104090000, which ran against an empty database before this file did. */
+INSERT INTO "public"."cars" ("garage_id", "plate", "manufacturer", "model", "year", "km", "vehicle_code")
+SELECT v."garage_id", min(btrim(v."plate")),
+       max(nullif(btrim(v."manufacturer"), '')), max(nullif(btrim(v."model"), '')),
+       max(nullif(btrim(v."year"), '')),         max(nullif(btrim(v."km"), '')),
+       max(nullif(btrim(v."vehicle_code"), ''))
+  FROM "public"."vehicles" v
+ WHERE public.plate_key(v."plate") <> ''
+ GROUP BY v."garage_id", public.plate_key(v."plate")
+ON CONFLICT ("garage_id", "plate_key") DO NOTHING;
+
+INSERT INTO "public"."cars" ("garage_id", "plate")
+SELECT DISTINCT ON (t."garage_id", public.plate_key(t."plate")) t."garage_id", btrim(t."plate")
+  FROM "public"."tickets" t
+ WHERE public.plate_key(t."plate") <> ''
+ON CONFLICT ("garage_id", "plate_key") DO NOTHING;
+
+-- Before the cars are assigned: one link per customer and car is enforced by
+-- an index that is live already, so a second spelling must go first.
+DELETE FROM "public"."vehicles" v
+ USING "public"."vehicles" keep
+ WHERE keep."customer_id" = v."customer_id"
+   AND public.plate_key(keep."plate") = public.plate_key(v."plate")
+   AND (keep."created_at", keep."id") < (v."created_at", v."id");
+
+UPDATE "public"."vehicles" v SET "car_id" = c."id"
+  FROM "public"."cars" c
+ WHERE c."garage_id" = v."garage_id" AND c."plate_key" = public.plate_key(v."plate");
+
+UPDATE "public"."tickets" t SET "car_id" = c."id"
+  FROM "public"."cars" c
+ WHERE c."garage_id" = t."garage_id" AND c."plate_key" = public.plate_key(t."plate");
+
+ALTER TABLE "public"."vehicles" ALTER COLUMN "car_id" SET NOT NULL;
 
 RESET ALL;
