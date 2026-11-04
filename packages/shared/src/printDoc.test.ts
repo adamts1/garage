@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setCurrentGarage } from './auth';
-import { workOrderHtml, workOrderTitle } from './printDoc';
+import { carHistoryHtml, carHistoryTitle, workOrderHtml, workOrderTitle } from './printDoc';
 import type { Ticket } from './types';
 
 /* The web opens this in a window; the phone hands the same string to
@@ -69,5 +69,29 @@ describe('workOrderHtml', () => {
     const html = workOrderHtml(ticket, totals);
     expect(html).toContain('אי-תן שירותי רכב בע&quot;מ');
     expect(html).toContain('02-6522306');
+  });
+});
+
+describe('carHistoryHtml', () => {
+  const car = { id: 'car-1', plate: '12-345-67', manufacturer: 'קיה', model: 'נירו', year: '2022', km: '9000', vehicle_code: '4111' };
+  const owners = [{ id: 'a', name: 'דנה', phone: null }, { id: 'b', name: 'יוסי', phone: null }];
+  const visit = (k: string, over: Partial<Ticket>): Ticket =>
+    ({ k, st: 'paid', title: 'טיפול', plate: '12-345-67', car: 'קיה נירו', customer: '', amount: 100, works: [], ...over }) as Ticket;
+
+  it('lists every owner\'s visits newest first, each with its customer and km, and leaves out cancelled ones', () => {
+    const html = carHistoryHtml(car, owners, [
+      visit('GAR-1', { customer: 'דנה', km: '1000', createdAtISO: '2026-01-01', createdAt: '1.1.2026' }),
+      visit('GAR-2', { customer: 'יוסי', km: '5000', createdAtISO: '2026-06-01', createdAt: '1.6.2026' }),
+      visit('GAR-3', { customer: 'דנה', st: 'cancelled', createdAtISO: '2026-07-01' }),
+    ]);
+    expect(html).toContain('12-345-67');
+    expect(html).toContain('דנה, יוסי');
+    expect(html.indexOf('GAR-2')).toBeLessThan(html.indexOf('GAR-1'));
+    expect(html).toContain('5000 ק״מ');
+    expect(html).not.toContain('GAR-3');
+  });
+
+  it('is titled by the plate', () => {
+    expect(carHistoryTitle(car)).toContain('12-345-67');
   });
 });

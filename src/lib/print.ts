@@ -17,10 +17,10 @@
    version of this inline and now uses it too. */
 
 import {
-  customerHistoryHtml, customerHistoryTitle,
+  carHistoryHtml, carHistoryTitle, customerHistoryHtml, customerHistoryTitle,
   esc, groupInvoiceLines, letterheadHtml, money, payMethodHe, renderPrintDoc, row,
   workOrderHtml, workOrderTitle,
-  type Customer, type Invoice, type InvoiceGroup, type InvoiceLine, type TicketTotals, type Ticket, type TicketWork,
+  type Car, type CarOwner, type Customer, type Invoice, type InvoiceGroup, type InvoiceLine, type TicketTotals, type Ticket, type TicketWork,
 } from '@garage/shared';
 
 /* Re-exported: both were declared here before the move, and the expense sheet
@@ -59,6 +59,10 @@ export const printTicket = (
 /** One customer's visits, cancelled tickets left out (by the builder). */
 export const printCustomerHistory = (c: Customer, tickets: readonly Ticket[]): boolean =>
   openDoc(customerHistoryTitle(c), customerHistoryHtml(c, tickets));
+
+/** One car's visits, whoever brought it in; cancelled tickets left out. */
+export const printCarHistory = (car: Car, owners: readonly CarOwner[], tickets: readonly Ticket[]): boolean =>
+  openDoc(carHistoryTitle(car), carHistoryHtml(car, owners, tickets));
 
 /* ---------------- invoice ---------------- */
 

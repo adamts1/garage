@@ -2,8 +2,11 @@ import { getCar, isCancelled, shekel, type Car, type CarOwner, type Ticket } fro
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Button } from '../../components/Button';
 import { Pill, type PillTone } from '../../components/Pill';
 import { Table, type Column } from '../../components/Table';
+import { IconPrint } from '../../icons';
+import { printCarHistory, warnIfBlocked } from '../../lib/print';
 import { isConfigured } from '../../lib/supabase';
 import styles from '../Customers/CustomerPage.module.css';
 
@@ -106,6 +109,10 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
             <span className={styles.plate} dir="ltr">{car.plate}</span>
             {make && <span className={styles.kind}>{make}</span>}
           </h2>
+          {/* Every visit, whoever brought the car in — never a cancelled one. */}
+          <Button onClick={() => warnIfBlocked(printCarHistory(car, owners, history))}>
+            <IconPrint /> {t('car.printHistory')}
+          </Button>
         </div>
         <dl className={styles.facts}>
           <div><dt>{t('car.fields.make')}</dt><dd>{make || t('common.none')}</dd></div>
