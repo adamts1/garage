@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { PageHeader } from '../../components/PageHeader';
-import { Table, type Column } from '../../components/Table';
+import { RowActions, Table, type Column } from '../../components/Table';
+import { IconPrint } from '../../icons';
+import { printCarHistory, warnIfBlocked } from '../../lib/print';
 import { isConfigured } from '../../lib/supabase';
 import { showError, useAppDispatch } from '../../store';
 import styles from './CarsPage.module.css';
@@ -79,6 +81,23 @@ export default function CarsPage({ tickets }: { tickets: Ticket[] }) {
     },
     { key: 'visits', header: 'cars.fields.visits', width: 90, sortValue: (c) => c.visits, render: (c) => c.visits },
     { key: 'lastVisit', header: 'cars.fields.lastVisit', width: 120, render: (c) => c.lastVisit || '—' },
+    {
+      key: 'print',
+      width: 56,
+      render: (c) => (
+        <RowActions>
+          <Button
+            variant="ghost"
+            size="sm"
+            title={t('car.printHistory')}
+            aria-label={t('car.printHistory')}
+            onClick={() => warnIfBlocked(printCarHistory(c, c.owners, tickets.filter((x) => x.carId === c.id)))}
+          >
+            <IconPrint />
+          </Button>
+        </RowActions>
+      ),
+    },
   ];
 
   return (
