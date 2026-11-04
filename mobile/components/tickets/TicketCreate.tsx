@@ -34,6 +34,7 @@ import { WorksSection } from './WorksSection';
 import {
   buildNewTicket,
   EMPTY_FORM,
+  fillFromKnownPlate,
   IDENTITY_FIELDS,
   isDirty,
   missingFields,
@@ -106,6 +107,15 @@ export default function TicketCreate({
     fillVehicle(v);
     setVehicleChoices([]);
   };
+
+  /** Picked by plate: the owner, and that car — not a question about which of
+   *  their cars it was. */
+  const pickPlate = (c: Customer, v: Vehicle) => {
+    pickCustomer(c);
+    pickVehicle(v);
+  };
+
+  const fillKnownPlate = () => setForm((prev) => fillFromKnownPlate(prev, vehicles));
 
   /* The two numbers, checked against everybody on file. The phone may be
      shared — a couple, a company, a parent paying for a student's car — so a
@@ -181,16 +191,18 @@ export default function TicketCreate({
           form={form}
           onSet={set}
           customers={customers}
+          vehicles={vehicles}
           conflict={conflict}
           idConflict={idConflict}
           vehicleChoices={vehicleChoices}
           onPickCustomer={pickCustomer}
           onPickVehicle={pickVehicle}
+          onPickPlate={pickPlate}
           search={search}
           onSearch={setSearch}
         />
 
-        <VehicleSection form={form} onSet={set} />
+        <VehicleSection form={form} onSet={set} onPlateDone={fillKnownPlate} />
 
         <View style={[s.card, { gap: 10 }]}>
           <Field label={t('create.fields.details')}>

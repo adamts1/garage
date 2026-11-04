@@ -11,7 +11,10 @@
 import { useMemo } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { isBusinessCustomer, matchCustomers, type Customer, type PhoneConflict, type Vehicle } from '@garage/shared';
+import {
+  isBusinessCustomer, matchCustomers, matchVehiclesByPlate,
+  type Customer, type PhoneConflict, type Vehicle,
+} from '@garage/shared';
 import { C, rtl, s } from '../../lib/theme';
 import { Button, Field } from '../ui';
 import type { TicketForm } from './newTicket';
@@ -20,17 +23,21 @@ export function CustomerSection({
   form,
   onSet,
   customers,
+  vehicles,
   conflict,
   idConflict,
   vehicleChoices,
   onPickCustomer,
   onPickVehicle,
+  onPickPlate,
   search,
   onSearch,
 }: {
   form: TicketForm;
   onSet: <K extends keyof TicketForm>(key: K, value: TicketForm[K]) => void;
   customers: Customer[];
+  /** Every customer↔car link on file, for finding a car by its plate. */
+  vehicles: Vehicle[];
   /** Somebody already answers this number — an offer, not a verdict. */
   conflict: PhoneConflict<Customer> | null;
   /** Somebody already holds this ת״ז — which is a verdict: it blocks the save. */
@@ -39,6 +46,8 @@ export function CustomerSection({
   vehicleChoices: Vehicle[];
   onPickCustomer: (c: Customer) => void;
   onPickVehicle: (v: Vehicle) => void;
+  /** A plate picked out of the search: its owner, and that car. */
+  onPickPlate: (c: Customer, v: Vehicle) => void;
   search: string;
   onSearch: (v: string) => void;
 }) {
@@ -47,6 +56,17 @@ export function CustomerSection({
   const query = search.trim();
   // The shared rule, not a second copy of it.
   const matches = useMemo(() => matchCustomers(customers, query), [customers, query]);
+
+  /* The car half of the same box, as on the web: a known plate and whose it
+     is. A car several people drive is offered once per driver — picking the
+     row says which of them brought it in. */
+  const plateMatches = useMemo(() => {
+    const byId = new Map(customers.map((c) => [c.id, c]));
+    return matchVehiclesByPlate(vehicles, query).flatMap((vehicle) => {
+      const owner = byId.get(vehicle.customer_id);
+      return owner ? [{ vehicle, customer: owner }] : [];
+    });
+  }, [customers, vehicles, query]);
 
   return (
     <>
@@ -62,12 +82,24 @@ export function CustomerSection({
 
         {query.length >= 1 && (
           <View style={[s.card, { padding: 0, overflow: 'hidden' }]}>
+            {plateMatches.map(({ vehicle: v, customer: c }, i) => (
+              <Pressable
+                key={`v:${v.id}`}
+                onPress={() => onPickPlate(c, v)}
+                style={{ padding: 12, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.line }}
+              >
+                <Text style={[s.h2, { textAlign: 'right' }]}>{`${v.plate} · ${c.name}`}</Text>
+                <Text style={[s.dim, { marginTop: 2 }]}>
+                  {[[v.manufacturer, v.model].filter(Boolean).join(' '), c.phone].filter(Boolean).join(' · ')}
+                </Text>
+              </Pressable>
+            ))}
             {matches.length ? (
               matches.map((c, i) => (
                 <Pressable
                   key={c.id}
                   onPress={() => onPickCustomer(c)}
-                  style={{ padding: 12, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.line }}
+                  style={{ padding: 12, borderTopWidth: i === 0 && !plateMatches.length ? 0 : 1, borderTopColor: C.line }}
                 >
                   <Text style={[s.h2, { textAlign: 'right' }]}>{c.name}</Text>
                   <Text style={[s.dim, { marginTop: 2 }]}>
@@ -76,7 +108,7 @@ export function CustomerSection({
                   </Text>
                 </Pressable>
               ))
-            ) : (
+            ) : plateMatches.length ? null : (
               <Text style={[s.dim, { padding: 12 }]}>{t('create.noCustomerMatch')}</Text>
             )}
           </View>
