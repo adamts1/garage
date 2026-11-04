@@ -18,7 +18,7 @@ import { garageLetterhead, garagePrintName } from './auth';
 import {
   VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, type TicketWork,
 } from './catalog';
-import type { Customer } from './db';
+import type { Car, CarOwner, Customer } from './db';
 import { money } from './money';
 import type { Ticket } from './types';
 
@@ -570,4 +570,86 @@ export const customerHistoryHtml = (c: Customer, tickets: readonly Ticket[]): st
     </div>`;
 
   return renderPrintDoc({ title: customerHistoryTitle(c), body });
+};
+
+/* ---------------- a car's treatment history ---------------- */
+
+export const carHistoryTitle = (car: Pick<Car, 'plate'>): string =>
+  `היסטוריית טיפולים - רכב ${car.plate}`;
+
+/** Every visit of one car, newest first, whoever brought it in — history is per
+ *  car (2026-11-04). Same rules as the customer's sheet: cancelled tickets are
+ *  left out by the builder, amounts are the stored totals, VAT included. Each
+ *  visit names its customer and the km read that day. */
+export const carHistoryHtml = (car: Car, owners: readonly CarOwner[], tickets: readonly Ticket[]): string => {
+  const visits = tickets
+    .filter((t) => t.st !== 'cancelled')
+    .slice()
+    .sort((a, b) => (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? ''));
+
+  const visit = (t: Ticket): string => {
+    const works = t.works ?? [];
+    const did = works.length
+      ? works.map((w) =>
+          `<tr class="did"><td colspan="5">${esc(w.name)}${
+            w.items.length
+              ? `<span class="parts">${esc(w.items.map((p) => (p.qty === 1 ? p.name : `${p.name} ×${p.qty}`)).join(' · '))}</span>`
+              : ''
+          }</td></tr>`).join('')
+      : `<tr class="did"><td colspan="5">${esc(t.title || '-')}</td></tr>`;
+    return `<tbody class="v">`
+      + `<tr class="visit">`
+      + `<td>${esc(val(t.createdAt))}</td>`
+      + `<td>${esc(t.k)}</td>`
+      + `<td>${esc(t.customer || '-')}</td>`
+      + `<td>${esc(t.km ? `${t.km} ק״מ` : '-')}</td>`
+      + `<td class="n">${esc(money(t.amount))}</td>`
+      + `</tr>${did}</tbody>`;
+  };
+
+  const total = visits.reduce((sum, t) => sum + (t.amount || 0), 0);
+
+  const body = `
+    ${letterheadHtml()}
+
+    <div class="docbar">
+      <span class="docbar-k">היסטוריית טיפולים לרכב</span>
+      <span>${esc(printedOn())}</span>
+    </div>
+
+    <div class="box">
+      <div class="sub-t">הרכב</div>
+      <div class="cols">
+        <section><table class="kv">
+          ${row('מספר רישוי', car.plate)}
+          ${row('יצרן ודגם', [car.manufacturer, car.model].filter(Boolean).join(' '))}
+          ${row('שנה', car.year)}
+        </table></section>
+        <section><table class="kv">
+          ${row('קוד דגם', car.vehicle_code)}
+          ${row('לקוחות', owners.map((o) => o.name).join(', '))}
+          ${row('מספר ביקורים', visits.length)}
+        </table></section>
+      </div>
+    </div>
+
+    <div class="box tight">
+      <table class="lines hist">
+        <thead>
+          <tr>
+            <th style="width:14%">תאריך</th>
+            <th style="width:13%">כרטיס</th>
+            <th style="width:36%">לקוח</th>
+            <th style="width:17%">קילומטראז׳</th>
+            <th class="n" style="width:20%">סה״כ (₪)</th>
+          </tr>
+        </thead>
+        ${visits.length
+          ? visits.map(visit).join('')
+          : `<tbody><tr><td colspan="5" style="color:#888">אין טיפולים רשומים לרכב</td></tr></tbody>`}
+        ${visits.length ? `<tfoot><tr><td colspan="4">סה״כ</td><td class="n">${esc(money(total))}</td></tr></tfoot>` : ''}
+      </table>
+    </div>`;
+
+  return renderPrintDoc({ title: carHistoryTitle(car), body });
 };
