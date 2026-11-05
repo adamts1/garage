@@ -145,10 +145,10 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     if (!isConfigured) return;
     const loadCustomers = () => listCustomers().then(setCustomers).catch(() => {});
     const loadVehicles = () => listVehicles().then(setVehicles).catch(() => {});
-    loadCustomers();
-    loadVehicles();
-    const offCustomers = subscribeToTable('customers', loadCustomers);
-    const offVehicles = subscribeToTable('vehicles', loadVehicles);
+    void loadCustomers();
+    void loadVehicles();
+    const offCustomers = subscribeToTable('customers', () => void loadCustomers());
+    const offVehicles = subscribeToTable('vehicles', () => void loadVehicles());
     return () => { offCustomers(); offVehicles(); };
   }, []);
 

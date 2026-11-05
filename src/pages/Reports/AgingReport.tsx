@@ -35,8 +35,8 @@ export default function AgingReport({ tickets }: { tickets: Ticket[] }) {
     const load = () => listExpenses()
       .then((rows) => { if (alive) setExpenses(rows); })
       .catch((e) => dispatch(showError(e)));
-    load();
-    const off = subscribeToExpenses(load);
+    void load();
+    const off = subscribeToExpenses(() => void load());
     return () => { alive = false; off(); };
   }, [dispatch]);
 
