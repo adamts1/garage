@@ -2,6 +2,7 @@ import { shekel, toCatalogCode, type Item } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
+import { SearchBar } from '../../components/SearchBar';
 import { CrudForm } from '../../components/CrudForm';
 import { TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
@@ -151,16 +152,7 @@ export default function ItemsPage() {
         }
       />
 
-      <div className={styles.filters}>
-        <input
-          className={styles.search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('items.searchPlaceholder')}
-          aria-label={t('items.searchPlaceholder')}
-        />
-        {filtering && <Button onClick={() => setQuery('')}>{t('common.reset')}</Button>}
-      </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="items.searchPlaceholder" />
 
       {adding && (
         <CrudForm

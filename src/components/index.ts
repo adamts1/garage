@@ -11,6 +11,7 @@ export * from './Modal';
 export * from './PageHeader';
 export * from './PickerModal';
 export * from './Pill';
+export * from './SearchBar';
 export * from './PromptModal';
 export * from './Pagination';
 export * from './Table';

@@ -2,6 +2,7 @@ import { shekel, toCatalogCode, type WorkDef } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
+import { SearchBar } from '../../components/SearchBar';
 import { CrudForm } from '../../components/CrudForm';
 import { TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
@@ -168,16 +169,7 @@ export default function WorksPage() {
 
       <p className={styles.hint}>{t('works.catalogHint')}</p>
 
-      <div className={styles.filters}>
-        <input
-          className={styles.search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('works.searchPlaceholder')}
-          aria-label={t('works.searchPlaceholder')}
-        />
-        {filtering && <Button onClick={() => setQuery('')}>{t('common.reset')}</Button>}
-      </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="works.searchPlaceholder" />
 
       {adding && (
         <CrudForm
