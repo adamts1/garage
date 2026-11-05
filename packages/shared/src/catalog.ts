@@ -19,6 +19,9 @@ export interface PartRow {
   price: number;
   /** Percent off `price`, 0–100. Per line on a ticket; the catalog has none. */
   discount?: number;
+  /** הנחת מע״מ: the price as shown is what the customer pays for it, VAT and
+   *  all. See "VAT discount" below. Per line on a ticket; the catalog has none. */
+  vatDiscount?: boolean;
 }
 
 export interface WorkDef {
@@ -38,6 +41,8 @@ export interface TicketWork {
   labor: number;
   /** Percent off `labor`, 0–100. Set on the ticket, never on the catalog. */
   laborDiscount?: number;
+  /** הנחת מע״מ on the labour — see PartRow.vatDiscount. */
+  laborVatDiscount?: boolean;
   items: PartRow[];
   custom?: boolean;       // true when it isn't in the catalog
   /** What was actually done, in the mechanic's words.
@@ -105,6 +110,27 @@ export const clampDiscount = (pct: unknown): number => {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/* netFromGross: the pre-VAT price that becomes `gross` once VAT is added.
+
+   The naive round2(gross / 1.18) does not always come back: a step of one
+   agora before VAT is 1.18 agorot after it, so the nearest one is searched
+   for, the same way issuableCredit does it. Some figures fall between two
+   pre-VAT prices (₪2: 1.69 → 1.99, 1.70 → 2.01) and land an agora off. */
+
+/** The pre-VAT price that becomes `gross` once VAT is added, to the agora. */
+export const netFromGross = (gross: number, vatRate: number = VAT): number => {
+  if (!Number.isFinite(gross) || gross <= 0) return 0;
+  const start = round2(gross / (1 + vatRate));
+  let best = start;
+  for (let step = -2; step <= 2; step++) {
+    const net = round2(start + step / 100);
+    if (net < 0) continue;
+    const off = Math.abs(round2(net * (1 + vatRate)) - gross);
+    if (off < Math.abs(round2(best * (1 + vatRate)) - gross) - 1e-9) best = net;
+  }
+  return best;
+};
+
 /** A unit price after a percent discount, to the agora. */
 export const discounted = (price: number, pct?: number): number => {
   const d = clampDiscount(pct);
@@ -123,6 +149,38 @@ export const partsTotal = (w: TicketWork) =>
 
 export const workTotal = (w: TicketWork) => laborNet(w) + partsTotal(w);
 
+/* VAT discount (הנחת מע״מ).
+
+   A line marked with it keeps the price it shows — 500 stays 500 on the line,
+   the sheet and the message — and the customer pays exactly that for it. The
+   VAT still goes on at the end and still appears on the invoice; what changes
+   is what that line is charged before VAT: the price that comes back to 500
+   once VAT is added (netFromGross: 423.73). The difference is the discount,
+   and the summary names it.
+
+   Per unit, after any percent discount, to the agora — the same shape as the
+   percent discount, so the invoice can carry it as an ordinary unit price.
+   issue-invoice repeats it (chargedUnit there) and the two must not drift. */
+
+const chargedUnit = (shown: number, vatDiscount?: boolean): number =>
+  vatDiscount ? netFromGross(shown) : shown;
+
+/** What one unit of a part is charged before VAT, after both discounts. */
+export const partUnitCharged = (p: PartRow) => chargedUnit(partUnitNet(p), p.vatDiscount);
+/** What a work's labour is charged before VAT, after both discounts. */
+export const laborCharged = (w: TicketWork) => chargedUnit(laborNet(w), w.laborVatDiscount);
+
+/** Everything a ticket's works are charged before VAT — what VAT is added to. */
+export const worksCharged = (works: readonly TicketWork[]) =>
+  works.reduce(
+    (s, w) => s + laborCharged(w) + w.items.reduce((t, i) => t + i.qty * partUnitCharged(i), 0),
+    0,
+  );
+
+/** What the VAT discounts took off. Zero on a ticket without any. */
+export const worksVatDiscount = (works: readonly TicketWork[]) =>
+  round2(works.reduce((s, w) => s + workTotal(w), 0) - worksCharged(works));
+
 /** How much the discounts took off, before VAT. Zero on a ticket without any. */
 export const worksDiscount = (works: readonly TicketWork[]) =>
   works.reduce(
@@ -132,13 +190,21 @@ export const worksDiscount = (works: readonly TicketWork[]) =>
     0,
   );
 
-/** Every figure is after discounts; `discount` says how much they took off. */
+/** `parts` and `labor` are the lines as shown, after percent discounts;
+ *  `discount` says how much those took off. `vatDiscount` comes off them to give
+ *  `net`, what VAT is added to.
+ *
+ *  VAT is to the agora. It was to the whole shekel, which put the phone a few
+ *  agorot off the web and the invoice, and a VAT-discounted ₪500 at ₪499.73. */
 export const worksSummary = (works: TicketWork[]) => {
   const parts = works.reduce((s, w) => s + partsTotal(w), 0);
   const labor = works.reduce((s, w) => s + laborNet(w), 0);
-  const net = parts + labor;
-  const vat = Math.round(net * VAT);
-  return { parts, labor, net, vat, total: net + vat, discount: worksDiscount(works) };
+  const net = round2(worksCharged(works));
+  const vat = round2(net * VAT);
+  return {
+    parts, labor, net, vat, total: round2(net + vat),
+    discount: worksDiscount(works), vatDiscount: worksVatDiscount(works),
+  };
 };
 
 export const fromCatalog = (def: WorkDef, uid: string): TicketWork => ({

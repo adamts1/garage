@@ -36,8 +36,8 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-interface WorkItem { name: string; qty: number; price: number; discount?: number | null }
-interface Work { name: string; labor: number; labor_discount?: number | null; work_items: WorkItem[] }
+interface WorkItem { name: string; qty: number; price: number; discount?: number | null; vat_discount?: boolean | null }
+interface Work { name: string; labor: number; labor_discount?: number | null; labor_vat_discount?: boolean | null; work_items: WorkItem[] }
 
 /** A unit price after a percent discount, to the agora. The provider gets the
  *  discounted price and nothing else — no discount field, no list price — so
@@ -49,18 +49,35 @@ function netUnit(price: unknown, pct: unknown): number {
   return d ? Math.round(p * (1 - d / 100) * 100) / 100 : p;
 }
 
+/** הנחת מע״מ: a line whose shown price is what the customer pays including
+ *  VAT is billed at the pre-VAT price that comes back to it, to the agora.
+ *  Must match `netFromGross` / `partUnitCharged` in packages/shared/src/catalog.ts. */
+function chargedUnit(shown: number, vatDiscount: unknown, vatRate: number): number {
+  if (vatDiscount !== true) return shown;
+  if (!Number.isFinite(shown) || shown <= 0) return 0;
+  const start = round2(shown / (1 + vatRate));
+  let best = start;
+  for (let step = -2; step <= 2; step++) {
+    const net = round2(start + step / 100);
+    if (net < 0) continue;
+    const off = Math.abs(round2(net * (1 + vatRate)) - shown);
+    if (off < Math.abs(round2(best * (1 + vatRate)) - shown) - 1e-9) best = net;
+  }
+  return best;
+}
+
 /** Build invoice lines from the ticket's OWN works: one line per work's labour,
  *  one per part, each after its discount. Prices are pre-VAT (as stored).
  *  Returns lines + pre-VAT subtotal. */
-function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number } {
+function linesFromWorks(works: Work[], vatRate: number): { items: InvoiceItem[]; subtotal: number } {
   const items: InvoiceItem[] = [];
   for (const w of works ?? []) {
-    const labour = netUnit(w.labor, w.labor_discount);
+    const labour = chargedUnit(netUnit(w.labor, w.labor_discount), w.labor_vat_discount, vatRate);
     if (labour > 0) {
       items.push({ description: w.name || 'עבודה', unitprice: labour, quantity: 1 });
     }
     for (const p of w.work_items ?? []) {
-      const unit = netUnit(p.price, p.discount);
+      const unit = chargedUnit(netUnit(p.price, p.discount), p.vat_discount, vatRate);
       if (unit !== 0) {
         items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1 });
       }
@@ -147,7 +164,7 @@ Deno.serve(async (req) => {
       // Caller's JWT -> RLS guarantees this is their garage's ticket, or nothing.
       const { data: ticket, error: tErr } = await userClient
         .from('tickets')
-        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, labor_discount, work_items(name, qty, price, discount))')
+        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, labor_discount, labor_vat_discount, work_items(name, qty, price, discount, vat_discount))')
         .eq('id', ticketId)
         .maybeSingle();
       if (tErr) return json({ error: tErr.message }, 400);
@@ -174,7 +191,7 @@ Deno.serve(async (req) => {
         return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
-      const { items, subtotal } = linesFromWorks(ticket.works as unknown as Work[]);
+      const { items, subtotal } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
       if (items.length === 0) return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
       const vat = round2(subtotal * vatRate);
       const total = round2(subtotal + vat);

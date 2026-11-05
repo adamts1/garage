@@ -81,6 +81,31 @@ function DiscountCell({ value, label, onChange }: {
   );
 }
 
+/* הנחת מע״מ, on the same line as the percent discount and open to the same
+   people. Pressed, the line keeps the price it shows and the customer pays
+   exactly that for it — the totals take the VAT out of it before adding VAT
+   back (catalog.ts: partUnitCharged). Pressed again, it is an ordinary line. */
+function VatDiscountToggle({ on, label, onChange }: {
+  on: boolean | undefined;
+  label: string;
+  onChange: (on: boolean | undefined) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      className={[styles.vatToggle, on && styles.vatToggleOn].filter(Boolean).join(' ')}
+      title={t('works.vatDiscountHint')}
+      aria-label={label}
+      aria-pressed={on === true}
+      // Off is stored as nothing, like a zero percent discount.
+      onClick={() => onChange(on ? undefined : true)}
+    >
+      {t('works.vatDiscount')}
+    </button>
+  );
+}
+
 export interface WorksStepProps {
   works: TicketWork[];
   setWorks: (next: TicketWork[]) => void;
@@ -181,13 +206,20 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'laborDiscount',
       header: 'works.fields.discount',
-      width: 68,
+      width: 146,
       render: (w) => (
-        <DiscountCell
-          value={w.laborDiscount}
-          label={t('works.fields.laborDiscount')}
-          onChange={(laborDiscount) => step.patchWork(w.uid, { laborDiscount })}
-        />
+        <div className={styles.discountCell}>
+          <DiscountCell
+            value={w.laborDiscount}
+            label={t('works.fields.laborDiscount')}
+            onChange={(laborDiscount) => step.patchWork(w.uid, { laborDiscount })}
+          />
+          <VatDiscountToggle
+            on={w.laborVatDiscount}
+            label={t('works.fields.laborVatDiscount')}
+            onChange={(laborVatDiscount) => step.patchWork(w.uid, { laborVatDiscount })}
+          />
+        </div>
       ),
     },
     {
@@ -280,13 +312,20 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'discount',
       header: 'works.fields.discount',
-      width: 68,
+      width: 146,
       render: (i, index) => (
-        <DiscountCell
-          value={i.discount}
-          label={t('works.fields.partDiscount')}
-          onChange={(discount) => current && step.patchPart(current.uid, index, { discount })}
-        />
+        <div className={styles.discountCell}>
+          <DiscountCell
+            value={i.discount}
+            label={t('works.fields.partDiscount')}
+            onChange={(discount) => current && step.patchPart(current.uid, index, { discount })}
+          />
+          <VatDiscountToggle
+            on={i.vatDiscount}
+            label={t('works.fields.partVatDiscount')}
+            onChange={(vatDiscount) => current && step.patchPart(current.uid, index, { vatDiscount })}
+          />
+        </div>
       ),
     },
     {

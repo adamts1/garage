@@ -492,6 +492,7 @@ const rowToTicket = (r: any): Ticket => ({
         name: w.name,
         labor: Number(w.labor),
         ...(Number(w.labor_discount) > 0 && { laborDiscount: Number(w.labor_discount) }),
+        ...(w.labor_vat_discount === true && { laborVatDiscount: true }),
         custom: w.custom,
         notes: w.notes ?? undefined,
         items: (w.work_items ?? [])
@@ -506,6 +507,7 @@ const rowToTicket = (r: any): Ticket => ({
               /* Only when there is one, so a ticket without discounts reads
                  back exactly as it was written and does not look edited. */
               ...(Number(p.discount) > 0 && { discount: Number(p.discount) }),
+              ...(p.vat_discount === true && { vatDiscount: true }),
             }),
           ),
       }),
@@ -583,6 +585,7 @@ const worksPayload = (works: TicketWork[]) =>
     name: w.name,
     labor: w.labor,
     labor_discount: clampDiscount(w.laborDiscount),
+    labor_vat_discount: w.laborVatDiscount === true,
     custom: w.custom ?? false,
     // Trimmed to nothing collapses to null in the RPC, so a note cleared in the
     // UI does not come back as an empty string next time the ticket is opened.
@@ -594,6 +597,7 @@ const worksPayload = (works: TicketWork[]) =>
       qty: p.qty,
       price: p.price,
       discount: clampDiscount(p.discount),
+      vat_discount: p.vatDiscount === true,
       position: j,
     })),
   }));

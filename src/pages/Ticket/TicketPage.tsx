@@ -435,6 +435,20 @@ export default function TicketPage({
                   <b>-{money(totals.discount)}</b>
                 </div>
               )}
+              {/* Subtracted, unlike the discount: the lines above show the
+                  price before it, and VAT goes on what is left. */}
+              {totals.vatDiscount > 0 && (
+                <>
+                  <div>
+                    <span>{t('ticket.vatDiscount')}</span>
+                    <b>-{money(totals.vatDiscount)}</b>
+                  </div>
+                  <div className="sum-sub">
+                    <span>{t('ticket.beforeVat')}</span>
+                    <b>{money(totals.labour + totals.items - totals.vatDiscount)}</b>
+                  </div>
+                </>
+              )}
               <div>
                 <span>{t('ticket.vat', { percent: Math.round(VAT * 100) })}</span>
                 <b>{money(totals.vat)}</b>
