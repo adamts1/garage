@@ -92,11 +92,37 @@ export function phoneConflict<C extends CustomerIdentity>(
   customers: readonly C[],
   { phone, name, pickedId }: { phone: string; name: string; pickedId?: string | null },
 ): PhoneConflict<C> | null {
-  const holder = customerByPhone(customers, phone);
+  /* Of several holders, the one with this name is the one meant: name and
+     phone together are a single customer (see nameAndPhoneHolder). */
+  const holder = nameAndPhoneHolder(customers, { phone, name }) ?? customerByPhone(customers, phone);
   if (!holder) return null;
   // Picking that very customer is how the conflict is resolved, not a conflict.
   if (pickedId && holder.id === pickedId) return null;
   return { customer: holder, differentName: looseName(holder.name) !== looseName(name) };
+}
+
+/* ---------- name + phone: one customer ----------
+
+   Either alone is shared, and stays allowed. Both together are the same
+   person entered twice, and the garage asked (2026-11-05) that it never be
+   stored twice — not even with two different ת״ז. The database refuses it
+   (customers_name_phone_unique, 20261105090000), and create_ticket attaches a
+   ticket typed with a known name + phone to that record. Compared the way the
+   database compares: public.customer_name_key and public.phone_key. */
+
+/** The other customer already on file with this name AND this phone, if any.
+ *  `exceptId` is the record being edited — keeping its own details is not a
+ *  clash. A blank name or phone never matches. */
+export function nameAndPhoneHolder<C extends CustomerIdentity>(
+  customers: readonly C[],
+  { phone, name, exceptId }: { phone: string | null | undefined; name: string; exceptId?: string | null },
+): C | undefined {
+  const d = phoneDigits(phone);
+  const n = looseName(name);
+  if (!d || !n) return undefined;
+  return customers.find(
+    (c) => c.id !== exceptId && phoneDigits(c.phone) === d && looseName(c.name) === n,
+  );
 }
 
 /* ---------- the ת״ז: optional, and nobody's twice ----------
