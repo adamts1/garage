@@ -62,6 +62,26 @@ jobs:
       - run: npm test
         working-directory: mobile
 
+  lint:
+    name: lint — web + mobile + shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      # Both installs: the rules are type-aware, and the mobile files only type
+      # against mobile's own node_modules (React Native, Expo). Without them
+      # those types collapse to `any` and the promise rules go quiet there.
+      - run: npm ci
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run lint
+
   migrations:
     name: migrations — apply to a clean database
     runs-on: ubuntu-latest
