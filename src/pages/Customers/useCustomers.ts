@@ -1,6 +1,7 @@
 import {
   CUSTOMER_KINDS, PRIVATE_CUSTOMER,
-  createCustomer, deleteCustomer, idNumberConflict, listCustomers, listVehicles,
+  createCustomer, customerByPhone, deleteCustomer, idNumberConflict, listCustomers, listVehicles,
+  nameAndPhoneHolder, phoneDigits,
   subscribeToTable, updateCustomer,
   type Customer, type Vehicle,
 } from '@garage/shared';
@@ -101,10 +102,35 @@ export function useCustomers() {
     [dispatch, rows],
   );
 
+  /* Name + phone together are one customer, and the database will not store
+     them twice (20261105090000) — not even under two different ת״ז. Caught
+     here so the refusal names who already has them.
+
+     A phone on somebody else's file, under another name, is allowed: a
+     household, a fleet. It is only asked about, so a mistyped digit or a
+     customer entered twice under a nickname gets a second look. Only asked
+     when the number is new to this record — an edit that leaves the phone
+     alone does not re-ask about a sharing somebody already accepted. */
+  const nameAndPhoneOk = useCallback(
+    async (draft: CustomerDraft, owner?: Customer) => {
+      const twin = nameAndPhoneHolder(rows, { phone: draft.phone, name: draft.name, exceptId: owner?.id });
+      if (twin) {
+        dispatch(showErrorKey('customers.namePhoneTaken', { name: twin.name }));
+        return false;
+      }
+      if (owner && phoneDigits(owner.phone) === phoneDigits(draft.phone)) return true;
+      const sharer = customerByPhone(rows.filter((c) => c.id !== owner?.id), draft.phone);
+      if (!sharer) return true;
+      return confirm({ bodyKey: 'customers.phoneTakenConfirm', values: { name: sharer.name } });
+    },
+    [confirm, dispatch, rows],
+  );
+
   const create = useCallback(
     async (draft: CustomerDraft) => {
       if (!draft.name.trim()) return false;
       if (idTaken(draft)) return false;
+      if (!(await nameAndPhoneOk(draft))) return false;
       try {
         await createCustomer(toRow(draft));
         dispatch(showSuccess('customers.created'));
@@ -115,12 +141,13 @@ export function useCustomers() {
         return false;
       }
     },
-    [dispatch, idTaken, load],
+    [dispatch, idTaken, load, nameAndPhoneOk],
   );
 
   const update = useCallback(
     async (id: string, draft: CustomerDraft) => {
       if (idTaken(draft, id)) return false;
+      if (!(await nameAndPhoneOk(draft, rows.find((c) => c.id === id)))) return false;
       try {
         await updateCustomer(id, toRow(draft));
         dispatch(showSuccess('customers.updated'));
@@ -131,7 +158,7 @@ export function useCustomers() {
         return false;
       }
     },
-    [dispatch, idTaken, load],
+    [dispatch, idTaken, load, nameAndPhoneOk, rows],
   );
 
   const remove = useCallback(

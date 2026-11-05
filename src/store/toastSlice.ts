@@ -89,6 +89,8 @@ export const showInfo = (key: string, values?: Toast['values']) =>
  * "customers_garage_id_number_key" in front of somebody at a service desk. */
 const CONSTRAINT_KEYS: Record<string, string> = {
   customers_garage_id_number_key: 'errors.idNumberTaken',
+  // A trigger, not an index (20261105090000), raising under this name.
+  customers_garage_name_phone_key: 'errors.namePhoneTaken',
   // ON DELETE RESTRICT: a customer with work orders stays on file.
   tickets_customer_id_fkey: 'customers.deleteBlocked',
 };
