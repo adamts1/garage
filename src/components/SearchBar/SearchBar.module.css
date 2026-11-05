@@ -1,0 +1,23 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.search {
+  flex: 1;
+  min-width: 240px;
+  max-width: 380px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 15.5px;
+  text-align: right;
+}
+.search:focus {
+  outline: none;
+  border-color: var(--primary);
+}
