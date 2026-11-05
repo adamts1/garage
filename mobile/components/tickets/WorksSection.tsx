@@ -149,6 +149,7 @@ export function WorksSection({
             setDiscountFor({ uid: w.uid, index: null, name: w.name, value: w.laborDiscount ?? 0 })}
           onEditPartDiscount={(i, p) =>
             setDiscountFor({ uid: w.uid, index: i, name: p.name, value: p.discount ?? 0 })}
+          onToggleLaborVat={() => patchWork(w.uid, { laborVatDiscount: w.laborVatDiscount ? undefined : true })}
           onNotes={(notes) => patchWork(w.uid, { notes })}
           onRemovePart={(i) => removePart(w.uid, i)}
           onRemove={() => removeWork(w.uid)}
@@ -165,6 +166,11 @@ export function WorksSection({
           {/* Said, not subtracted: the net above is already after it. */}
           {sum.discount > 0 ? (
             <TotalRow label={t('works.totals.discount')} value={`-${money(sum.discount)}`} />
+          ) : null}
+          {/* Subtracted, unlike the discount: the lines show the price before
+              it, and the net above is already after it. */}
+          {sum.vatDiscount > 0 ? (
+            <TotalRow label={t('works.totals.vatDiscount')} value={`-${money(sum.vatDiscount)}`} />
           ) : null}
           <TotalRow
             label={t('works.totals.vat', { percent: Math.round(VAT * 100) })}
@@ -250,6 +256,7 @@ function WorkCard({
   onEditLabor,
   onEditLaborDiscount,
   onEditPartDiscount,
+  onToggleLaborVat,
   onNotes,
   onRemovePart,
   onRemove,
@@ -266,6 +273,7 @@ function WorkCard({
   onEditLabor: () => void;
   onEditLaborDiscount: () => void;
   onEditPartDiscount: (idx: number, part: PartRow) => void;
+  onToggleLaborVat: () => void;
   onNotes: (notes: string) => void;
   onRemovePart: (idx: number) => void;
   onRemove: () => void;
@@ -333,6 +341,21 @@ function WorkCard({
             </Text>
           </Pressable>
 
+          {/* הנחת מע״מ on that labour, for anyone, like the percent discount:
+              the price stays as shown and the customer pays exactly that. */}
+          <Pressable
+            onPress={onToggleLaborVat}
+            style={[s.rowBetween, { paddingVertical: 6 }]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: w.laborVatDiscount === true }}
+            accessibilityLabel={t('works.vatDiscount')}
+          >
+            <Text style={[s.body, { fontSize: 13 }]}>{t('works.vatDiscount')}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: w.laborVatDiscount ? C.ok : C.ink, ...rtl }}>
+              {w.laborVatDiscount ? '✓' : t('works.noDiscount')}
+            </Text>
+          </Pressable>
+
           {/* What was actually done, against the work it was done on. Open to
               everyone: it records labour, it does not price it.
 
@@ -378,6 +401,23 @@ function WorkCard({
                 >
                   <Text style={[s.dim, { fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 2 }]}>
                     {p.discount ? t('works.discountTag', { pct: p.discount }) : t('works.addDiscount')}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => onPatchPart(i, { vatDiscount: p.vatDiscount ? undefined : true })}
+                  hitSlop={6}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: p.vatDiscount === true }}
+                  accessibilityLabel={t('works.vatDiscount')}
+                >
+                  <Text
+                    style={[
+                      s.dim,
+                      { fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 4 },
+                      p.vatDiscount ? { color: C.ok } : null,
+                    ]}
+                  >
+                    {p.vatDiscount ? `✓ ${t('works.vatDiscount')}` : `+ ${t('works.vatDiscount')}`}
                   </Text>
                 </Pressable>
               </View>

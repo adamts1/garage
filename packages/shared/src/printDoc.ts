@@ -16,7 +16,7 @@
 
 import { garageLetterhead, garagePrintName } from './auth';
 import {
-  VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, type TicketWork,
+  VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, worksVatDiscount, type TicketWork,
 } from './catalog';
 import type { Car, CarOwner, Customer } from './db';
 import { money } from './money';
@@ -294,10 +294,13 @@ export interface TicketTotals {
 /* A discounted price prints as the list price with the percentage under it,
    and the line total beside it is already after the discount — so the sheet
    shows both what it would have cost and what it does. */
-const priceCell = (price: number, pct?: number): string => {
+/* A VAT discount is named the same way. The line keeps its price; what it
+   takes off is in the totals, before the VAT. */
+const priceCell = (price: number, pct?: number, vatDiscount?: boolean): string => {
   const d = clampDiscount(pct);
   return `<td class="n">${esc(money(price))}`
     + (d ? `<div class="disc">הנחה ${d}%</div>` : '')
+    + (vatDiscount ? `<div class="disc">הנחת מע״מ</div>` : '')
     + `</td>`;
 };
 
@@ -310,7 +313,7 @@ const workBlock = (w: TicketWork, index: number): string => {
       + `<td class="desc">${esc(p.name)}</td>`
       + `<td class="n">${esc(val(p.sku))}</td>`
       + `<td class="n">${p.qty}</td>`
-      + priceCell(p.price, p.discount)
+      + priceCell(p.price, p.discount, p.vatDiscount)
       + `<td class="n">${esc(money(partLineTotal(p)))}</td>`
       + `</tr>`),
     ...(note ? [`<tr class="note"><td></td><td class="txt" colspan="5">${esc(note)}</td></tr>`] : []),
@@ -322,7 +325,7 @@ const workBlock = (w: TicketWork, index: number): string => {
     + `<td class="name">${esc(w.name)}</td>`
     + `<td class="n">${esc(val(w.code))}</td>`
     + `<td class="n">${w.items.length ? `${w.items.length} חלקים` : '-'}</td>`
-    + priceCell(w.labor, w.laborDiscount)
+    + priceCell(w.labor, w.laborDiscount, w.laborVatDiscount)
     + `<td class="n">${esc(money(workTotal(w)))}</td>`
     + `</tr>`
     + lines
@@ -374,6 +377,8 @@ export const workOrderHtml = (
   const works = t.works ?? [];
   /* Told, not subtracted: the totals above it are already after discounts. */
   const discount = worksDiscount(works);
+  /* Subtracted, unlike the discount: the lines show the price before it. */
+  const vatDiscount = worksVatDiscount(works);
 
   const lines = works.length
     ? works.map(workBlock).join('')
@@ -458,6 +463,8 @@ export const workOrderHtml = (
           ${row('סה״כ חלקים', money(totals.items))}
           ${row('סכום ביניים', money(totals.labour + totals.items))}
           ${discount > 0 ? row('מזה הנחה', `-${money(discount)}`) : ''}
+          ${vatDiscount > 0 ? row('הנחת מע״מ', `-${money(vatDiscount)}`) : ''}
+          ${vatDiscount > 0 ? row('סה״כ לפני מע״מ', money(totals.labour + totals.items - vatDiscount)) : ''}
           ${row(`מע״מ ${Math.round(VAT * 100)}%`, money(totals.vat))}
         </table>` : ''}
         <div class="grand">
