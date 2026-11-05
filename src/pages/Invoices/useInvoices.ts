@@ -34,8 +34,8 @@ export function useInvoices() {
         })
         .finally(() => { if (alive) setLoading(false); });
 
-    load();
-    const off = subscribeToInvoices(load);
+    void load();
+    const off = subscribeToInvoices(() => void load());
     return () => { alive = false; off(); };
   }, [dispatch]);
 

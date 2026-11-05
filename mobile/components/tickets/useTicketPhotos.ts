@@ -149,23 +149,21 @@ export function useTicketPhotos(ticketKey: string) {
   };
 
   /** Asks first — a photo is the only record of what the car looked like on arrival. */
-  const confirmRemove = (photo: TicketPhoto, onRemoved?: () => void) =>
+  const confirmRemove = (photo: TicketPhoto, onRemoved?: () => void) => {
+    const remove = async () => {
+      try {
+        await deleteTicketPhoto(photo);
+        setPhotos((prev) => prev.filter((x) => x.id !== photo.id));
+        onRemoved?.();
+      } catch (e: any) {
+        Alert.alert(t('ticket.photos.deleteFailed'), e?.message ?? t('ticket.photos.deleteFailedBody'));
+      }
+    };
     Alert.alert(t('ticket.photos.deleteTitle'), t('ticket.photos.deleteBody'), [
       { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteTicketPhoto(photo);
-            setPhotos((prev) => prev.filter((x) => x.id !== photo.id));
-            onRemoved?.();
-          } catch (e: any) {
-            Alert.alert(t('ticket.photos.deleteFailed'), e?.message ?? t('ticket.photos.deleteFailedBody'));
-          }
-        },
-      },
+      { text: t('common.delete'), style: 'destructive', onPress: () => void remove() },
     ]);
+  };
 
   return { photos, pending, loading, uploading, remaining, add, confirmRemove };
 }

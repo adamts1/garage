@@ -115,8 +115,8 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
       listTicketPhotos(ticket.k)
         .then((p) => { if (alive) setPhotos(p); })
         .catch(() => { if (alive) setPhotos([]); });   // an empty gallery beats a broken page
-    load();
-    const off = subscribeToTicketPhotos(load);
+    void load();
+    const off = subscribeToTicketPhotos(() => void load());
     return () => { alive = false; off(); };
   }, [ticket.k]);
 
@@ -126,8 +126,8 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
       listInvoices()
         .then((all) => { if (alive) setTicketDocs(all.filter((i) => i.ticketKey === ticket.k)); })
         .catch(() => {});   // an absent invoice panel beats a broken page
-    load();
-    const off = subscribeToInvoices(load);
+    void load();
+    const off = subscribeToInvoices(() => void load());
     return () => { alive = false; off(); };
   }, [ticket.k]);
 

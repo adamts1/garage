@@ -35,8 +35,8 @@ export default function IncomeReport() {
     const load = () => listInvoices()
       .then((rows) => { if (alive) setInvoices(rows); })
       .catch((e) => dispatch(showError(e)));
-    load();
-    const off = subscribeToInvoices(load);
+    void load();
+    const off = subscribeToInvoices(() => void load());
     return () => { alive = false; off(); };
   }, [dispatch]);
 
