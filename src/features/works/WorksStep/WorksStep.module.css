@@ -247,7 +247,7 @@
   font-weight: 400;
 }
 
-/* A price and, beside it, the switch to type it with VAT in. */
+/* A price and, beside it, the button that takes VAT out of it. */
 .priceCell {
   display: flex;
   align-items: center;
@@ -267,18 +267,18 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.vatToggle:hover {
+.vatToggle:hover:not(:disabled) {
   border-color: var(--primary);
 }
+.vatToggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 
-/* On, and the field beside it is the with-VAT figure — tinted so nobody reads
-   it as the stored price. */
+/* Just pressed: the price beside it is the one it made, and this puts the
+   typed one back. */
 .vatToggleOn {
   border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--primary-d);
-}
-.grossInput {
-  border-color: var(--primary);
-  background: var(--primary-soft);
 }

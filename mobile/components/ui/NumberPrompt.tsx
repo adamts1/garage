@@ -11,11 +11,10 @@
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { grossFromNet, money, netFromGross } from '@garage/shared';
+import { money, netFromGross } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { C, s } from '../../lib/theme';
 import { Button } from './Button';
-import { Checkbox } from './Checkbox';
 
 export function NumberPrompt({
   visible,
@@ -31,22 +30,24 @@ export function NumberPrompt({
   /** What is being priced — the row this was opened from. */
   subtitle?: string;
   value: number;
-  /** A price: offer to type it with VAT in. What is submitted is still the
-   *  pre-VAT price — the one that comes back to the typed figure (netFromGross). */
+  /** A price: offer a button that takes the VAT out of what was typed, so the
+   *  line comes back to that figure once VAT is added at the end. */
   inclVat?: boolean;
   onCancel: () => void;
   onSubmit: (value: number) => void;
 }) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
-  const [gross, setGross] = useState(false);
+  /* What was typed before VAT was taken out of it, so the same button can put
+     it back rather than take VAT out a second time. */
+  const [typed, setTyped] = useState<string | null>(null);
 
   // Seed on open, not on every render: typing must not be overwritten by the
   // value the prompt was opened with.
   useEffect(() => {
     if (visible) {
       setText(String(value));
-      setGross(false);
+      setTyped(null);
     }
   }, [visible, value]);
 
@@ -56,17 +57,24 @@ export function NumberPrompt({
   const parsed = Number.parseFloat(text.replace(',', '.'));
   const valid = Number.isFinite(parsed) && parsed >= 0;
 
-  const net = gross ? netFromGross(parsed) : parsed;
-
   const submit = () => {
-    if (valid) onSubmit(net);
+    if (valid) onSubmit(parsed);
   };
 
-  /* Ticking it re-reads the same price the other way: the field switches to
-     what it comes to with VAT, so what is in it is always what it says. */
-  const toggleGross = (next: boolean) => {
-    if (valid) setText(String(next ? grossFromNet(parsed) : netFromGross(parsed)));
-    setGross(next);
+  const removeVat = () => {
+    if (typed !== null) {
+      setText(typed);
+      setTyped(null);
+    } else if (valid && parsed > 0) {
+      setTyped(text);
+      setText(String(netFromGross(parsed)));
+    }
+  };
+
+  // Typing over the result ends the undo: the field is a new price now.
+  const onType = (next: string) => {
+    setText(next);
+    setTyped(null);
   };
 
   return (
@@ -93,7 +101,7 @@ export function NumberPrompt({
             <TextInput
               style={[s.input, { fontSize: 18, fontWeight: '700', textAlign: 'center' }]}
               value={text}
-              onChangeText={setText}
+              onChangeText={onType}
               keyboardType="decimal-pad"
               autoFocus
               selectTextOnFocus
@@ -103,11 +111,16 @@ export function NumberPrompt({
             />
 
             {inclVat ? (
-              <View>
-                <Checkbox checked={gross} onChange={toggleGross} label={t('works.inclVatLabel')} />
-                {gross && valid ? (
-                  <Text style={[s.dim, { fontSize: 12 }]}>
-                    {t('works.inclVatSaved', { net: money(net) })}
+              <View style={{ gap: 4 }}>
+                <Button
+                  label={t(typed !== null ? 'works.restoreVat' : 'works.removeVat')}
+                  onPress={removeVat}
+                  disabled={typed === null && !(valid && parsed > 0)}
+                  variant="outline"
+                />
+                {typed !== null ? (
+                  <Text style={[s.dim, { fontSize: 12, textAlign: 'center' }]}>
+                    {t('works.vatRemoved', { typed: money(Number.parseFloat(typed.replace(',', '.'))) })}
                   </Text>
                 ) : null}
               </View>
