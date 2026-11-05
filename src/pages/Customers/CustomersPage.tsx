@@ -1,4 +1,4 @@
-import { customerKind, type Customer, type Ticket } from '@garage/shared';
+import { customerKind, phoneDigits, plateKey, type Customer, type Ticket } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -30,6 +30,21 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
     }
     return map;
   }, [tickets]);
+
+  /* Searched by everything the counter is likely to have in hand: a name, a
+     phone typed with or without hyphens, an email, a ת״ז, a city, or the plate
+     of one of their cars. */
+  const [query, setQuery] = useState('');
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    const qDigits = phoneDigits(q);
+    const qPlate = plateKey(q);
+    return rows.filter((c) =>
+      [c.name, c.email, c.id_number, c.city].some((x) => x?.toLowerCase().includes(q))
+      || (qDigits.length >= 3 && phoneDigits(c.phone).includes(qDigits))
+      || (qPlate && (vehiclesByCustomer.get(c.id) ?? []).some((v) => plateKey(v.plate).includes(qPlate))));
+  }, [rows, query, vehiclesByCustomer]);
 
   /* One open panel at a time. Several would turn the table into a list of
      lists, and the reason to open one is to look at that customer's cars. */
@@ -220,11 +235,22 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
         </CrudForm>
       )}
 
+      <div className={styles.filters}>
+        <input
+          className={styles.search}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('customers.searchPlaceholder')}
+          aria-label={t('customers.searchPlaceholder')}
+        />
+        {query.trim() && <Button onClick={() => setQuery('')}>{t('common.reset')}</Button>}
+      </div>
+
       <Table
         columns={columns}
-        rows={rows}
+        rows={shown}
         rowKey={(c) => c.id}
-        emptyKey="customers.empty"
+        empty={rows.length === 0 ? t('customers.empty') : t('customers.noMatch')}
         renderExpanded={(c) =>
           openVehicles === c.id ? (
             <div className={styles.vehicles}>
