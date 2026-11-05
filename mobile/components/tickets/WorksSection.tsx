@@ -187,6 +187,7 @@ export function WorksSection({
         title={t('works.priceTitle')}
         subtitle={pricing?.part.name}
         value={pricing?.part.price ?? 0}
+        inclVat
         onCancel={() => setPricing(null)}
         onSubmit={applyPrice}
       />
@@ -214,6 +215,7 @@ export function WorksSection({
         title={t('works.laborTitle')}
         subtitle={laborFor?.name}
         value={laborFor?.labor ?? 0}
+        inclVat
         onCancel={() => setLaborFor(null)}
         onSubmit={applyLabor}
       />

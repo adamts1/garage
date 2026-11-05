@@ -111,6 +111,37 @@ export const discounted = (price: number, pct?: number): number => {
   return d ? round2(price * (1 - d / 100)) : price;
 };
 
+/* A price typed with the VAT already in it.
+
+   Every price on a ticket is stored before VAT, and VAT goes on once, at the
+   end. When a customer is quoted a figure that includes VAT, the line has to
+   hold the price that comes back to that figure once VAT is added — 500 is
+   stored as 423.73, and 423.73 + 18% is 500.00. Only the entry converts;
+   nothing downstream knows a price was typed this way.
+
+   The naive round2(gross / 1.18) does not always come back: a step of one
+   agora before VAT is 1.18 agorot after it, so the nearest one is searched
+   for, the same way issuableCredit does it. Some figures fall between two
+   stored prices (₪2: 1.69 → 1.99, 1.70 → 2.01) and land an agora off. */
+
+/** The pre-VAT price that becomes `gross` once VAT is added, to the agora. */
+export const netFromGross = (gross: number, vatRate: number = VAT): number => {
+  if (!Number.isFinite(gross) || gross <= 0) return 0;
+  const start = round2(gross / (1 + vatRate));
+  let best = start;
+  for (let step = -2; step <= 2; step++) {
+    const net = round2(start + step / 100);
+    if (net < 0) continue;
+    const off = Math.abs(round2(net * (1 + vatRate)) - gross);
+    if (off < Math.abs(round2(best * (1 + vatRate)) - gross) - 1e-9) best = net;
+  }
+  return best;
+};
+
+/** A pre-VAT price as the customer sees it, VAT added, to the agora. */
+export const grossFromNet = (net: number, vatRate: number = VAT): number =>
+  round2(net * (1 + vatRate));
+
 /** What one unit of a part costs on this ticket. */
 export const partUnitNet = (p: PartRow) => discounted(p.price, p.discount);
 /** A part's line: quantity × the discounted unit price. */

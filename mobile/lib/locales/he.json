@@ -231,6 +231,8 @@
     "priceTitle": "מחיר ליחידה",
     "laborTitle": "מחיר העבודה",
     "discountTitle": "הנחה באחוזים",
+    "inclVatLabel": "המחיר כולל מע״מ",
+    "inclVatSaved": "יישמר {{net}} לפני מע״מ, ובסוף החשבון יתווסף המע״מ",
     "laborDiscount": "הנחה על העבודה",
     "noDiscount": "ללא",
     "addDiscount": "+ הנחה",

@@ -1,5 +1,5 @@
 import {
-  clampDiscount, isGarageAdmin, money, partLineTotal, partsTotal as workPartsTotal, toCatalogCode,
+  clampDiscount, grossFromNet, isGarageAdmin, money, netFromGross, partLineTotal, partsTotal as workPartsTotal, toCatalogCode,
   workTotal, type PartRow, type TicketWork,
 } from '@garage/shared';
 import { useState } from 'react';
@@ -78,6 +78,74 @@ function DiscountCell({ value, label, onChange }: {
       aria-label={label}
       onChange={(e) => onChange(clampDiscount(e.target.value) || undefined)}
     />
+  );
+}
+
+/* A price, stored before VAT like every other — with a way to type the figure
+   the customer was quoted with VAT in it.
+
+   The "כולל מע״מ" button swaps the field to that figure. It holds its own
+   draft and commits once, on blur or Enter, as the pre-VAT price that comes
+   back to it (netFromGross): typed straight through, each keystroke would be
+   divided on its own and "5", "50", "500" would each be saved on the way.
+   Escape leaves without saving. Nothing is remembered about how a price was
+   typed; reopened, the field shows the current price with VAT added. */
+function PriceCell({ value, label, onChange }: {
+  value: number;
+  label: string;
+  onChange: (price: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [gross, setGross] = useState<string | null>(null);
+
+  const commit = () => {
+    if (gross === null) return;
+    const net = netFromGross(Number(gross));
+    if (net !== value) onChange(net);
+    setGross(null);
+  };
+
+  return (
+    <div className={styles.priceCell}>
+      {gross === null ? (
+        <CellInput
+          type="number"
+          min={0}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+        />
+      ) : (
+        <CellInput
+          className={styles.grossInput}
+          type="number"
+          min={0}
+          step="any"
+          autoFocus
+          value={gross}
+          aria-label={t('works.priceInclVat', { label })}
+          title={t('works.priceInclVatHint')}
+          onChange={(e) => setGross(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') setGross(null);
+          }}
+        />
+      )}
+      <button
+        type="button"
+        className={[styles.vatToggle, gross !== null && styles.vatToggleOn].filter(Boolean).join(' ')}
+        title={t('works.priceInclVatHint')}
+        aria-pressed={gross !== null}
+        /* Before the input's blur, so a click to close it does not first
+           commit through blur and then reopen. */
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => (gross === null ? setGross(String(grossFromNet(value) || '')) : commit())}
+      >
+        {t('works.inclVat')}
+      </button>
+    </div>
   );
 }
 
@@ -164,15 +232,13 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'labor',
       header: 'works.fields.labor',
-      width: 104,
+      width: 168,
       render: (w) =>
         canPrice ? (
-          <CellInput
-            type="number"
-            min={0}
+          <PriceCell
             value={w.labor}
-            aria-label={t('works.fields.labor')}
-            onChange={(e) => step.patchWork(w.uid, { labor: Number(e.target.value) || 0 })}
+            label={t('works.fields.labor')}
+            onChange={(labor) => step.patchWork(w.uid, { labor })}
           />
         ) : (
           <span className={styles.locked} title={t('works.adminOnly')}>{money(w.labor)}</span>
@@ -266,14 +332,12 @@ export default function WorksStep({ works, setWorks, combinedEmpty }: WorksStepP
     {
       key: 'price',
       header: 'works.fields.unitPrice',
-      width: 104,
+      width: 168,
       render: (i, index) => (
-        <CellInput
-          type="number"
-          min={0}
+        <PriceCell
           value={i.price}
-          aria-label={t('works.fields.unitPrice')}
-          onChange={(e) => current && step.patchPart(current.uid, index, { price: Number(e.target.value) || 0 })}
+          label={t('works.fields.unitPrice')}
+          onChange={(price) => current && step.patchPart(current.uid, index, { price })}
         />
       ),
     },

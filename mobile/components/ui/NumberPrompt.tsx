@@ -11,15 +11,18 @@
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { grossFromNet, money, netFromGross } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { C, s } from '../../lib/theme';
 import { Button } from './Button';
+import { Checkbox } from './Checkbox';
 
 export function NumberPrompt({
   visible,
   title,
   subtitle,
   value,
+  inclVat = false,
   onCancel,
   onSubmit,
 }: {
@@ -28,16 +31,23 @@ export function NumberPrompt({
   /** What is being priced — the row this was opened from. */
   subtitle?: string;
   value: number;
+  /** A price: offer to type it with VAT in. What is submitted is still the
+   *  pre-VAT price — the one that comes back to the typed figure (netFromGross). */
+  inclVat?: boolean;
   onCancel: () => void;
   onSubmit: (value: number) => void;
 }) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  const [gross, setGross] = useState(false);
 
   // Seed on open, not on every render: typing must not be overwritten by the
   // value the prompt was opened with.
   useEffect(() => {
-    if (visible) setText(String(value));
+    if (visible) {
+      setText(String(value));
+      setGross(false);
+    }
   }, [visible, value]);
 
   /* A comma is what a Hebrew keyboard offers for a decimal point, and "12,50"
@@ -46,8 +56,17 @@ export function NumberPrompt({
   const parsed = Number.parseFloat(text.replace(',', '.'));
   const valid = Number.isFinite(parsed) && parsed >= 0;
 
+  const net = gross ? netFromGross(parsed) : parsed;
+
   const submit = () => {
-    if (valid) onSubmit(parsed);
+    if (valid) onSubmit(net);
+  };
+
+  /* Ticking it re-reads the same price the other way: the field switches to
+     what it comes to with VAT, so what is in it is always what it says. */
+  const toggleGross = (next: boolean) => {
+    if (valid) setText(String(next ? grossFromNet(parsed) : netFromGross(parsed)));
+    setGross(next);
   };
 
   return (
@@ -82,6 +101,17 @@ export function NumberPrompt({
               onSubmitEditing={submit}
               accessibilityLabel={title}
             />
+
+            {inclVat ? (
+              <View>
+                <Checkbox checked={gross} onChange={toggleGross} label={t('works.inclVatLabel')} />
+                {gross && valid ? (
+                  <Text style={[s.dim, { fontSize: 12 }]}>
+                    {t('works.inclVatSaved', { net: money(net) })}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={[s.row, { gap: 10 }]}>
               <Button
