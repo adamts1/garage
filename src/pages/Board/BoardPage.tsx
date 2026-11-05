@@ -4,6 +4,7 @@ import {
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
+import { SearchBar } from '../../components/SearchBar';
 import { Table, type Column } from '../../components/Table';
 import { IconBoard, IconEye, IconEyeOff, IconTickets } from '../../icons';
 import { epicChip } from '../../lib/epic';
@@ -292,14 +293,7 @@ export default function BoardPage({
         </Button>
       </div>
 
-      <div className={styles.filters}>
-        <input
-          className={styles.search}
-          placeholder={t('board.searchPlaceholder')}
-          aria-label={t('board.searchPlaceholder')}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <SearchBar value={query} onChange={setQuery} placeholder="board.searchPlaceholder">
         <div className={styles.spacer} />
         {/* Hidden is not gone: say how many, and where they are. */}
         {view === 'board' && hiddenCount > 0 && (
@@ -313,7 +307,7 @@ export default function BoardPage({
             total: tickets.length,
           })}
         </span>
-      </div>
+      </SearchBar>
 
       {view === 'board' ? (
         boardView(onBoard, 'all')

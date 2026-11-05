@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
+import { SearchBar } from '../../components/SearchBar';
 import { CrudForm } from '../../components/CrudForm';
 import { SelectField, TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
@@ -235,16 +236,7 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
         </CrudForm>
       )}
 
-      <div className={styles.filters}>
-        <input
-          className={styles.search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('customers.searchPlaceholder')}
-          aria-label={t('customers.searchPlaceholder')}
-        />
-        {query.trim() && <Button onClick={() => setQuery('')}>{t('common.reset')}</Button>}
-      </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="customers.searchPlaceholder" />
 
       <Table
         columns={columns}

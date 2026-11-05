@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
+import { SearchBar } from '../../components/SearchBar';
 import { PageHeader } from '../../components/PageHeader';
 import { RowActions, Table, type Column } from '../../components/Table';
 import { IconPrint } from '../../icons';
@@ -103,16 +104,7 @@ export default function CarsPage({ tickets }: { tickets: Ticket[] }) {
   return (
     <>
       <PageHeader title="cars.title" count={rows.length} />
-      <div className={styles.filters}>
-        <input
-          className={styles.search}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('cars.searchPlaceholder')}
-          aria-label={t('cars.searchPlaceholder')}
-        />
-        {query.trim() && <Button onClick={() => setQuery('')}>{t('common.reset')}</Button>}
-      </div>
+      <SearchBar value={query} onChange={setQuery} placeholder="cars.searchPlaceholder" />
       <Table
         columns={columns}
         rows={shown}
