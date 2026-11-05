@@ -568,21 +568,44 @@ check('a duplicate ת״ז insert is rejected by the unique index', dupIns.status
  * a student's car — and while the RPC resolved by phone, the second person's
  * ticket was attached to the first and no record could be opened for them.
  *
- * So three tickets typed with one number, and nothing else to go on, are three
+ * So three tickets typed with one number under three names are three
  * customers. Merging them is not the database's call to make: the intake forms
  * name the holder and offer to attach the ticket to them, and taking that offer
- * arrives here as customer_id — which is the case asserted below. */
-for (const phone of ['050-123-4567', '050 1234567', '0501234567']) {
-  await rpc('create_ticket', a.token, { t: { title: 'phone', customer_name: 'טלפון זהה', phone } });
+ * arrives here as customer_id — which is the case asserted below.
+ *
+ * Name AND phone together are another matter (20261105090000): that is one
+ * customer, however either is typed, and is asserted right after. */
+const sharers = ['טלפון זהה א', 'טלפון זהה ב', 'טלפון זהה ג'];
+for (const [i, phone] of ['050-123-4567', '050 1234567', '0501234567'].entries()) {
+  await rpc('create_ticket', a.token, { t: { title: 'phone', customer_name: sharers[i], phone } });
 }
 const byPhone = await (await rest(
-  `customers?name=eq.${encodeURIComponent('טלפון זהה')}&select=id`, a.token,
+  `customers?name=like.${encodeURIComponent('טלפון זהה *')}&select=id`, a.token,
 )).json();
 check(
   'one number does not merge three customers — a phone is not an identity',
   Array.isArray(byPhone) && byPhone.length === 3,
   `got ${Array.isArray(byPhone) ? byPhone.length : '?'}`,
 );
+
+for (const [name, phone] of [['שם וטלפון', '052-765-4321'], ['  שם   וטלפון ', '0527654321']]) {
+  await rpc('create_ticket', a.token, { t: { title: 'name+phone', customer_name: name, phone } });
+}
+const twins = await (await rest(
+  `customers?phone=in.(${encodeURIComponent('052-765-4321')},0527654321)&select=id`, a.token,
+)).json();
+check(
+  'one name on one number is one customer, however either is typed',
+  Array.isArray(twins) && twins.length === 1,
+  `got ${Array.isArray(twins) ? twins.length : '?'}`,
+);
+
+const twinIns = await rest('customers', a.token, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+  body: JSON.stringify({ name: 'שם וטלפון', phone: '0527654321', id_number: 'IDA-TWIN' }),
+});
+check('a second customer with the same name and phone is refused, even with its own ת״ז', twinIns.status === 409, `got ${twinIns.status}`);
 
 /* And the other half of that: a ticket carrying a ת״ז somebody already holds
  * still resolves to them, however the phone reads. The ת״ז is unique per garage,

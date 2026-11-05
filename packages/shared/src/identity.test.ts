@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, matchVehiclesByPlate, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
+import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, matchVehiclesByPlate, nameAndPhoneHolder, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
 import type { Ticket } from './types';
 
 const cust = (over: Partial<CustomerIdentity>): CustomerIdentity => ({
@@ -221,5 +221,40 @@ describe('customerKind', () => {
     expect(customerKind('')).toBe('private');
     expect(customerKind('something else')).toBe('private');
     expect(isBusinessCustomer('something else')).toBe(false);
+  });
+});
+
+describe('nameAndPhoneHolder', () => {
+  const people: CustomerIdentity[] = [
+    { id: 'dad', name: 'משה כהן', phone: '050-1234567' },
+    { id: 'mum', name: 'שרה כהן', phone: '0501234567' },
+  ];
+
+  it('finds the same name on the same number, however either is typed', () => {
+    expect(nameAndPhoneHolder(people, { name: '  משה   כהן ', phone: '050 123 4567' })?.id).toBe('dad');
+  });
+
+  it('lets a shared number stand under another name', () => {
+    expect(nameAndPhoneHolder(people, { name: 'דני כהן', phone: '0501234567' })).toBeUndefined();
+  });
+
+  it('does not count the record being edited', () => {
+    expect(nameAndPhoneHolder(people, { name: 'משה כהן', phone: '0501234567', exceptId: 'dad' })).toBeUndefined();
+  });
+
+  it('never matches on a blank phone', () => {
+    expect(nameAndPhoneHolder([{ id: 'x', name: 'משה', phone: null }], { name: 'משה', phone: '' })).toBeUndefined();
+  });
+});
+
+describe('phoneConflict with several holders', () => {
+  it('reports the holder with this name, not merely the first', () => {
+    const people: CustomerIdentity[] = [
+      { id: 'mum', name: 'שרה כהן', phone: '0501234567' },
+      { id: 'dad', name: 'משה כהן', phone: '0501234567' },
+    ];
+    const c = phoneConflict(people, { name: 'משה כהן', phone: '050-1234567' });
+    expect(c?.customer.id).toBe('dad');
+    expect(c?.differentName).toBe(false);
   });
 });
