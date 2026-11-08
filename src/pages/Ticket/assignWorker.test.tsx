@@ -61,13 +61,13 @@ const CHIPS = Object.fromEntries(
 /** Renders the page and hands back whatever the picker writes to the ticket. */
 const renderPage = async (t: Ticket = ticket()) => {
   const store = configureStore({ reducer: { toast, modal } });
-  const setTickets = vi.fn();
+  const saveTicket = vi.fn(async (_: Ticket) => {});
   render(
     <Provider store={store}>
       <CatalogProvider>
         <TicketPage
           ticket={t}
-          setTickets={setTickets}
+          saveTicket={saveTicket}
           workers={STAFF}
           workerChips={CHIPS}
           onBack={() => {}}
@@ -85,15 +85,13 @@ const renderPage = async (t: Ticket = ticket()) => {
     await act(async () => { screen.getByText('שמור').click(); });
   };
 
-  /** The ticket as it stands after the picker's write — setTickets is handed an
-   *  updater, so this applies it the way useTickets would. */
+  /** The ticket as it stands after the picker's write. */
   const written = (): Ticket => {
-    const calls = setTickets.mock.calls;
-    const update = calls[calls.length - 1][0] as (prev: Ticket[]) => Ticket[];
-    return update([t])[0];
+    const calls = saveTicket.mock.calls;
+    return calls[calls.length - 1][0];
   };
 
-  return { picker, setTickets, written, pressSave };
+  return { picker, saveTicket, written, pressSave };
 };
 
 afterEach(cleanup);
@@ -107,12 +105,12 @@ describe('assigning a ticket', () => {
   });
 
   it('changes nothing until the ticket is saved', async () => {
-    const { picker, setTickets } = await renderPage();
+    const { picker, saveTicket } = await renderPage();
     await act(async () => { fireEvent.change(picker, { target: { value: 'noa' } }); });
 
     // Picked, shown, and not yet written: the page holds a draft now.
     expect(picker.value).toBe('noa');
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 
   it('writes the worker code, not the name', async () => {
@@ -134,11 +132,11 @@ describe('assigning a ticket', () => {
   });
 
   it('keeps a retired assignee on the ticket that already has them', async () => {
-    const { picker, setTickets } = await renderPage(ticket({ who: 'avi' }));
+    const { picker, saveTicket } = await renderPage(ticket({ who: 'avi' }));
 
     // Shown as the current value — opening the menu must not silently reassign.
     expect(picker.value).toBe('avi');
     expect([...picker.options].map((o) => o.textContent)).toContain('אבי מזרחי (הושבת)');
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 });
