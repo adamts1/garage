@@ -69,14 +69,14 @@ const YOSSI = customer({ id: 'cust-yossi', name: 'יוסי לוי', phone: '0527
 
 const renderPage = async (t: Ticket = ticket()) => {
   const store = configureStore({ reducer: { toast, modal } });
-  const setTickets = vi.fn();
+  const saveTicket = vi.fn(async (_: Ticket) => {});
   render(
     <Provider store={store}>
       <MemoryRouter>
         <CatalogProvider>
           <TicketPage
             ticket={t}
-            setTickets={setTickets}
+            saveTicket={saveTicket}
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}
@@ -99,14 +99,13 @@ const renderPage = async (t: Ticket = ticket()) => {
     await act(async () => { await Promise.resolve(); });
   };
   const written = (): Ticket => {
-    const calls = setTickets.mock.calls;
-    const update = calls[calls.length - 1][0] as (prev: Ticket[]) => Ticket[];
-    return update([t])[0];
+    const calls = saveTicket.mock.calls;
+    return calls[calls.length - 1][0];
   };
 
   const toasts = () => store.getState().toast.items.map((x: { text?: string; key?: string }) => x.text ?? x.key);
 
-  return { notes, idField, type, press, setTickets, written, store, toasts };
+  return { notes, idField, type, press, saveTicket, written, store, toasts };
 };
 
 beforeEach(() => {
@@ -119,11 +118,11 @@ afterEach(cleanup);
 
 describe('editing a ticket', () => {
   it('writes nothing while a note is being typed', async () => {
-    const { notes, type, setTickets } = await renderPage();
+    const { notes, type, saveTicket } = await renderPage();
     await type(notes, 'הלקוח ביקש לבדוק גם את הבלמים');
 
     expect(notes.value).toBe('הלקוח ביקש לבדוק גם את הבלמים');
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 
   it('writes the whole draft on save', async () => {
@@ -135,12 +134,12 @@ describe('editing a ticket', () => {
   });
 
   it('puts the ticket back when the edit is cancelled', async () => {
-    const { notes, type, press, setTickets } = await renderPage();
+    const { notes, type, press, saveTicket } = await renderPage();
     await type(notes, 'טעות');
     await press('בטל שינויים');
 
     expect(notes.value).toBe('ישן');
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 });
 
@@ -168,12 +167,12 @@ describe('the ת״ז on a ticket', () => {
   });
 
   it('refuses to save a ת״ז held by another customer — neither table is touched', async () => {
-    const { idField, type, press, setTickets } = await renderPage();
+    const { idField, type, press, saveTicket } = await renderPage();
     await type(idField, '311111111');
     await press('שמור');
 
     expect(updateCustomer).not.toHaveBeenCalled();
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 
   /* The list on this screen was loaded when it opened. A customer entered at
@@ -181,7 +180,7 @@ describe('the ת״ז on a ticket', () => {
      clash and the database is the one that knows. */
   it('refuses a number the database says is taken, even when the page cannot see it', async () => {
     customerHoldingIdNumber.mockResolvedValue({ ...YOSSI, id_number: '399999999' });
-    const { idField, type, press, toasts, setTickets } = await renderPage();
+    const { idField, type, press, toasts, saveTicket } = await renderPage();
 
     await type(idField, '399999999');   // nobody in the loaded list holds this
     expect(screen.queryByText(/יוסי לוי/)).toBeNull();
@@ -189,7 +188,7 @@ describe('the ת״ז on a ticket', () => {
     await press('שמור');
 
     expect(updateCustomer).not.toHaveBeenCalled();
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
     // Named, in Hebrew — not "[object Object]", and not a constraint name.
     expect(toasts().join(' ')).toContain('ticket.idTakenBlocked');
   });

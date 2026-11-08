@@ -68,14 +68,14 @@ const YOSSI = customer({ id: 'cust-yossi', name: 'יוסי לוי', phone: '0527
 
 const renderPage = async (t: Ticket = ticket()) => {
   const store = configureStore({ reducer: { toast, modal } });
-  const setTickets = vi.fn();
+  const saveTicket = vi.fn(async (_: Ticket) => {});
   render(
     <Provider store={store}>
       <MemoryRouter>
         <CatalogProvider>
           <TicketPage
             ticket={t}
-            setTickets={setTickets}
+            saveTicket={saveTicket}
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}
@@ -98,14 +98,13 @@ const renderPage = async (t: Ticket = ticket()) => {
     await act(async () => { await Promise.resolve(); });
   };
   const written = (): Ticket => {
-    const calls = setTickets.mock.calls;
-    const update = calls[calls.length - 1][0] as (prev: Ticket[]) => Ticket[];
-    return update([t])[0];
+    const calls = saveTicket.mock.calls;
+    return calls[calls.length - 1][0];
   };
 
   const toasts = () => store.getState().toast.items.map((x: { text?: string; key?: string }) => x.text ?? x.key);
 
-  return { notes, idField, type, press, setTickets, written, store, toasts };
+  return { notes, idField, type, press, saveTicket, written, store, toasts };
 };
 
 beforeEach(() => {
@@ -141,12 +140,12 @@ describe('correcting the customer on a ticket', () => {
   });
 
   it('refuses an empty name and touches neither table', async () => {
-    const { type, press, setTickets } = await renderPage();
+    const { type, press, saveTicket } = await renderPage();
     await type(field('שם'), '  ');
     await press('שמור');
 
     expect(updateCustomer).not.toHaveBeenCalled();
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 
   it('is frozen once the ticket is billed', async () => {

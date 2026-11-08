@@ -60,7 +60,7 @@ export default function App() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { tickets, setTickets, cancel, loading, error } = useTickets();   // Supabase-backed, live
+  const { tickets, setTickets, saveTicket, cancel, loading, error } = useTickets();   // Supabase-backed, live
 
   /* Unsaved edits on an open ticket. Held here, above the routes, because every
      way out of that page — the sidebar, the browser's Back, signing out — starts
@@ -186,7 +186,7 @@ export default function App() {
                   element={
                     <TicketRoute
                       tickets={tickets}
-                      setTickets={setTickets}
+                      saveTicket={saveTicket}
                       workers={workers}
                       workerChips={workerChips}
                       onBack={() => navigate('/')}
