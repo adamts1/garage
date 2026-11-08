@@ -141,8 +141,8 @@
 .browserBar { display: flex; gap: 6px; padding: 10px 14px; background: #eef2f7; border-bottom: 1px solid var(--line); }
 .browserBar span { width: 10px; height: 10px; border-radius: 50%; background: #c9d2df; }
 
-.phone { padding: 8px; border-radius: 30px; background: var(--ink); box-shadow: 0 16px 36px rgba(27, 39, 64, 0.2); }
-.phone img { border-radius: 23px; }
+.phone { padding: 4px; border-radius: 24px; background: var(--ink); box-shadow: 0 16px 36px rgba(27, 39, 64, 0.2); }
+.phone img { border-radius: 20px; }
 .heroPhone { position: absolute; bottom: 0; left: -12px; width: 26%; min-width: 110px; }
 
 /* ---------- cards ---------- */
@@ -179,41 +179,18 @@
 
 /* ---------- screens ---------- */
 
-.screens { display: flex; flex-wrap: wrap; align-items: stretch; gap: 28px; }
-.screenWide { flex: 1 1 560px; min-width: 0; }
-.phones { flex: 1 1 380px; min-width: 0; display: flex; flex-wrap: wrap; gap: 24px; }
-.phones figure { flex: 1 1 170px; min-width: 0; }
-
+/* Tablet and two phones side by side at one height: the columns are in the
+   ratio of the shots' widths at equal height (0.69 : 0.46 : 0.46). */
+.screens { display: grid; grid-template-columns: 1.5fr 1fr 1fr; align-items: start; gap: 28px; }
 .screens figure { display: flex; flex-direction: column; gap: 16px; }
 .screens figcaption { display: flex; flex-direction: column; gap: 4px; }
 .screens figcaption strong { font-size: 19px; }
 .screens figcaption span { color: var(--body); font-size: 15px; }
 
-/* the tablet mock */
-.tablet { padding: 12px; border-radius: 28px; background: var(--ink); box-shadow: 0 20px 50px rgba(27, 39, 64, 0.2); }
-.screen { overflow: hidden; border-radius: 18px; background: #f3f5f9; font-size: 13px; }
-.screenBar { padding: 12px; background: var(--ink); color: #fff; text-align: center; font-weight: 700; font-size: 15px; }
-.screenBody { display: flex; flex-wrap: wrap; }
-
-.queue { flex: 1 1 150px; max-width: 32%; min-width: 130px; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-left: 1px solid #e1e6ee; }
-.search { padding: 8px 10px; border: 1px solid #e1e6ee; border-radius: 8px; background: #fff; color: var(--muted); font-size: 12px; }
-.car { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid #e1e6ee; border-radius: 10px; background: #fff; color: #34507e; font-weight: 500; }
-.carActive { border: 2px solid var(--ink); background: #eef2f8; }
-.plate { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: #f1e9d2; color: var(--ink); font-weight: 800; font-size: 15px; direction: ltr; }
-
-.detail { flex: 999 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #fff; }
-.detailPlate { text-align: center; font-weight: 800; font-size: 20px; direction: ltr; }
-.notify { padding: 10px; border-radius: 10px; background: #22c55e; color: #fff; text-align: center; font-weight: 700; }
-.tabs { display: flex; justify-content: space-between; gap: 8px; padding: 4px 4px 8px; border-bottom: 1px solid #e1e6ee; color: var(--muted); }
-.tabActive { color: var(--ink); font-weight: 700; border-bottom: 2px solid var(--ink); }
-.work { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid #e1e6ee; border-radius: 10px; color: var(--muted); }
-.work strong { color: var(--ink); }
-.line { display: flex; justify-content: space-between; }
-.total { margin-top: 4px; padding-top: 6px; border-top: 1px solid #e1e6ee; color: var(--ink); font-weight: 800; font-size: 16px; }
-.actions { display: flex; gap: 8px; }
-.finish, .save { flex: 1; padding: 9px; border-radius: 10px; text-align: center; }
-.finish { background: var(--ink); color: #fff; font-weight: 700; }
-.save { border: 1px solid #e1e6ee; color: var(--muted); }
+/* The tablet shot carries its own black bezel, but its corners are opaque
+   black too — rounded here so it reads as a device, not a square. The radius is
+   in the shot's own proportions (940 × 1371), so it holds at any width. */
+.tabletShot { border-radius: 6% / 4.1%; box-shadow: 0 20px 44px rgba(27, 39, 64, 0.22); }
 
 /* ---------- demo ---------- */
 
@@ -240,10 +217,14 @@
 
 @media (max-width: 860px) {
   .navLinks { display: none; }
+  .screens { grid-template-columns: 1fr 1fr; }
+  .screens > :first-child { grid-column: 1 / -1; max-width: 520px; justify-self: center; }
 }
 
 @media (max-width: 640px) {
   .section { padding: 64px 0; }
+  .phone { padding: 3px; border-radius: 16px; }
+  .phone img { border-radius: 13px; }
   /* Stacked, the text runs the full width, so the veil does too. */
   .heroBg {
     background:
