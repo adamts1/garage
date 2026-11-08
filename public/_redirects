@@ -5,4 +5,11 @@
 #
 # Not forced (no !), so real files still win: /privacy.html and the built
 # assets are served as themselves.
+# The landing page is a real file at /marketing/index.html (and /ar/). Sent
+# there explicitly, so the address without a trailing slash can never fall
+# through to the app's rewrite below. Must come first: Netlify stops at the
+# first rule that matches.
+/marketing     /marketing/     301
+/marketing/ar  /marketing/ar/  301
+
 /*  /index.html  200
