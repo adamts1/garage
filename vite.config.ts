@@ -8,6 +8,15 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      /* The app, and the landing page beside it as pages of their own. Each
+         HTML file builds to the same path in dist, so Netlify serves
+         /marketing/ and /marketing/ar/ as real files, ahead of the app's
+         catch-all rewrite. */
+      input: {
+        app: 'index.html',
+        marketing: 'marketing/index.html',
+        marketingAr: 'marketing/ar/index.html',
+      },
       output: {
         /* The large libraries each get a chunk of their own. In one bundle,
            every deploy renamed the whole thing, and the first load after any

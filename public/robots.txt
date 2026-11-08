@@ -1,0 +1,10 @@
+# Only the landing page is public; every other path is the app, behind a
+# login. /assets/ must stay open: the landing page is rendered by its bundle,
+# and a crawler that cannot fetch it sees an empty <div id="root">.
+User-agent: *
+Allow: /marketing/
+Allow: /assets/
+Allow: /privacy.html
+Disallow: /
+
+Sitemap: https://garagiox.com/sitemap.xml
