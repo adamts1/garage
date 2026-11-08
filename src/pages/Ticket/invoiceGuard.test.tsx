@@ -78,7 +78,7 @@ const renderPage = async (t: Ticket = ticket()) => {
         <CatalogProvider>
           <TicketPage
             ticket={t}
-            setTickets={() => {}}
+            saveTicket={async () => {}}
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}

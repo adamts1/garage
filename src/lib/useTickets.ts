@@ -107,6 +107,37 @@ export function useTickets() {
     void persist(prev, next); // save second
   }, [persist]);
 
+  /** Save one existing ticket and WAIT for it. setTickets paints and writes in
+   *  the background, which is right for a drag on the board and wrong for
+   *  anything that acts on the stored row next: close-and-charge issues a tax
+   *  document from what the database holds, so "saved" has to mean saved. Paints
+   *  first like setTickets; throws when the write fails, after pulling the
+   *  server's version back so the list does not keep showing a lie. The caller
+   *  says what went wrong — this does not touch the page-wide error banner. */
+  const saveTicket = useCallback(async (next: Ticket) => {
+    const old = current.current.find((t) => t.k === next.k);
+    if (old && JSON.stringify(old) === JSON.stringify(next)) return;
+
+    const list = current.current.map((t) => (t.k === next.k ? next : t));
+    current.current = list;
+    setLocal(list);
+
+    writing.current++;
+    try {
+      const worksChanged = JSON.stringify(old?.works ?? []) !== JSON.stringify(next.works ?? []);
+      await updateTicket(next, worksChanged || !old);
+    } catch (e) {
+      pending.current = true;   // what we painted is not what is stored
+      throw e;
+    } finally {
+      writing.current--;
+      if (writing.current === 0 && pending.current) {
+        pending.current = false;
+        await refetch().catch(() => {});
+      }
+    }
+  }, [refetch]);
+
   /** Cancel, not delete. Not optimistic: the server can say no (no reason, an
    *  issued invoice), and the caller needs to show why. Throws on refusal. */
   const cancel = useCallback(async (key: string, reason: string) => {
@@ -125,5 +156,5 @@ export function useTickets() {
     }
   }, [refetch]);
 
-  return { tickets, setTickets, cancel, loading, error, refetch };
+  return { tickets, setTickets, saveTicket, cancel, loading, error, refetch };
 }

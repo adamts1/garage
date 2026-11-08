@@ -76,14 +76,14 @@ const invoice = (over: Partial<Invoice> = {}): Invoice =>
     ...over,
   }) as unknown as Invoice;
 
-const renderPage = async () => {
+const renderPage = async (saveTicket: (t: Ticket) => Promise<void> = async () => {}) => {
   const store = configureStore({ reducer: { toast, modal } });
   render(
     <Provider store={store}>
       <CatalogProvider>
         <TicketPage
           ticket={ticket()}
-          setTickets={() => {}}
+          saveTicket={saveTicket}
           workers={[]}
           workerChips={{} as never}
           onBack={() => {}}
@@ -179,6 +179,39 @@ describe('taking a payment', () => {
 
     expect(toasts(store)).toContain('ticket.paymentTaken');
     expect(toasts(store)).toContain('invoiceIssue.issued');
+  });
+});
+
+/* The document is built by the server from the stored row, so the close has to
+   be stored before anything is issued. The save used to report success at once
+   and write in the background: on a slow line the invoice could be built from
+   the works as they were before this visit's last part, and a save that failed
+   outright still went on to issue — a legal document for a ticket nobody had
+   saved, and the part gone from the screen after the next refresh. */
+describe('the save underneath the close', () => {
+  it('issues nothing when the save fails', async () => {
+    const store = await renderPage(async () => { throw new Error('network down'); });
+    await closeAndCharge('מזומן');
+
+    expect(issueInvoice).not.toHaveBeenCalled();
+    expect(toasts(store)).not.toContain('ticket.saved');
+    expect(toasts(store)).not.toContain('ticket.paymentTaken');
+  });
+
+  it('waits for the save to land before issuing', async () => {
+    let land!: () => void;
+    const saveTicket = vi.fn((_: Ticket) => new Promise<void>((resolve) => { land = resolve; }));
+    await renderPage(saveTicket);
+    await closeAndCharge('מזומן');
+
+    expect(saveTicket).toHaveBeenCalledWith(expect.objectContaining({ st: 'paid', paid: true }));
+    expect(issueInvoice).not.toHaveBeenCalled();
+
+    await act(async () => { land(); await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(issueInvoice).toHaveBeenCalledTimes(1);
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'invoice_receipt');
   });
 });
 

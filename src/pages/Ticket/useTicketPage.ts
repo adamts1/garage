@@ -3,7 +3,6 @@ import {
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type Dispatch, type SetStateAction,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCloseTicket, useCollectPayment, type CloseResult } from '../../features/ticket/CloseTicketModal';
@@ -17,7 +16,9 @@ import {
 
 export interface UseTicketPageOptions {
   ticket: Ticket;
-  setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** Writes the ticket and resolves once it is stored; rejects when it is not.
+   *  See useTickets.saveTicket. */
+  saveTicket: (next: Ticket) => Promise<void>;
   onBack: () => void;
   /** Cancels the ticket on the server; throws when it refuses. See useTickets. */
   onCancelTicket: (key: string, reason: string) => Promise<void>;
@@ -62,7 +63,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
    on `customers`, not on `tickets`, so it is held beside the draft rather than
    inside it — otherwise every ticket read back from the server would look
    edited the moment the customer had a number. */
-export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDirtyChange }: UseTicketPageOptions) {
+export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDirtyChange }: UseTicketPageOptions) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const run = useBusyRun();
@@ -300,9 +301,15 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
           await updateCustomer(customer.id, { id_number: wanted || null });
           await loadCustomers();
         }
+        /* Awaited. It used to hand the row to setTickets, which paints and
+           writes in the background, and report "saved" at once — so close-and-
+           charge went on to issue a tax document from whatever the database
+           held at that moment, and a write that failed was never this code's
+           business. A failure now lands in the catch below with the draft
+           intact, so the edits are still on screen to save again. */
         if (!same(next, ticket)) {
+          await saveTicket(next);
           setDraft(next);
-          setTickets((prev) => prev.map((t) => (t.k === ticket.k ? next : t)));
         }
         dispatch(showSuccess('ticket.saved'));
         return true;
@@ -313,7 +320,7 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
         setBusy(false);
       }
     },
-    [customer, dispatch, draft, idConflict, idDirty, idNumber, loadCustomers, setTickets, ticket],
+    [customer, dispatch, draft, idConflict, idDirty, idNumber, loadCustomers, saveTicket, ticket],
   );
 
   /** Move the ticket to another customer — an existing one, or one created here
@@ -505,11 +512,15 @@ export function useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDi
      rather than putting back the old one. */
   const setBoardHidden = useCallback(
     (boardHidden: boolean) => {
-      setTickets((prev) => prev.map((t) => (t.k === ticket.k ? { ...t, boardHidden } : t)));
       setDraft((d) => ({ ...d, boardHidden }));
-      dispatch(showInfo(boardHidden ? 'board.hiddenToast' : 'board.shownToast'));
+      saveTicket({ ...ticket, boardHidden })
+        .then(() => dispatch(showInfo(boardHidden ? 'board.hiddenToast' : 'board.shownToast')))
+        .catch((e) => {
+          setDraft((d) => ({ ...d, boardHidden: !boardHidden }));
+          dispatch(showError(e));
+        });
     },
-    [dispatch, setTickets, ticket.k],
+    [dispatch, saveTicket, ticket],
   );
 
   /** Cancel, never delete: a numbered work order stays on file under its
