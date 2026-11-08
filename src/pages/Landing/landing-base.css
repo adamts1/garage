@@ -1,0 +1,16 @@
+/* The few document-wide rules the landing page needs. It does not load the
+   app's styles.css, so nothing set for the app reaches it, or the reverse. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Rubik, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font: inherit; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
