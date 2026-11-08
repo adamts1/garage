@@ -9,7 +9,6 @@ import { COPY } from './copy';
 import { FEATURE_ICONS } from './icons';
 import { LANDING_PATHS, type Lang } from './languages';
 import styles from './landing.module.css';
-import TicketMockup from './TicketMockup';
 
 const SECTIONS = ['features', 'how', 'screens', 'demo'] as const;
 
@@ -47,7 +46,7 @@ export default function LandingPage({ lang }: { lang: Lang }) {
       <header className={styles.nav}>
         <div className={styles.container}>
           <a href="#top" className={styles.brand}>
-            <img src="/marketing/images/logo.png" alt="" width="44" height="44" />
+            <img src="/marketing/images/logo.webp" alt="" width="44" height="44" />
             <span>Garagiox</span>
           </a>
           <nav aria-label={t.nav.label} className={styles.navLinks}>
@@ -83,10 +82,10 @@ export default function LandingPage({ lang }: { lang: Lang }) {
             <div className={styles.heroVisual}>
               <div className={styles.browser}>
                 <div className={styles.browserBar} aria-hidden="true"><span /><span /><span /></div>
-                <img src="/marketing/images/board.jpg" width="2000" height="1089" alt={t.hero.boardAlt} />
+                <img src="/marketing/images/board.webp" width="1400" height="765" alt={t.hero.boardAlt} />
               </div>
               <div className={`${styles.phone} ${styles.heroPhone}`}>
-                <img src="/marketing/images/jobcard.jpg" width="900" height="1954" alt={t.hero.phoneAlt} />
+                <img src="/marketing/images/jobcard.webp" width="640" height="1390" alt={t.hero.phoneAlt} />
               </div>
             </div>
           </div>
@@ -126,26 +125,27 @@ export default function LandingPage({ lang }: { lang: Lang }) {
           <div className={styles.container}>
             <SectionHead eyebrow={t.screens.eyebrow} title={t.screens.title} lead={t.screens.lead} />
             <div className={styles.screens}>
-              <figure className={styles.screenWide}>
-                <TicketMockup copy={t.mock} />
+              <figure>
+                <img
+                  src="/marketing/images/tablet.webp" width="940" height="1371" loading="lazy"
+                  alt={t.screens.tablet.alt} className={styles.tabletShot}
+                />
                 <figcaption>
                   <strong>{t.screens.tablet.title}</strong>
                   <span>{t.screens.tablet.body}</span>
                 </figcaption>
               </figure>
-              <div className={styles.phones}>
-                {([['jobcard', t.screens.approval], ['parts', t.screens.parts]] as const).map(([shot, s]) => (
-                  <figure key={shot}>
-                    <div className={styles.phone}>
-                      <img src={`/marketing/images/${shot}.jpg`} width="900" height="1954" loading="lazy" alt={s.alt} />
-                    </div>
-                    <figcaption>
-                      <strong>{s.title}</strong>
-                      <span>{s.body}</span>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
+            {([['jobcard', t.screens.approval], ['parts', t.screens.parts]] as const).map(([shot, s]) => (
+                <figure key={shot}>
+                  <div className={styles.phone}>
+                    <img src={`/marketing/images/${shot}.webp`} width="640" height="1390" loading="lazy" alt={s.alt} />
+                  </div>
+                  <figcaption>
+                    <strong>{s.title}</strong>
+                    <span>{s.body}</span>
+                  </figcaption>
+                </figure>
+              ))}
             </div>
           </div>
         </section>
@@ -186,7 +186,7 @@ export default function LandingPage({ lang }: { lang: Lang }) {
       <footer className={styles.footer}>
         <div className={styles.container}>
           <div className={styles.brand}>
-            <img src="/marketing/images/logo.png" alt="" width="36" height="36" loading="lazy" />
+            <img src="/marketing/images/logo.webp" alt="" width="36" height="36" loading="lazy" />
             <span>Garagiox</span>
           </div>
           <div className={styles.footerLinks}>
