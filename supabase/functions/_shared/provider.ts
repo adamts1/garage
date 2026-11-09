@@ -8,6 +8,18 @@
 // this boundary. The handler passes normalized inputs and stores a normalized
 // result, so the invoices table and the whole app stay provider-agnostic.
 
+/** Thrown when the provider certainly created nothing: it answered, and the
+ *  answer was no (or we never got as far as asking). Anything else an adapter
+ *  throws — a timeout, a dropped connection, a reply that is not the provider's
+ *  — means a document MAY exist, and the caller must not guess which. The
+ *  handler keeps the target locked in that case (see billing_attempts). */
+export class NotIssued extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotIssued';
+  }
+}
+
 /** Provider credentials, exactly as stored in garage_billing_secrets.credentials.
  *  Shape is provider-defined (iCount: { cid, token }). */
 export type ProviderCredentials = Record<string, unknown>;
