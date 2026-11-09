@@ -11,6 +11,7 @@
 
 import { discounted, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
+import { paymentsTotal, type PayMethod, type PaymentPart } from './payment';
 
 /* Four documents, two of which are bills.
  *
@@ -60,6 +61,11 @@ export interface Invoice {
   total: number;
   payMethod: string | null;
   payReference: string | null;
+  /** Every payment the document records, when it records more than one — cash
+   *  and a card at the same visit, on one receipt. Null on a document with a
+   *  single method (that is `payMethod`) and on everything issued before the
+   *  column existed. When set, `payMethod` is null: no one method names it. */
+  payments: PaymentPart[] | null;
   status: InvoiceStatus;
   /** the credit note that cancelled this one, if any */
   cancelledBy: string | null;
@@ -72,6 +78,10 @@ export interface Invoice {
   paysInvoiceId: string | null;
   createdAt: string;
 }
+
+const paymentToBody = (p: PaymentPart) => ({
+  method: p.method, amount: p.amount, reference: p.reference ?? null,
+});
 
 const rowToInvoice = (r: any): Invoice => ({
   id: r.id,
@@ -94,6 +104,13 @@ const rowToInvoice = (r: any): Invoice => ({
   total: Number(r.total),
   payMethod: r.pay_method ?? null,
   payReference: r.pay_reference ?? null,
+  payments: Array.isArray(r.payments) && r.payments.length > 0
+    ? (r.payments as Array<{ method: PayMethod; amount: number; reference?: string | null }>).map((p) => ({
+        method: p.method,
+        amount: Number(p.amount),
+        ...(p.reference ? { reference: p.reference } : {}),
+      }))
+    : null,
   status: r.status,
   cancelledBy: r.cancelled_by ?? null,
   creditsInvoiceId: r.credits_invoice_id ?? null,
@@ -151,16 +168,23 @@ export const invoicingActive = async (): Promise<boolean> => {
 /* Issue a חשבונית מס-קבלה for a ticket. Irreversible — the only undo is a
    credit note. The Edge Function is idempotent per ticket, so a double click
    returns the invoice that already exists rather than issuing two. */
+/** `payments` is how an invoice-receipt was paid, when it was paid by more
+ *  than one method; without it the server reads the single method off the
+ *  ticket. They must add up to the bill — the server refuses otherwise. */
 export const issueInvoice = async (
   ticketKey: string,
   docType: BillDocType = 'invoice_receipt',
+  payments?: readonly PaymentPart[],
 ): Promise<Invoice> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
   if (tErr) throw tErr;
 
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
-    body: { action: 'issue', ticket_id: t.id, doc_type: docType },
+    body: {
+      action: 'issue', ticket_id: t.id, doc_type: docType,
+      ...(payments && payments.length > 0 ? { payments: payments.map(paymentToBody) } : {}),
+    },
   });
   if (error) throw await invokeError(error);
   return rowToInvoice(data.invoice);
@@ -224,14 +248,19 @@ export const issueStandaloneInvoice = async (input: StandaloneInvoiceInput): Pro
   return rowToInvoice(data.invoice);
 };
 
+/** One receipt against a tax invoice, for every payment taken at this visit.
+ *  Their sum is what is collected; it may be less than what is owed. */
 export const collectInvoice = async (
   invoiceId: string,
-  amount?: number,
-  payMethod?: string,
-  reference?: string,
+  payments: readonly PaymentPart[],
 ): Promise<{ receipt: Invoice; owed: number }> => {
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
-    body: { action: 'collect', invoice_id: invoiceId, amount, pay_method: payMethod, reference },
+    body: {
+      action: 'collect',
+      invoice_id: invoiceId,
+      amount: paymentsTotal(payments),
+      payments: payments.map(paymentToBody),
+    },
   });
   if (error) throw await invokeError(error);
   return { receipt: rowToInvoice(data.receipt), owed: Number(data.owed ?? 0) };

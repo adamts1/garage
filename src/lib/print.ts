@@ -198,7 +198,9 @@ export const printInvoice = (
         <section>
           <div class="sub-t">תשלום ושיוך</div>
           <table class="kv">
-            ${row('אמצעי תשלום', payMethodHe(inv.payMethod))}
+            ${row('אמצעי תשלום', inv.payments
+              ? inv.payments.map((p) => `${payMethodHe(p.method)} ${money(p.amount)}`).join(' + ')
+              : payMethodHe(inv.payMethod))}
             ${row('אסמכתא', inv.payReference)}
             ${row('כרטיס עבודה', inv.ticketKey)}
             ${row('סטטוס', cancelled ? 'בוטל' : 'תקף')}

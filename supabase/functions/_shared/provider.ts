@@ -34,6 +34,16 @@ export interface InvoiceItem {
  *  is a bill that will be paid later, and is settled by its own receipt. */
 export type BillDocType = 'invoice_receipt' | 'tax_invoice';
 
+/** One payment among several on a single document — cash and a card at the
+ *  same visit, on one receipt. `method` is a code (cash | card | bit |
+ *  bank_transfer | cheque | other); see packages/shared/src/payment.ts. */
+export interface PaymentPart {
+  method: string;
+  /** VAT-inclusive. */
+  amount: number;
+  reference?: string | null;
+}
+
 export interface IssueInput {
   credentials: ProviderCredentials;
   docType: BillDocType;
@@ -42,6 +52,9 @@ export interface IssueInput {
   /** Null on a tax invoice: nothing has been paid, so there is nothing to
    *  describe. Providers that demand a balancing payment must not be given one. */
   payMethod: string | null;
+  /** Set when the document was paid by more than one method; then it replaces
+   *  `payMethod`. Must add up to `total`. Never set on a tax invoice. */
+  payments?: PaymentPart[];
   total: number; // VAT-inclusive, for providers that need a balancing payment
 }
 
@@ -50,6 +63,9 @@ export interface CollectInput {
   credentials: ProviderCredentials;
   customer: { name: string; idNo?: string };
   payMethod: string | null;
+  /** Set when the money arrived by more than one method; then it replaces
+   *  `payMethod`. Must add up to `amount`. */
+  payments?: PaymentPart[];
   /** VAT-inclusive — a receipt records a payment, it does not price anything. */
   amount: number;
   /** The tax invoice being settled. */

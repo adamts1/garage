@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PAY_METHOD, PAY_METHODS, payMethod, payMethodHe } from './payment';
+import { DEFAULT_PAY_METHOD, PAY_METHODS, mainPayMethod, payMethod, payMethodHe, paymentsTotal } from './payment';
 
 describe('payMethod', () => {
   it('passes a code through', () => {
@@ -63,5 +63,21 @@ describe('payMethodHe', () => {
   it('says nothing when nothing was recorded', () => {
     expect(payMethodHe(null)).toBeNull();
     expect(payMethodHe('')).toBeNull();
+  });
+});
+
+describe('several payments on one document', () => {
+  it('adds them up to the agora', () => {
+    expect(paymentsTotal([{ method: 'cash', amount: 0.1 }, { method: 'card', amount: 0.2 }])).toBe(0.3);
+    expect(paymentsTotal([])).toBe(0);
+  });
+
+  it('names the ticket by the method that brought in the most', () => {
+    expect(mainPayMethod([{ method: 'cash', amount: 500 }, { method: 'card', amount: 680 }])).toBe('card');
+    expect(mainPayMethod([])).toBeNull();
+  });
+
+  it('breaks a tie toward the part the customer started with', () => {
+    expect(mainPayMethod([{ method: 'bit', amount: 300 }, { method: 'cash', amount: 300 }])).toBe('bit');
   });
 });

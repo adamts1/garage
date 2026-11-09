@@ -87,6 +87,10 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
   /** The document being settled, shown while collecting so the advisor can see
    *  which bill the money is going against. */
   const docnum = String(props.docnum ?? '');
+  /** Collected earlier in this same visit, by other methods, and not yet on
+   *  any document — the drawer reopens on what is left after each part, and
+   *  one receipt covers them all at the end. Zero on the first round. */
+  const soFar = Number(props.soFar ?? 0);
 
   const [step, setStep] = useState(1);
   const [methodId, setMethodId] = useState<string | null>(null);
@@ -115,6 +119,10 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
    *  מס and this payment as a קבלה against it, exactly as if it had been
    *  collected later — which is what makes the rest collectable afterwards. */
   const partPaid = !collecting && !!method?.paid && !full;
+  /** This round does not end the visit's payments, so nothing is issued by it:
+   *  the drawer comes back on the rest, and the documents follow when the bill
+   *  is paid or the drawer is closed. */
+  const deferred = partPaid || (collecting && !full);
 
   const doc = t(collecting
     ? 'close.docCollect'
@@ -183,7 +191,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                   ? t('close.paidWith', { method: t(method.label) })
                   : t('close.openBalance')}
               {' · '}
-              {t('close.issued', { doc })}
+              {t(deferred ? 'close.issuedAtEnd' : 'close.issued', { doc })}
             </p>
             {!full && method.paid && (
               <p className={styles.docLine}>
@@ -243,6 +251,12 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 <div className={styles.total}>
                   <span className={styles.key}>{t(collecting ? 'close.amountOwed' : 'close.amountDue')}</span>
                   <b>{money(total)}</b>
+                  {soFar > 0 && (
+                    <>
+                      <span className={styles.key}>{t('close.paidThisVisit')}</span>
+                      <b>{money(soFar)}</b>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -319,10 +333,10 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
               <div className={`${styles.info}${method.paid ? ` ${styles.ok}` : ''}`}>
                 <span className={styles.infoIcon}>{method.paid ? <IconCard /> : 'i'}</span>
                 <div>
-                  <b>{t('close.willIssue', { doc })}</b>
+                  <b>{t(deferred ? 'close.issuedAtEnd' : 'close.willIssue', { doc })}</b>
                   <p>
                     {t(collecting
-                      ? 'close.receiptOnFinish'
+                      ? deferred ? 'close.oneReceipt' : 'close.receiptOnFinish'
                       : partPaid ? 'close.restLater'
                         : method.paid ? 'close.sentOnFinish' : 'close.receiptLater')}
                   </p>
@@ -360,7 +374,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                         })
                       : t(method.paid ? 'close.willClosePaid' : 'close.willCloseBalance')}
                   </b>
-                  <p>{t('close.issued', { doc })}</p>
+                  <p>{t(deferred ? 'close.issuedAtEnd' : 'close.issued', { doc })}</p>
                 </div>
               </div>
             </div>
@@ -372,7 +386,12 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
             onClick={step === 1 ? () => answer(null) : () => setStep(step - 1)}
             disabled={state === 'charging'}
           >
-            {step === 1 ? t('common.cancel') : t('close.back')}
+            {/* Once part of the bill is in, closing is not cancelling: what was
+                taken gets its receipt, and the rest stays owed. Said on the
+                button, because the ✕ does the same and says nothing. */}
+            {step === 1
+              ? soFar > 0 ? t('close.finishNow', { amount: money(soFar) }) : t('common.cancel')
+              : t('close.back')}
           </Button>
           <Button
             variant="primary"
@@ -384,7 +403,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
               <><span className={styles.spinner} /> {t('close.charging')}</>
             ) : step === 3 ? (
               collecting
-                ? t('close.collectNow', { amount: money(amount) })
+                ? deferred
+                  ? t('close.recordPayment', { amount: money(amount) })
+                  : t('close.collectNow', { amount: money(round2(soFar + amount)) })
                 : method?.paid ? t('close.collectAmount', { amount: money(amount) }) : t('close.closeTicket')
             ) : (
               t('close.next')
