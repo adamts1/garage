@@ -10,33 +10,47 @@ import type {
   InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
   ProviderCredentials, RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
+import { NotIssued } from './provider.ts';
 
-const BASE = 'https://api.icount.co.il/api/v3.php';
+/* Overridable for one reason: the local end-to-end test of issue-invoice points
+   it at a stand-in server, to make the provider answer slowly, refuse, or not
+   answer at all. Never set it on a hosted project. */
+const BASE = Deno.env.get('ICOUNT_BASE_URL') ?? 'https://api.icount.co.il/api/v3.php';
+
+/* Long enough for iCount on a bad day, short enough that the function answers
+   well inside its own wall-clock limit — killed by the platform mid-call, it
+   could not record that the outcome is unknown. */
+const TIMEOUT_MS = 30_000;
 
 interface IcountCreds { cid: string; token: string }
 
 function readCreds(c: ProviderCredentials): IcountCreds {
   const cid = c.cid as string | undefined;
   const token = c.token as string | undefined;
-  if (!cid || !token) throw new Error('iCount credentials must include cid and token');
+  if (!cid || !token) throw new NotIssued('iCount credentials must include cid and token');
   return { cid, token };
 }
 
 async function call(c: IcountCreds, path: string, body: Record<string, unknown>) {
+  /* A timeout, a dropped connection or a reply that is not JSON throw as plain
+     errors: the request may have been acted on. Only iCount's own "status:
+     false" is a definite no, and only that throws NotIssued. */
   const res = await fetch(`${BASE}/${path}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${c.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ cid: c.cid, ...body }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const data = await res.json();
-  if (!data?.status) {
+  if (data && typeof data === 'object' && 'status' in data && !data.status) {
     // error_details is often an empty array even on failure; fall back to the
     // description/reason so the message is never blank (e.g. "Token expired").
     const detail = (Array.isArray(data?.error_details) && data.error_details.length)
       ? data.error_details.join('; ')
       : (data?.error_description ?? data?.reason ?? 'iCount request failed');
-    throw new Error(`iCount ${path}: ${detail}`);
+    throw new NotIssued(`iCount ${path}: ${detail}`);
   }
+  if (!data?.status) throw new Error(`iCount ${path}: unrecognised reply`);
   return data;
 }
 
