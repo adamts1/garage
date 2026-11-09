@@ -420,9 +420,13 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      The ticket follows the money: collecting the last of what is owed is the
      moment the job is actually paid for, so the ticket goes to שולם — the same
      transition the close-and-charge drawer makes, reached from the other end.
-     A part payment moves nothing: the customer still owes the rest. */
-  const collect = useCallback(async () => {
-    if (!invoice || owed <= 0) return;
+     A part payment moves nothing: the customer still owes the rest.
+
+     Takes the bill and its balance as arguments rather than reading them from
+     state, because closing with a part payment calls it on a bill issued a
+     moment ago — before the page's own `invoice` and `owed` have caught up. */
+  const collectOn = useCallback(async (invoice: Invoice, owed: number) => {
+    if (owed <= 0) return;
 
     /* The same drawer the counter uses, opened on what is still owed. Taking
        money is one act with one screen, whether the customer is standing there
@@ -454,7 +458,11 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     } finally {
       setBusy(false);
     }
-  }, [dispatch, draft, invoice, openCollectDrawer, owed, run, save, ticket.k]);
+  }, [dispatch, draft, openCollectDrawer, run, save, ticket.k]);
+
+  const collect = useCallback(async () => {
+    if (invoice) await collectOn(invoice, owed);
+  }, [collectOn, invoice, owed]);
 
   /* Give the customer money back — all of what is left on the invoice, or part
      of it. The dialog opens on the whole remaining amount, because that is the
@@ -581,8 +589,17 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         return;
       }
 
-      const result: CloseResult | null = await openCloseDrawer(draft, totals.total);
+      /* Asked before the drawer opens rather than after, because it decides
+         what the drawer may offer: a part payment leaves a balance, and the
+         balance is read off the tax invoice and its receipts. With no provider
+         there are none, and the rest would be owed with nothing remembering it. */
+      const invoicing = await invoicingActive();
+
+      const result: CloseResult | null = await openCloseDrawer(draft, totals.total, invoicing);
       if (!result) return;
+      /** Money taken, but not all of it. */
+      const partPaid = !result.paid && result.method !== null;
+      const left = Math.max(0, Math.round((totals.total - result.amount) * 100) / 100);
 
       const saved = await save({
         // paid → "שולם"; closed with an open balance stays "מוכן לאיסוף"
@@ -590,7 +607,9 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         done: draft.subtasks.length,
         paid: result.paid,
         /* A code, or nothing at all — an open charge is not a way of paying,
-           so the column that says how the money arrived stays empty. */
+           so the column that says how the money arrived stays empty. A part
+           payment records the method it came by; the collect that settles the
+           rest overwrites it with the last one. */
         payMethod: result.method ?? undefined,
         doc: result.doc,
         reference: result.reference,
@@ -598,7 +617,13 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       if (!saved) return;
 
       dispatch(
-        result.paid
+        partPaid
+          ? showSuccess('ticket.partPaymentTaken', {
+              method: payMethodLabel(t, result.method) ?? '-',
+              amount: money(result.amount),
+              left: money(left),
+            })
+          : result.paid
           /* No longer names the document it is about to issue. It used to, and
              the claim was made before anything had been issued — now the
              issuing itself reports, with the number the provider actually gave
@@ -636,19 +661,43 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
          document twice and ends on "גבה ₪X". Asking again would be asking
          whether they meant the thing they just did. */
       const docType: BillDocType = result.paid ? 'invoice_receipt' : 'tax_invoice';
+      /* A part payment is the open charge plus a receipt against it: the bill
+         for the whole job, and a קבלה for what arrived today. The rest is then
+         exactly a tax invoice with money still owed on it, so "גבה תשלום"
+         collects it later the same way it collects any open bill. */
 
       /* A garage that has not connected its provider takes money and writes its
          documents elsewhere. That is a normal way to run, not a failure to
          report on top of a payment that succeeded — so it is asked first rather
          than discovered from an error. */
-      if (!(await invoicingActive())) {
+      if (!invoicing) {
         dispatch(showInfo(result.paid ? 'ticket.paidNoInvoicing' : 'ticket.closedNoInvoicing'));
         return;
       }
 
+      /** Set once a part payment is on the books: the bill, and what is still
+       *  owed on it. */
+      let rest: { bill: Invoice; owed: number } | null = null;
+
       setBusy(true);
       try {
-        await issueNow(docType);
+        const bill = await issueNow(docType);
+        if (partPaid) {
+          /* If this fails the bill stands with all of it owed, which is what
+             the screen will then say — the button offers to collect it again.
+             Never reported as taken: a receipt nobody issued is not a payment
+             the books know about. */
+          const { receipt, owed: stillOwed } = await run('busy.collecting', () => collectInvoice(
+            bill.id, result.amount, result.method!, result.reference,
+          ));
+          setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
+          dispatch(showSuccess('collect.donePartial', {
+            docnum: receipt.docnum,
+            amount: money(receipt.total),
+            left: money(stillOwed),
+          }));
+          rest = { bill, owed: stillOwed };
+        }
       } catch (e) {
         /* The close is recorded and the document is not. Both facts are already
            on screen — the drawer's own message stands, and this says what is
@@ -660,8 +709,14 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       } finally {
         setBusy(false);
       }
+
+      /* A customer splitting the bill at the counter — some cash, the rest on
+         a card — is still standing there, so the drawer opens again on what is
+         left. One paying the rest next week closes it, and the ticket's
+         "גבה תשלום" collects it then. */
+      if (rest) await collectOn(rest.bill, rest.owed);
     },
-    [collect, dispatch, draft, invoice, issueNow, openCloseDrawer, owed, save, t, totals.total],
+    [collect, collectOn, dispatch, draft, invoice, issueNow, openCloseDrawer, owed, run, save, t, ticket.k, totals.total],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button

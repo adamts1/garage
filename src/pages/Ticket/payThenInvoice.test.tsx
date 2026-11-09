@@ -19,7 +19,7 @@
 
 import type { Invoice, Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -118,6 +118,27 @@ const closeAndCharge = async (method: string) => {
   await act(async () => { drawer().getByText(/^גבה |^סגור כרטיס$/).click(); });
   await act(async () => { await vi.advanceTimersByTimeAsync(900); });   // "charging"
   await act(async () => { await vi.advanceTimersByTimeAsync(1500); });  // success screen
+  await act(async () => { await Promise.resolve(); });
+};
+
+/* The close drawer again, with the amount on step 2 typed down to part of the
+   bill. The input is the only one on that step whose label names money taken. */
+const closeAndChargePart = async (method: string, amount: string) => {
+  await act(async () => { screen.getByText(/גבה תשלום|סגור כרטיס וחייב לקוח/).click(); });
+  const drawer = () => {
+    const asides = document.querySelectorAll('aside');
+    return within(asides[asides.length - 1] as HTMLElement);
+  };
+
+  await act(async () => { drawer().getByText(method).click(); });
+  await act(async () => { drawer().getByText('המשך').click(); });
+  await act(async () => {
+    fireEvent.change(drawer().getByLabelText(/סכום שהתקבל/), { target: { value: amount } });
+  });
+  await act(async () => { drawer().getByText('המשך').click(); });
+  await act(async () => { drawer().getByText(/^גבה /).click(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
   await act(async () => { await Promise.resolve(); });
 };
 
@@ -309,6 +330,108 @@ describe('a ticket that already carries an open tax invoice', () => {
     expect(invoiceId).toBe('inv1');
     expect(amount).toBe(1180);
     expect(method).toBe('cash');
+  });
+});
+
+/* Part now, the rest later — by any method.
+
+   A part payment at the counter is the open charge plus a receipt against it:
+   the bill for the whole job as a חשבונית מס, and a קבלה for what arrived. The
+   rest is then an open bill like any other, which "גבה תשלום" already knows how
+   to collect, in one go or in parts. */
+describe('paying part of it when closing', () => {
+  it('bills the whole job and issues a receipt for the part', async () => {
+    issueInvoice.mockResolvedValue(invoice({ id: 'inv9', docType: 'tax_invoice' }));
+    collectInvoice.mockResolvedValue({ receipt: invoice({ docType: 'receipt', total: 500 }), owed: 680 });
+    await renderPage();
+    await closeAndChargePart('כרטיס אשראי', '500');
+
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'tax_invoice');
+    expect(collectInvoice).toHaveBeenCalledTimes(1);
+    const [invoiceId, amount, method] = collectInvoice.mock.calls[0];
+    expect(invoiceId).toBe('inv9');
+    expect(amount).toBe(500);
+    expect(method).toBe('card');
+  });
+
+  it('leaves the ticket open, not paid', async () => {
+    issueInvoice.mockResolvedValue(invoice({ docType: 'tax_invoice' }));
+    const saveTicket = vi.fn(async (_: Ticket) => {});
+    const store = await renderPage(saveTicket);
+    await closeAndChargePart('מזומן', '300');
+
+    expect(saveTicket).toHaveBeenCalledWith(expect.objectContaining({ st: 'done', paid: false, payMethod: 'cash' }));
+    expect(toasts(store)).toContain('ticket.partPaymentTaken');
+    expect(toasts(store)).toContain('collect.donePartial');
+    expect(toasts(store)).not.toContain('ticket.paymentTaken');
+  });
+
+  /* Splitting at the counter: the drawer comes straight back on what is left. */
+  it('opens the drawer again on the rest', async () => {
+    issueInvoice.mockResolvedValue(invoice({ id: 'inv9', docType: 'tax_invoice' }));
+    collectInvoice.mockResolvedValue({ receipt: invoice({ docType: 'receipt', total: 500 }), owed: 680 });
+    await renderPage();
+    await closeAndChargePart('מזומן', '500');
+
+    expect(screen.queryByText('רישום תשלום')).not.toBeNull();
+    const asides = document.querySelectorAll('aside');
+    const drawer = asides[asides.length - 1] as HTMLElement;
+    expect(within(drawer).getByText('נותר לתשלום').parentElement?.textContent).toContain('680');
+  });
+
+  it('settles the ticket when the rest is paid by another method', async () => {
+    issueInvoice.mockResolvedValue(invoice({ id: 'inv9', docType: 'tax_invoice' }));
+    collectInvoice
+      .mockResolvedValueOnce({ receipt: invoice({ docType: 'receipt', total: 500 }), owed: 680 })
+      .mockResolvedValueOnce({ receipt: invoice({ docType: 'receipt', total: 680 }), owed: 0 });
+    const saveTicket = vi.fn(async (_: Ticket) => {});
+    const store = await renderPage(saveTicket);
+    await closeAndChargePart('מזומן', '500');
+
+    const asides = document.querySelectorAll('aside');
+    const drawer = within(asides[asides.length - 1] as HTMLElement);
+    await act(async () => { drawer.getByText('כרטיס אשראי').click(); });
+    await act(async () => { drawer.getByText('המשך').click(); });
+    await act(async () => { drawer.getByText('המשך').click(); });
+    await act(async () => { drawer.getByText(/^הפק קבלה/).click(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(collectInvoice).toHaveBeenCalledTimes(2);
+    expect(collectInvoice.mock.calls[1].slice(0, 3)).toEqual(['inv9', 680, 'card']);
+    expect(saveTicket).toHaveBeenLastCalledWith(expect.objectContaining({ st: 'paid', paid: true, payMethod: 'card' }));
+    expect(toasts(store)).toContain('collect.doneFull');
+  });
+
+  it('refuses more than the bill', async () => {
+    await renderPage();
+    await act(async () => { screen.getByText(/גבה תשלום|סגור כרטיס וחייב לקוח/).click(); });
+    const asides = document.querySelectorAll('aside');
+    const drawer = within(asides[asides.length - 1] as HTMLElement);
+
+    await act(async () => { drawer.getByText('מזומן').click(); });
+    await act(async () => { drawer.getByText('המשך').click(); });
+    await act(async () => {
+      fireEvent.change(drawer.getByLabelText(/סכום שהתקבל/), { target: { value: '5000' } });
+    });
+
+    expect(drawer.getByText('המשך').closest('button')?.disabled).toBe(true);
+  });
+
+  /* With no provider there is no bill to hang the balance on, so nothing would
+     remember the rest — the figure is shown, not offered for editing. */
+  it('is not offered when the garage has no invoicing connected', async () => {
+    invoicingActive.mockResolvedValue(false);
+    await renderPage();
+    await act(async () => { screen.getByText(/גבה תשלום|סגור כרטיס וחייב לקוח/).click(); });
+    const asides = document.querySelectorAll('aside');
+    const drawer = within(asides[asides.length - 1] as HTMLElement);
+
+    await act(async () => { drawer.getByText('מזומן').click(); });
+    await act(async () => { drawer.getByText('המשך').click(); });
+
+    expect(drawer.queryByLabelText(/סכום שהתקבל/)).toBeNull();
   });
 });
 
