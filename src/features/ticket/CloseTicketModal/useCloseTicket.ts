@@ -12,12 +12,18 @@ const identity = (ticket: Ticket) => ({
 });
 
 /** Opens the close-and-charge drawer. Resolves the result, or null if the
- *  drawer was dismissed without finishing. */
+ *  drawer was dismissed without finishing.
+ *
+ *  `partial` lets the amount be typed down to a part payment. Only a garage
+ *  with invoicing connected may be offered it: the balance left over is read
+ *  off the tax invoice and its receipts, and without them nothing would
+ *  remember that the customer still owes the rest. */
 export function useCloseTicket() {
   const open = useModalResult<CloseResult>();
 
   return useCallback(
-    (ticket: Ticket, total: number) => open('closeTicket', { ...identity(ticket), total }),
+    (ticket: Ticket, total: number, partial = false) =>
+      open('closeTicket', { ...identity(ticket), total, partial }),
     [open],
   );
 }
