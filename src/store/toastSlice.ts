@@ -93,6 +93,11 @@ const CONSTRAINT_KEYS: Record<string, string> = {
   customers_garage_name_phone_key: 'errors.namePhoneTaken',
   // ON DELETE RESTRICT: a customer with work orders stays on file.
   tickets_customer_id_fkey: 'customers.deleteBlocked',
+  /* Not constraints but codes issue-invoice puts at the head of its message,
+     for the two states of a billing attempt that mean "do not press again"
+     (see migration 20261109090000_billing_attempts). */
+  billing_in_progress: 'errors.billingInProgress',
+  billing_needs_check: 'errors.billingNeedsCheck',
 };
 
 /** `e` is whatever landed in a catch block. Errors carry their own text — there

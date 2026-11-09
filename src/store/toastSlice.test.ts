@@ -19,6 +19,17 @@ const postgrest = {
 };
 
 describe('showError', () => {
+  /* issue-invoice refuses a second billing act on the same target, and says so
+     in English with a code at the front. The operator must read Hebrew — and
+     must read "do not press again", which the raw message buries. */
+  it.each([
+    ['billing_in_progress: another request is already issuing a document for this', 'errors.billingInProgress'],
+    ['billing_needs_check: no clear answer from the provider (timeout)', 'errors.billingNeedsCheck'],
+  ])('turns the billing lock code in "%s" into words', (message, key) => {
+    const { payload } = showError(new Error(message));
+    expect(payload.key).toBe(key);
+  });
+
   it('reads the message off a Supabase error, which is not an Error', () => {
     expect(postgrest instanceof Error).toBe(false);
 
