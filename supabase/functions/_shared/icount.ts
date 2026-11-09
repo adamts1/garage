@@ -8,7 +8,7 @@
 
 import type {
   InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
-  ProviderCredentials, RecordExpenseInput, RecordedExpense,
+  PaymentPart, ProviderCredentials, RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 import { NotIssued } from './provider.ts';
 
@@ -89,6 +89,32 @@ function paymentBlock(method: string | null, total: number): Record<string, unkn
   return { cash: { sum: total } };
 }
 
+/* Several payments on one document: each part is mapped as above and parts
+   landing on the same key are added together. Cheques stay one entry per
+   cheque, because a cheque is a piece of paper and iCount lists them. The
+   block still balances the document, since the parts add up to it — the
+   function checks that before anything reaches here. */
+function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
+  const sums: Record<'cash' | 'cc' | 'banktransfer', number> = { cash: 0, cc: 0, banktransfer: 0 };
+  const cheques: Array<{ sum: number }> = [];
+  for (const p of parts) {
+    const one = paymentBlock(p.method, p.amount);
+    if ('cheques' in one) cheques.push({ sum: p.amount });
+    else for (const key of Object.keys(sums) as Array<keyof typeof sums>) {
+      if (key in one) sums[key] = Math.round((sums[key] + p.amount) * 100) / 100;
+    }
+  }
+  const block: Record<string, unknown> = {};
+  for (const [key, sum] of Object.entries(sums)) if (sum > 0) block[key] = { sum };
+  if (cheques.length > 0) block.cheques = cheques;
+  return block;
+}
+
+/** The payment block for a document: every part when there are several, else
+ *  the single method. */
+const payBlock = (payments: PaymentPart[] | undefined, method: string | null, total: number) =>
+  payments && payments.length > 0 ? paymentsBlock(payments) : paymentBlock(method, total);
+
 /** doc/create returns only docnum + doc_url; doc/info has doc_id + allocation. */
 async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
   const data = await call(c, 'doc/info', { doctype, docnum });
@@ -116,7 +142,7 @@ export const icountAdapter: InvoiceProvider = {
          rejected without one; a plain invoice describes money not yet received,
          and claiming it was paid is the one thing that would make the document
          a lie. */
-      ...(input.docType === 'invoice_receipt' ? paymentBlock(input.payMethod, input.total) : {}),
+      ...(input.docType === 'invoice_receipt' ? payBlock(input.payments, input.payMethod, input.total) : {}),
       email_to_client: false,
       send_email: false,
     });
@@ -151,7 +177,7 @@ export const icountAdapter: InvoiceProvider = {
         unitprice: input.amount,
         quantity: 1,
       }],
-      ...paymentBlock(input.payMethod, input.amount),
+      ...payBlock(input.payments, input.payMethod, input.amount),
       based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
       email_to_client: false,
       send_email: false,

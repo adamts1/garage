@@ -35,9 +35,11 @@ export function useCloseTicket() {
 export function useCollectPayment() {
   const open = useModalResult<CloseResult>();
 
+  /* `soFar` is what this visit has already taken, in earlier rounds of the
+     same drawer, and not yet put on a receipt. */
   return useCallback(
-    (ticket: Ticket, owed: number, docnum: string) =>
-      open('closeTicket', { ...identity(ticket), total: owed, docnum, mode: 'collect' }),
+    (ticket: Ticket, owed: number, docnum: string, soFar = 0) =>
+      open('closeTicket', { ...identity(ticket), total: owed, docnum, mode: 'collect', soFar }),
     [open],
   );
 }

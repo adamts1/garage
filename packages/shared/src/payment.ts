@@ -92,3 +92,33 @@ export function payMethodHe(raw: string | null | undefined): string | null {
   if (code) return PAY_METHOD_HE[code];
   return (raw ?? '').trim() || null;
 }
+
+/* One payment among several on a single document.
+
+   A customer who pays part in cash and the rest on a card at the same counter
+   visit gets ONE receipt naming both, not a receipt per part. The parts are
+   gathered on screen and sent together; the server checks them and the
+   provider writes them all onto the one document. */
+export interface PaymentPart {
+  method: PayMethod;
+  /** VAT-inclusive, what the customer handed over by this method. */
+  amount: number;
+  /** Last four digits, cheque number, transfer reference — whatever the
+   *  method asks for, if anything was typed. */
+  reference?: string;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** What the parts add up to. */
+export const paymentsTotal = (parts: readonly PaymentPart[]): number =>
+  round2(parts.reduce((sum, p) => sum + p.amount, 0));
+
+/** The method that brought in the most, for the one column that names a
+ *  single method (`tickets.pay_method`). Null with no parts. Ties go to the
+ *  earlier part, which is the one the customer started with. */
+export function mainPayMethod(parts: readonly PaymentPart[]): PayMethod | null {
+  let best: PaymentPart | null = null;
+  for (const p of parts) if (!best || p.amount > best.amount) best = p;
+  return best?.method ?? null;
+}

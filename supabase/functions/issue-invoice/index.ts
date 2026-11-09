@@ -22,7 +22,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
 import { NotIssued } from '../_shared/provider.ts';
-import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, ProviderCredentials } from '../_shared/provider.ts';
+import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, PaymentPart, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
 const ADAPTERS: Record<string, InvoiceProvider> = {
@@ -72,6 +72,40 @@ function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/* Mirrors PAY_METHODS in packages/shared/src/payment.ts. Deno does not import
+   the package, so the list is repeated; a code outside it is refused rather
+   than stored, because the column it lands in is read back as a code. */
+const PAY_METHODS = ['cash', 'card', 'bit', 'bank_transfer', 'cheque', 'other'];
+
+/** The `payments` a request carries, checked: absent → null, malformed → a
+ *  message to refuse with. Each part a known method and a positive sum. */
+function readPayments(raw: unknown): PaymentPart[] | null | string {
+  if (raw == null) return null;
+  if (!Array.isArray(raw) || raw.length === 0) return 'payments must be a non-empty list';
+  const parts: PaymentPart[] = [];
+  for (const p of raw) {
+    const method = String(p?.method ?? '');
+    const amount = round2(Number(p?.amount));
+    if (!PAY_METHODS.includes(method)) return `unknown payment method: "${method}"`;
+    if (!Number.isFinite(amount) || amount <= 0) return 'every payment needs a positive amount';
+    const reference = p?.reference == null ? null : String(p.reference).trim() || null;
+    parts.push({ method, amount, reference });
+  }
+  return parts;
+}
+
+/** How a list of payments is stored: one part is an ordinary single-method
+ *  document, written exactly as before; several go into `payments`, and no one
+ *  method names the document. */
+function paymentColumns(parts: PaymentPart[]) {
+  if (parts.length === 1) {
+    return { pay_method: parts[0].method, pay_reference: parts[0].reference ?? null, payments: null };
+  }
+  return { pay_method: null, pay_reference: null, payments: parts };
+}
+
+const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
 /* A line is priced BEFORE VAT and the provider adds the VAT, so the gross a
    customer sees is never chosen directly — it is whatever subtotal + round(
@@ -255,6 +289,12 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (existing) return json({ invoice: existing, reused: true });
 
+      /* Several methods at one visit, when the caller sends them. Checked here,
+         before anything is reserved; their sum is checked against the bill once
+         the bill is priced, below. */
+      const payments = readPayments(body.payments);
+      if (typeof payments === 'string') return json({ error: payments }, 400);
+
       const { provider, adapter, credentials, vatRate, defaultDocType } = await billing(ticket.garage_id);
 
       const busy = await reserve(ticket.garage_id, 'issue', ticket.id, null);
@@ -290,6 +330,29 @@ Deno.serve(async (req) => {
       const vat = round2(subtotal * vatRate);
       const total = round2(subtotal + vat);
 
+      /* A tax invoice records no payment, so a list of them is a mistake in the
+         caller. An invoice-receipt says the bill was paid — all of it — so the
+         parts must add up to exactly the bill, or the document would claim a
+         payment that did not happen (or hide one that did). */
+      if (payments && docType !== 'invoice_receipt') {
+        await release('payments on a tax invoice');
+        return json({ error: 'a tax invoice records no payment; collect against it with a receipt' }, 400);
+      }
+      /* The screen rounds VAT and total together, this function rounds the VAT
+         first — the two can land an agora apart on the same works. That much,
+         and no more, the last payment absorbs: it is the part that "paid the
+         rest", and the single-method path has always used this function's
+         total in the same way. Anything larger is a real disagreement. */
+      if (payments) {
+        const diff = round2(total - sumOf(payments));
+        const last = payments[payments.length - 1];
+        if (Math.abs(diff) > 0.02 || round2(last.amount + diff) <= 0) {
+          await release('payments do not add up');
+          return json({ error: `the payments add up to ${sumOf(payments)}, the bill is ${total}`, total }, 400);
+        }
+        last.amount = round2(last.amount + diff);
+      }
+
       const doc = await provide(() => adapter.issue({
         credentials,
         docType,
@@ -298,6 +361,7 @@ Deno.serve(async (req) => {
         /* A tax invoice records no payment, so it carries none — not the pay
            method sitting on the ticket, which describes how it WILL be paid. */
         payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
+        payments: payments ?? undefined,
         total,
       }));
       if (doc instanceof Response) return doc;
@@ -322,8 +386,12 @@ Deno.serve(async (req) => {
         vat_rate: vatRate,
         vat,
         total,
-        pay_method: docType === 'invoice_receipt' ? ticket.pay_method : null,
-        pay_reference: docType === 'invoice_receipt' ? ticket.reference : null,
+        ...(payments
+          ? paymentColumns(payments)
+          : {
+              pay_method: docType === 'invoice_receipt' ? ticket.pay_method : null,
+              pay_reference: docType === 'invoice_receipt' ? ticket.reference : null,
+            }),
         status: 'issued',
       };
       const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
@@ -484,6 +552,16 @@ Deno.serve(async (req) => {
       }
       if (inv.status === 'cancelled') return json({ error: 'invoice is cancelled' }, 409);
 
+      /* Every payment taken at this visit, on one receipt. Their sum is the
+         amount; an `amount` sent beside them must agree, or one of the two is
+         wrong and nobody can say which. */
+      const payments = readPayments(body.payments);
+      if (typeof payments === 'string') return json({ error: payments }, 400);
+      if (payments && body.amount != null && round2(Number(body.amount)) !== sumOf(payments)) {
+        return json({ error: `amount ${body.amount} does not match the payments (${sumOf(payments)})` }, 400);
+      }
+      const asked = payments ? sumOf(payments) : body.amount == null ? null : round2(Number(body.amount));
+
       const { provider, adapter, credentials } = await billing(inv.garage_id);
 
       /* Reserved before what is owed is read, not after. The read alone could not
@@ -491,7 +569,7 @@ Deno.serve(async (req) => {
          and both receipts were created before either was stored. With the
          invoice reserved, the second is refused here and the balance below is
          the one that will still be true when the receipt lands. */
-      const busy = await reserve(inv.garage_id, 'collect', inv.id, body.amount == null ? null : round2(Number(body.amount)));
+      const busy = await reserve(inv.garage_id, 'collect', inv.id, asked);
       if (busy) return busy;
 
       /* What is still owed, asked of the database. */
@@ -506,7 +584,7 @@ Deno.serve(async (req) => {
       if (owed <= 0) { await release('already settled'); return json({ error: 'this invoice is already settled' }, 409); }
 
       // Absent, the whole of what is left — paying in full is the common case.
-      const requested = body.amount == null ? owed : round2(Number(body.amount));
+      const requested = asked ?? owed;
       if (!Number.isFinite(requested) || requested <= 0) {
         await release('bad amount');
         return json({ error: 'amount must be a positive number' }, 400);
@@ -525,6 +603,7 @@ Deno.serve(async (req) => {
         credentials,
         customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
         payMethod,
+        payments: payments ?? undefined,
         amount: requested,
         basedOnDocnum: inv.provider_docnum,
       }));
@@ -554,8 +633,9 @@ Deno.serve(async (req) => {
         vat_rate: Number(inv.vat_rate),
         vat: 0,
         total: requested,
-        pay_method: payMethod,
-        pay_reference: (body.reference as string) ?? null,
+        ...(payments
+          ? paymentColumns(payments)
+          : { pay_method: payMethod, pay_reference: (body.reference as string) ?? null }),
         status: 'issued',
       }).select().single();
       await stored(receipt?.id ?? null, nErr?.message);

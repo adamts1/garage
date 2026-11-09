@@ -76,7 +76,13 @@ export default function InvoiceDetail({
           <dd>{invoice.allocationNumber ?? <span className={styles.muted}>-</span>}</dd>
 
           <dt><IconCard /> {t('invoices.detail.payMethod')}</dt>
-          <dd>{payMethodLabel(t, invoice.payMethod) ?? <span className={styles.muted}>-</span>}</dd>
+          <dd>
+            {/* Several methods at one visit sit in `payments`, each with its sum;
+                then `payMethod` is empty, since no one method names the document. */}
+            {invoice.payments
+              ? invoice.payments.map((p) => `${payMethodLabel(t, p.method)} ${money(p.amount)}`).join(' + ')
+              : payMethodLabel(t, invoice.payMethod) ?? <span className={styles.muted}>-</span>}
+          </dd>
         </dl>
 
         <div className={styles.sum}>
