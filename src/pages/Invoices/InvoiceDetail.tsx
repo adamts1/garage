@@ -39,7 +39,9 @@ export default function InvoiceDetail({
   const { t } = useTranslation();
 
   const lineColumns: Column<Line>[] = [
-    { key: 'desc', header: 'invoices.lines.desc', render: (l) => l.desc },
+    /* A part sits under the work it was used in, marked the way the issued
+       document marks it. Older documents do not say, and stay flat. */
+    { key: 'desc', header: 'invoices.lines.desc', render: (l) => (l.kind === 'part' ? `└ ${l.desc}` : l.desc) },
     { key: 'qty', header: 'invoices.lines.qty', width: 80, cellClassName: styles.muted, render: (l) => l.qty },
     { key: 'unit', header: 'invoices.lines.unit', width: 110, cellClassName: styles.muted, render: (l) => money(l.unit_price) },
     { key: 'total', header: 'invoices.lines.total', width: 120, render: (l) => <strong>{money(l.line_total)}</strong> },
@@ -63,6 +65,22 @@ export default function InvoiceDetail({
             <>
               <dt><IconDoc /> {t('invoices.detail.idNumber')}</dt>
               <dd>{invoice.customerIdNumber}</dd>
+            </>
+          )}
+
+          {invoice.vehicle && (
+            <>
+              <dt><IconDoc /> {t('invoices.detail.vehicle')}</dt>
+              <dd>
+                {[invoice.vehicle.plate, invoice.vehicle.car, invoice.vehicle.km && t('invoices.detail.km', { km: invoice.vehicle.km })]
+                  .filter(Boolean).join(' · ') || '-'}
+              </dd>
+              <dt><IconCard /> {t('invoices.detail.visit')}</dt>
+              <dd>
+                {invoice.vehicle.openedAt ? fmt(invoice.vehicle.openedAt) : '-'}
+                {' – '}
+                {invoice.vehicle.closedAt ? fmt(invoice.vehicle.closedAt) : '-'}
+              </dd>
             </>
           )}
 

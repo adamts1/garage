@@ -28,6 +28,10 @@ export interface InvoiceItem {
   description: string;
   unitprice: number; // pre-VAT
   quantity: number;
+  /** A part, printed under the work it was used in. Providers list lines flat,
+   *  so each adapter marks it the way its documents can show — the stored line
+   *  keeps the plain name. */
+  indent?: boolean;
 }
 
 /** The two kinds of bill. A מס-קבלה is billed and settled at once; a חשבונית מס
@@ -56,6 +60,10 @@ export interface IssueInput {
    *  `payMethod`. Must add up to `total`. Never set on a tax invoice. */
   payments?: PaymentPart[];
   total: number; // VAT-inclusive, for providers that need a balancing payment
+  /** Free text printed on the document — the car, its mileage, when it came in
+   *  and when the work was done. Optional: a provider that cannot print it
+   *  issues the document without it rather than not at all. */
+  note?: string;
 }
 
 /** Money arriving against a tax invoice already issued. */

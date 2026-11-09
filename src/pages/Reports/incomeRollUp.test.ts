@@ -10,7 +10,7 @@ const doc = (over: Partial<Invoice>): Invoice => ({
   issuedAt: '2026-08-05T10:00:00.000Z',
   customerName: null, customerIdNumber: null, customerAddress: null, customerPhone: null,
   lines: [], subtotal: 100, vatRate: 0.18, vat: 18, total: 118,
-  payMethod: null, payReference: null, payments: null,
+  payMethod: null, payReference: null, payments: null, vehicle: null,
   status: 'issued', cancelledBy: null, creditsInvoiceId: null, paysInvoiceId: null,
   createdAt: '2026-08-05T10:00:00.000Z',
   ...over,

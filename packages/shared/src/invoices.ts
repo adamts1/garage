@@ -35,6 +35,24 @@ export interface InvoiceLine {
   qty: number;
   unit_price: number;
   line_total: number;
+  /** Which of the ticket's works the line was billed under — its position, and
+   *  its name — and whether it is that work's labour or one of its parts.
+   *  Frozen at issue since 20261110090000; absent on older documents and on
+   *  counter sales, which have no works. */
+  group?: number;
+  work?: string;
+  kind?: 'work' | 'part';
+}
+
+/** The car a document was issued for, as the ticket had it then. */
+export interface InvoiceVehicle {
+  plate: string | null;
+  car: string | null;
+  km: string | null;
+  /** ISO — when the car came in. */
+  openedAt: string | null;
+  /** ISO — when the work was finished. */
+  closedAt: string | null;
 }
 
 /** One issued document, exactly as stored — a frozen snapshot, never recomputed. */
@@ -66,6 +84,8 @@ export interface Invoice {
    *  single method (that is `payMethod`) and on everything issued before the
    *  column existed. When set, `payMethod` is null: no one method names it. */
   payments: PaymentPart[] | null;
+  /** Frozen at issue on a ticket's bill since 20261110090000; null otherwise. */
+  vehicle: InvoiceVehicle | null;
   status: InvoiceStatus;
   /** the credit note that cancelled this one, if any */
   cancelledBy: string | null;
@@ -110,6 +130,15 @@ const rowToInvoice = (r: any): Invoice => ({
         amount: Number(p.amount),
         ...(p.reference ? { reference: p.reference } : {}),
       }))
+    : null,
+  vehicle: r.vehicle && typeof r.vehicle === 'object'
+    ? {
+        plate: r.vehicle.plate ?? null,
+        car: r.vehicle.car ?? null,
+        km: r.vehicle.km ?? null,
+        openedAt: r.vehicle.opened_at ?? null,
+        closedAt: r.vehicle.closed_at ?? null,
+      }
     : null,
   status: r.status,
   cancelledBy: r.cancelled_by ?? null,
@@ -468,6 +497,24 @@ export interface InvoiceGroup {
   parts: InvoiceLine[];
 }
 
+/** Groups lines that say which work they belong to, in the order issued. Null
+ *  unless every line says so — a document is grouped whole or not at all. */
+const groupFrozenLines = (lines: readonly InvoiceLine[]): InvoiceGroup[] | null => {
+  if (!lines.length || !lines.every((l) => typeof l.group === 'number' && l.work && l.kind)) return null;
+  const groups: InvoiceGroup[] = [];
+  let at: number | null = null;
+  for (const l of lines) {
+    if (l.group !== at) {
+      groups.push({ name: l.work!, labour: null, parts: [] });
+      at = l.group!;
+    }
+    const g = groups[groups.length - 1];
+    if (l.kind === 'work') g.labour = l;
+    else g.parts.push(l);
+  }
+  return groups;
+};
+
 /** Money compares to the agora; these have been through a float and a database. */
 const sameMoney = (a: number, b: number) => Math.abs(Number(a) - Number(b)) < 0.005;
 
@@ -475,6 +522,11 @@ export const groupInvoiceLines = (
   inv: Pick<Invoice, 'lines'>,
   works: readonly TicketWork[] | undefined,
 ): InvoiceGroup[] | null => {
+  /* A document issued since its lines carried their work needs no ticket and
+     no check: the grouping is part of what was issued. */
+  const frozen = groupFrozenLines(inv.lines);
+  if (frozen) return frozen;
+
   if (!works?.length || !inv.lines.length) return null;
 
   const groups: InvoiceGroup[] = [];
