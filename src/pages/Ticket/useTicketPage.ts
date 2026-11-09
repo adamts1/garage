@@ -1,5 +1,5 @@
 import {
-  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -37,6 +37,15 @@ const currentInvoice = (all: readonly Invoice[], ticketKey: string) => {
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** One round of the drawer, as a payment among the visit's others. */
+const partOf = (r: CloseResult): PaymentPart => ({
+  method: r.method!,
+  amount: r.amount,
+  ...(r.reference ? { reference: r.reference } : {}),
+});
 
 /* The ticket page edits a DRAFT, and the draft reaches the database only when
    somebody saves it.
@@ -374,12 +383,14 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      and refuses to invoice unsaved works; the close-and-charge drawer has just
      saved the ticket itself and has already told the customer's money apart from
      the question of whether to bill it. */
-  const issueNow = useCallback(async (docType: BillDocType) => {
+  const issueNow = useCallback(async (docType: BillDocType, payments?: PaymentPart[]) => {
     /* Both ways of issuing come through here, so the overlay is claimed here
        too rather than at each caller. The wait is a provider round-trip over a
        network — the longest thing this page does, and the one a disabled button
        says nothing about. */
-    const inv = await run('busy.issuingInvoice', () => issueInvoice(ticket.k, docType));
+    const inv = await run('busy.issuingInvoice', () => (payments
+      ? issueInvoice(ticket.k, docType, payments)
+      : issueInvoice(ticket.k, docType)));
     setTicketDocs((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
     dispatch(showSuccess('invoiceIssue.issued', {
       docType: inv.docType, docnum: inv.docnum, total: money(inv.total),
@@ -415,34 +426,55 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     }
   }, [dirty, dispatch, issueNow, openModal, ticket.customer, totals.total]);
 
-  /* Money arriving against a חשבונית מס, as a קבלה of its own.
+  /* One visit's payments, gathered before anything is issued.
+
+     A customer paying in parts is usually still at the counter — some cash,
+     the rest on a card — so after every part the drawer opens again on what is
+     left. Nothing is issued between rounds: the visit gets ONE document naming
+     every method, rather than a receipt per part. The rounds end when nothing
+     is owed or the drawer is closed, and closing is how the rest is left for
+     another day.
+
+     Appends to `parts` and returns it. `due` is what is owed before them. */
+  const gather = useCallback(async (parts: PaymentPart[], due: number, docnum: string) => {
+    let left = round2(due - paymentsTotal(parts));
+    while (left > 0) {
+      const answer = await openCollectDrawer(draft, left, docnum, paymentsTotal(parts));
+      /* Collecting offers no open-charge card, so a finished drawer always names
+         a method — but the type allows null, and defaulting beats asserting. */
+      if (!answer || !answer.method) break;
+      parts.push(partOf(answer));
+      left = round2(left - answer.amount);
+    }
+    return parts;
+  }, [draft, openCollectDrawer]);
+
+  /* Money arriving against a חשבונית מס, as one קבלה for the visit.
 
      The ticket follows the money: collecting the last of what is owed is the
      moment the job is actually paid for, so the ticket goes to שולם — the same
      transition the close-and-charge drawer makes, reached from the other end.
-     A part payment moves nothing: the customer still owes the rest. */
-  const collect = useCallback(async () => {
-    if (!invoice || owed <= 0) return;
+     A part payment moves nothing: the customer still owes the rest.
 
+     Takes the bill and its balance as arguments rather than reading them from
+     state, because closing with a part payment calls it on a bill issued a
+     moment ago — before the page's own `invoice` and `owed` have caught up. */
+  const collectOn = useCallback(async (invoice: Invoice, owed: number, parts: PaymentPart[] = []) => {
     /* The same drawer the counter uses, opened on what is still owed. Taking
        money is one act with one screen, whether the customer is standing there
        at the end of the job or settling a bill from last month. */
-    const answer = await openCollectDrawer(draft, owed, invoice.docnum);
-    /* Collecting offers no open-charge card, so a finished drawer always names
-       a method — but the type allows null, and defaulting beats asserting. */
-    if (!answer || !answer.method) return;
+    await gather(parts, owed, invoice.docnum);
+    if (parts.length === 0) return;
 
     setBusy(true);
     try {
-      const { receipt, owed: left } = await run('busy.collecting', () => collectInvoice(
-        invoice.id, answer.amount, answer.method!, answer.reference,
-      ));
+      const { receipt, owed: left } = await run('busy.collecting', () => collectInvoice(invoice.id, parts));
       setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 
       if (left <= 0) {
         /* Through save(), so it reaches the database and the board the way any
            other status change does. */
-        await save({ st: 'paid', paid: true, payMethod: answer.method });
+        await save({ st: 'paid', paid: true, payMethod: mainPayMethod(parts) ?? undefined });
       }
       dispatch(showSuccess(left <= 0 ? 'collect.doneFull' : 'collect.donePartial', {
         docnum: receipt.docnum,
@@ -450,11 +482,18 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         left: money(left),
       }));
     } catch (e) {
+      /* Never reported as taken: a receipt nobody issued is not a payment the
+         books know about. The bill still shows all of it owed, and the button
+         offers to collect it again. */
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
-  }, [dispatch, draft, invoice, openCollectDrawer, owed, run, save, ticket.k]);
+  }, [dispatch, gather, run, save, ticket.k]);
+
+  const collect = useCallback(async () => {
+    if (invoice) await collectOn(invoice, owed);
+  }, [collectOn, invoice, owed]);
 
   /* Give the customer money back — all of what is left on the invoice, or part
      of it. The dialog opens on the whole remaining amount, because that is the
@@ -581,33 +620,54 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         return;
       }
 
-      const result: CloseResult | null = await openCloseDrawer(draft, totals.total);
-      if (!result) return;
+      /* Asked before the drawer opens rather than after, because it decides
+         what the drawer may offer: a part payment leaves a balance, and the
+         balance is read off the tax invoice and its receipts. With no provider
+         there are none, and the rest would be owed with nothing remembering it. */
+      const invoicing = await invoicingActive();
+
+      const total = round2(totals.total);
+      const first: CloseResult | null = await openCloseDrawer(draft, total, invoicing);
+      if (!first) return;
+
+      /* The first round is the close drawer itself; a part payment there opens
+         the collect drawer on the rest, round after round, before anything is
+         saved or issued. See gather(). */
+      const parts: PaymentPart[] = first.method ? [partOf(first)] : [];
+      if (first.method && !first.paid) await gather(parts, total, '');
+
+      const taken = paymentsTotal(parts);
+      const paid = parts.length > 0 && taken >= total;
+      /** Money taken, but not all of it. */
+      const partPaid = parts.length > 0 && !paid;
+      const left = Math.max(0, round2(total - taken));
+      const methods = [...new Set(parts.map((p) => payMethodLabel(t, p.method) ?? '-'))].join(' + ');
 
       const saved = await save({
         // paid → "שולם"; closed with an open balance stays "מוכן לאיסוף"
-        st: result.paid ? 'paid' : 'done',
+        st: paid ? 'paid' : 'done',
         done: draft.subtasks.length,
-        paid: result.paid,
+        paid,
         /* A code, or nothing at all — an open charge is not a way of paying,
-           so the column that says how the money arrived stays empty. */
-        payMethod: result.method ?? undefined,
-        doc: result.doc,
-        reference: result.reference,
+           so the column that says how the money arrived stays empty. Several
+           methods are named by the one that brought in the most; the document
+           itself lists them all. */
+        payMethod: mainPayMethod(parts) ?? undefined,
+        doc: paid ? t('close.docReceipt') : partPaid ? t('close.docInvoiceAndReceipt') : first.doc,
+        reference: parts.length === 1 ? parts[0].reference : undefined,
       });
       if (!saved) return;
 
       dispatch(
-        result.paid
+        partPaid
+          ? showSuccess('ticket.partPaymentTaken', { method: methods, amount: money(taken), left: money(left) })
+          : paid
           /* No longer names the document it is about to issue. It used to, and
              the claim was made before anything had been issued — now the
              issuing itself reports, with the number the provider actually gave
              back. Two messages, and the second one is true. */
-          ? showSuccess('ticket.paymentTaken', {
-              method: payMethodLabel(t, result.method) ?? '-',
-              total: money(totals.total),
-            })
-          : showErrorKey('ticket.closedWithBalance', { total: money(totals.total) }),
+          ? showSuccess('ticket.paymentTaken', { method: methods, total: money(total) })
+          : showErrorKey('ticket.closedWithBalance', { total: money(total) }),
       );
 
       /* The document follows the money, without a second trip into the ticket.
@@ -618,37 +678,55 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
          behind them.
 
          The open charge follows the debt the same way, and for the same reason.
-         It used to return here, on the argument that billing a debt is a
-         decision rather than a record of a payment — but the drawer does not
-         offer it as a decision still to be made. Pick חיוב פתוח and it names
-         the document on the collect step, again in the summary, and once more on
-         the success screen: "יופק חשבונית מס (חיוב פתוח)". Three screens of
-         promise and nothing issuing it left the debt side with exactly the
-         backlog the paid side had — jobs closed against a customer's account
-         with no invoice behind them, and output VAT owed on none of them.
+         Pick חיוב פתוח and the drawer names the document three times: "יופק
+         חשבונית מס (חיוב פתוח)". Jobs closed against a customer's account with
+         no invoice behind them would owe output VAT on none of them.
 
-         So the only thing the payment decides is WHICH document. A מס-קבלה
-         records money that arrived; a חשבונית מס bills money that has not. What
-         it no longer decides is whether anything is issued at all.
+         So the only thing the payment decides is WHICH document:
+         - all of it paid → one מס-קבלה, naming every method used;
+         - part of it → a חשבונית מס for the job, and one קבלה for what arrived
+           today, naming every method — the rest is then an open bill like any
+           other, collected later by "גבה תשלום";
+         - none of it → the חשבונית מס alone.
 
          Deliberately without the confirmation dialog the button puts up: the
-         person has just worked through three steps of a drawer that names the
-         document twice and ends on "גבה ₪X". Asking again would be asking
-         whether they meant the thing they just did. */
-      const docType: BillDocType = result.paid ? 'invoice_receipt' : 'tax_invoice';
+         person has just worked through a drawer that names the document twice
+         and ends on "גבה ₪X". Asking again would be asking whether they meant
+         the thing they just did. */
 
       /* A garage that has not connected its provider takes money and writes its
          documents elsewhere. That is a normal way to run, not a failure to
          report on top of a payment that succeeded — so it is asked first rather
-         than discovered from an error. */
-      if (!(await invoicingActive())) {
-        dispatch(showInfo(result.paid ? 'ticket.paidNoInvoicing' : 'ticket.closedNoInvoicing'));
+         than discovered from an error. (It is never offered a part payment, so
+         it has at most one.) */
+      if (!invoicing) {
+        dispatch(showInfo(paid ? 'ticket.paidNoInvoicing' : 'ticket.closedNoInvoicing'));
         return;
       }
 
       setBusy(true);
       try {
-        await issueNow(docType);
+        if (paid) {
+          /* One method is the ordinary document, read off the saved ticket as
+             it always was; several are sent, and the server checks they add up
+             to the bill. */
+          await issueNow('invoice_receipt', parts.length > 1 ? parts : undefined);
+        } else {
+          const bill = await issueNow('tax_invoice');
+          if (partPaid) {
+            /* If this fails the bill stands with all of it owed, which is what
+               the screen will then say — the button offers to collect it again.
+               Never reported as taken: a receipt nobody issued is not a payment
+               the books know about. */
+            const { receipt, owed: stillOwed } = await run('busy.collecting', () => collectInvoice(bill.id, parts));
+            setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
+            dispatch(showSuccess('collect.donePartial', {
+              docnum: receipt.docnum,
+              amount: money(receipt.total),
+              left: money(stillOwed),
+            }));
+          }
+        }
       } catch (e) {
         /* The close is recorded and the document is not. Both facts are already
            on screen — the drawer's own message stands, and this says what is
@@ -661,7 +739,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         setBusy(false);
       }
     },
-    [collect, dispatch, draft, invoice, issueNow, openCloseDrawer, owed, save, t, totals.total],
+    [collect, dispatch, draft, gather, invoice, issueNow, openCloseDrawer, owed, run, save, t, ticket.k, totals.total],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button
