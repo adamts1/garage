@@ -426,37 +426,45 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      state, because closing with a part payment calls it on a bill issued a
      moment ago — before the page's own `invoice` and `owed` have caught up. */
   const collectOn = useCallback(async (invoice: Invoice, owed: number) => {
-    if (owed <= 0) return;
+    /* Round after round until nothing is owed: a customer paying in parts is
+       usually still at the counter, so every part payment opens the drawer
+       again on what is left. Closing the drawer is how the rest is left for
+       later, and a failure stops too — the advisor reads the error before
+       anything else is asked of them. */
+    let due = owed;
+    while (due > 0) {
+      /* The same drawer the counter uses, opened on what is still owed. Taking
+         money is one act with one screen, whether the customer is standing there
+         at the end of the job or settling a bill from last month. */
+      const answer = await openCollectDrawer(draft, due, invoice.docnum);
+      /* Collecting offers no open-charge card, so a finished drawer always names
+         a method — but the type allows null, and defaulting beats asserting. */
+      if (!answer || !answer.method) return;
 
-    /* The same drawer the counter uses, opened on what is still owed. Taking
-       money is one act with one screen, whether the customer is standing there
-       at the end of the job or settling a bill from last month. */
-    const answer = await openCollectDrawer(draft, owed, invoice.docnum);
-    /* Collecting offers no open-charge card, so a finished drawer always names
-       a method — but the type allows null, and defaulting beats asserting. */
-    if (!answer || !answer.method) return;
+      setBusy(true);
+      try {
+        const { receipt, owed: left } = await run('busy.collecting', () => collectInvoice(
+          invoice.id, answer.amount, answer.method!, answer.reference,
+        ));
+        setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 
-    setBusy(true);
-    try {
-      const { receipt, owed: left } = await run('busy.collecting', () => collectInvoice(
-        invoice.id, answer.amount, answer.method!, answer.reference,
-      ));
-      setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
-
-      if (left <= 0) {
-        /* Through save(), so it reaches the database and the board the way any
-           other status change does. */
-        await save({ st: 'paid', paid: true, payMethod: answer.method });
+        if (left <= 0) {
+          /* Through save(), so it reaches the database and the board the way any
+             other status change does. */
+          await save({ st: 'paid', paid: true, payMethod: answer.method });
+        }
+        dispatch(showSuccess(left <= 0 ? 'collect.doneFull' : 'collect.donePartial', {
+          docnum: receipt.docnum,
+          amount: money(receipt.total),
+          left: money(left),
+        }));
+        due = left;
+      } catch (e) {
+        dispatch(showError(e));
+        return;
+      } finally {
+        setBusy(false);
       }
-      dispatch(showSuccess(left <= 0 ? 'collect.doneFull' : 'collect.donePartial', {
-        docnum: receipt.docnum,
-        amount: money(receipt.total),
-        left: money(left),
-      }));
-    } catch (e) {
-      dispatch(showError(e));
-    } finally {
-      setBusy(false);
     }
   }, [dispatch, draft, openCollectDrawer, run, save, ticket.k]);
 

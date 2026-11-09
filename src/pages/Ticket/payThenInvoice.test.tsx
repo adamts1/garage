@@ -404,6 +404,59 @@ describe('paying part of it when closing', () => {
     expect(toasts(store)).toContain('collect.doneFull');
   });
 
+  /* Every part payment, not just the first: the drawer keeps coming back while
+     anything is owed, and stops once the bill is settled. */
+  it('keeps reopening on the balance until it is paid', async () => {
+    issueInvoice.mockResolvedValue(invoice({ id: 'inv9', docType: 'tax_invoice' }));
+    collectInvoice
+      .mockResolvedValueOnce({ receipt: invoice({ docType: 'receipt', total: 500 }), owed: 680 })
+      .mockResolvedValueOnce({ receipt: invoice({ docType: 'receipt', total: 300 }), owed: 380 })
+      .mockResolvedValueOnce({ receipt: invoice({ docType: 'receipt', total: 380 }), owed: 0 });
+    const saveTicket = vi.fn(async (_: Ticket) => {});
+    await renderPage(saveTicket);
+    await closeAndChargePart('מזומן', '500');
+
+    const drawer = () => {
+      const asides = document.querySelectorAll('aside');
+      return within(asides[asides.length - 1] as HTMLElement);
+    };
+    const payRound = async (method: string, amount?: string) => {
+      await act(async () => { drawer().getByText(method).click(); });
+      await act(async () => { drawer().getByText('המשך').click(); });
+      if (amount) {
+        await act(async () => {
+          fireEvent.change(drawer().getByLabelText(/סכום שהתקבל/), { target: { value: amount } });
+        });
+      }
+      await act(async () => { drawer().getByText('המשך').click(); });
+      await act(async () => { drawer().getByText(/^הפק קבלה/).click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(900); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+      await act(async () => { await Promise.resolve(); });
+    };
+
+    await payRound('כרטיס אשראי', '300');
+    // Second part payment → the drawer is back, on what is left after it.
+    expect(drawer().getByText('נותר לתשלום').parentElement?.textContent).toContain('380');
+
+    await payRound('מזומן');
+    expect(collectInvoice).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText('רישום תשלום')).toBeNull();
+    expect(saveTicket).toHaveBeenLastCalledWith(expect.objectContaining({ st: 'paid', paid: true }));
+  });
+
+  it('stops asking once the drawer is closed', async () => {
+    issueInvoice.mockResolvedValue(invoice({ id: 'inv9', docType: 'tax_invoice' }));
+    collectInvoice.mockResolvedValue({ receipt: invoice({ docType: 'receipt', total: 500 }), owed: 680 });
+    await renderPage();
+    await closeAndChargePart('מזומן', '500');
+
+    await act(async () => { const xs = screen.getAllByLabelText('סגירה'); xs[xs.length - 1].click(); });
+
+    expect(screen.queryByText('רישום תשלום')).toBeNull();
+    expect(collectInvoice).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses more than the bill', async () => {
     await renderPage();
     await act(async () => { screen.getByText(/גבה תשלום|סגור כרטיס וחייב לקוח/).click(); });
