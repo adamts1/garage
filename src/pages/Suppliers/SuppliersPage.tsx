@@ -5,7 +5,7 @@ import { Button } from '../../components/Button';
 import { CrudForm } from '../../components/CrudForm';
 import { TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
-import { CellInput, RowActions, Table, type Column } from '../../components/Table';
+import { CellInput, PagedTable, RowActions, type Column } from '../../components/Table';
 import styles from './SuppliersPage.module.css';
 import { blankSupplier, toDraft, useSuppliers, type SupplierDraft } from './useSuppliers';
 
@@ -138,7 +138,7 @@ export default function SuppliersPage() {
         </CrudForm>
       )}
 
-      <Table columns={columns} rows={rows} rowKey={(s) => s.id} emptyKey="suppliers.empty" />
+      <PagedTable columns={columns} rows={rows} rowKey={(s) => s.id} emptyKey="suppliers.empty" />
     </>
   );
 }

@@ -639,18 +639,86 @@ export const listTickets = async (): Promise<Ticket[]> => {
   }
 };
 
-/** A car's work orders from the garage's previous system, newest first. Empty
- *  where nothing was imported, or where the column does not exist yet. */
-export const listCarLegacyHistory = async (carId: string): Promise<Ticket[]> => {
-  const { data, error } = await getClient()
-    .from('tickets')
-    .select('*, works(*, work_items(*))')
-    .eq('car_id', carId)
-    .not('legacy_source', 'is', null)
-    .order('created_at', { ascending: false });
+/* ---------------- imported history (legacy_source) ----------------
+
+   Kept out of listTickets, so the board and the reports never carry it; each
+   screen that shows it asks for just the part it shows. Every reader returns
+   empty, not an error, on a database the 20261110100000 columns have not
+   reached. */
+
+/** Header columns only: what a list of cards shows, without their lines. */
+const LEGACY_HEADER = 'id, key, status, type, epic, priority, points, title, plate, car, customer_id, car_id, '
+  + 'customer_name, phone, km, year, amount, done, subtasks, flags, created_at, closed_at, paid, '
+  + 'legacy_source, legacy_number';
+
+const legacyRows = async (q: PromiseLike<{ data: unknown[] | null; error: { code?: string } | null }>) => {
+  const { data, error } = await q;
   if (isMissingColumn(error)) return [];
   if (error) throw error;
   return (data ?? []).map(rowToTicket);
+};
+
+/** A car's work orders from the garage's previous system, newest first, with
+ *  their lines — one car's worth is small, and its printed history lists them. */
+export const listCarLegacyHistory = async (carId: string): Promise<Ticket[]> =>
+  legacyRows(getClient()
+    .from('tickets').select('*, works(*, work_items(*))')
+    .eq('car_id', carId).not('legacy_source', 'is', null)
+    .order('created_at', { ascending: false }));
+
+/** A customer's work orders from the previous system, newest first. */
+export const listCustomerLegacyHistory = async (customerId: string): Promise<Ticket[]> =>
+  legacyRows(getClient()
+    .from('tickets').select(LEGACY_HEADER)
+    .eq('customer_id', customerId).not('legacy_source', 'is', null)
+    .order('created_at', { ascending: false }));
+
+/** One ticket by its key, works and parts included, whether or not it is in
+ *  the board's list — the way an imported card (RB-…) is opened. */
+export const getTicketByKey = async (key: string): Promise<Ticket | null> => {
+  const { data, error } = await getClient()
+    .from('tickets').select('*, works(*, work_items(*))').eq('key', key).maybeSingle();
+  if (error) throw error;
+  return data ? rowToTicket(data) : null;
+};
+
+/** When each of these cars or customers came in under the previous system:
+ *  enough for a list's "visits" and "last visit" columns, for one page of rows. */
+export const legacyVisits = async (
+  { carIds = [], customerIds = [] }: { carIds?: string[]; customerIds?: string[] },
+): Promise<{ carId: string | null; customerId: string | null; at: string }[]> => {
+  if (!carIds.length && !customerIds.length) return [];
+  let q = getClient().from('tickets').select('car_id, customer_id, created_at').not('legacy_source', 'is', null);
+  q = carIds.length ? q.in('car_id', carIds) : q.in('customer_id', customerIds);
+  const { data, error } = await q.range(0, 9999);
+  if (isMissingColumn(error)) return [];
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ carId: r.car_id ?? null, customerId: r.customer_id ?? null, at: r.created_at }));
+};
+
+/** One page of the imported cards, newest first, searched by number, title,
+ *  plate or customer — the archive's "previous system" tab. */
+export const searchLegacyTickets = async (
+  { query = '', page = 1, pageSize = PAGE_SIZE }: PageQuery = {},
+): Promise<Page<Ticket>> => {
+  const [from, to] = pageRange(page, pageSize);
+  // PostgREST's or=() is comma- and paren-delimited; those are never searched for.
+  const q = query.trim().replace(/[,()*%\\]/g, ' ').trim();
+  let req = getClient()
+    .from('tickets').select(LEGACY_HEADER, { count: 'exact' })
+    .not('legacy_source', 'is', null);
+  if (q) {
+    const plate = q.toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
+    req = req.or([
+      `key.ilike.*${q}*`, `title.ilike.*${q}*`, `customer_name.ilike.*${q}*`, `phone.ilike.*${q}*`,
+      ...(plate ? [`plate.ilike.*${plate}*`] : []),
+    ].join(','));
+  }
+  const { data, error, count } = await req
+    .order('created_at', { ascending: false }).order('id').range(from, to);
+  if (isMissingColumn(error)) return { rows: [], total: 0 };
+  if (error) throw error;
+  return { rows: (data ?? []).map(rowToTicket), total: count ?? 0 };
 };
 
 const ticketIdByKey = async (key: string): Promise<string> => {

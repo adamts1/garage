@@ -11,7 +11,7 @@ export const PAGED_TABLE_PER_PAGE = [25, 50, 100];
  *  once. Drawing them all made every visit to those screens, and every live
  *  update while on them, lay out the whole list. Sorting stays across every
  *  row (it is lifted out of the table), and only the page is sliced. The pager
- *  appears once there is more than one page. */
+ *  is always there, at the foot of the page. */
 export default function PagedTable<Row>({
   rows, columns, defaultSort = null, perPage = 50, ...rest
 }: Omit<TableProps<Row>, 'sort' | 'onToggleSort'> & { perPage?: number }) {
@@ -20,19 +20,17 @@ export default function PagedTable<Row>({
   return (
     <>
       <Table {...rest} columns={columns} rows={pager.slice} sort={sort} onToggleSort={toggleSort} />
-      {pager.total > pager.perPage && (
-        <Pagination
-          page={pager.page}
-          pages={pager.pages}
-          perPage={pager.perPage}
-          from={pager.from}
-          to={pager.to}
-          total={pager.total}
-          onPage={pager.setPage}
-          onPerPage={pager.setPerPage}
-          perPageOptions={PAGED_TABLE_PER_PAGE}
-        />
-      )}
+      <Pagination
+        page={pager.page}
+        pages={pager.pages}
+        perPage={pager.perPage}
+        from={pager.from}
+        to={pager.to}
+        total={pager.total}
+        onPage={pager.setPage}
+        onPerPage={pager.setPerPage}
+        perPageOptions={PAGED_TABLE_PER_PAGE}
+      />
     </>
   );
 }

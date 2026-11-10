@@ -27,6 +27,7 @@ const NewTicketPage = lazy(() => import('./pages/NewTicket').then((m) => ({ defa
 const ReportsPage = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
 const SuppliersPage = lazy(() => import('./pages/Suppliers').then((m) => ({ default: m.SuppliersPage })));
 const TicketPage = lazy(() => import('./pages/Ticket').then((m) => ({ default: m.TicketPage })));
+const LegacyTicketPage = lazy(() => import('./pages/Ticket/LegacyTicketPage'));
 const WorkersPage = lazy(() => import('./pages/Workers').then((m) => ({ default: m.WorkersPage })));
 
 export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`;
@@ -38,21 +39,15 @@ export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`
 function TicketRoute({ tickets, ...rest }: {
   tickets: Ticket[];
 } & Omit<React.ComponentProps<typeof TicketPage>, 'ticket'>) {
-  const { t } = useTranslation();
   const { key } = useParams();
   const ticket = tickets.find((x) => x.k === key);
 
-  /* A key that matches nothing is a real case now that the URL is typeable and
-     shareable — a mistyped number, or a link from another garage. Say so rather
-     than rendering an empty panel. No loading branch: the routes render only
-     once the tickets have arrived. */
-  if (!ticket) {
-    return (
-      <div className="db-error">
-        {t('app.ticketNotFound', { key })} <Link to="/">{t('app.backToBoard')}</Link>
-      </div>
-    );
-  }
+  /* Not in the board's list: an imported card from the previous system (RB-…),
+     which listTickets leaves out and is fetched on its own — or a key that
+     matches nothing at all (a typo, another garage's link), which that page
+     says plainly. No loading branch for the list itself: the routes render
+     only once the tickets have arrived. */
+  if (!ticket) return <LegacyTicketPage ticketKey={key ?? ''} />;
   return <TicketPage ticket={ticket} {...rest} />;
 }
 

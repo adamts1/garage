@@ -2,13 +2,11 @@ import { searchCars, subscribeToTable, type Car, type CarOwner, type Ticket } fr
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Button } from '../../components/Button';
 import { Pagination } from '../../components/Pagination';
 import { SearchBar } from '../../components/SearchBar';
 import { PageHeader } from '../../components/PageHeader';
-import { RowActions, Table, type Column } from '../../components/Table';
-import { IconPrint } from '../../icons';
-import { printCarHistory, warnIfBlocked } from '../../lib/print';
+import { Table, type Column } from '../../components/Table';
+import { useLegacyVisits } from '../../lib/useLegacyVisits';
 import { PER_PAGE_OPTIONS, useBurstReload, useServerPage } from '../../lib/useServerPage';
 import { showError, useAppDispatch } from '../../store';
 import styles from './CarsPage.module.css';
@@ -34,23 +32,26 @@ export default function CarsPage({ tickets }: { tickets: Ticket[] }) {
   useBurstReload(onCarsChange, reload);
 
   /* Visits are counted from the tickets the shell already holds, cancelled ones
-     included — the same record the car page lists. */
+     included — the same record the car page lists — plus this page's cars'
+     cards from the previous system, which the shell does not hold. */
+  const legacy = useLegacyVisits('car', useMemo(() => cars.map((c) => c.id), [cars]));
   const rows: Row[] = useMemo(() => {
     const visits = new Map<string, { n: number; last: string; lastLabel: string }>();
-    for (const ticket of tickets) {
-      if (!ticket.carId) continue;
-      const v = visits.get(ticket.carId) ?? { n: 0, last: '', lastLabel: '' };
+    const add = (carId: string | null | undefined, iso: string) => {
+      if (!carId) return;
+      const v = visits.get(carId) ?? { n: 0, last: '', lastLabel: '' };
       v.n += 1;
-      const iso = ticket.createdAtISO ?? '';
-      if (iso > v.last) { v.last = iso; v.lastLabel = ticket.createdAt ?? ''; }
-      visits.set(ticket.carId, v);
-    }
+      if (iso > v.last) { v.last = iso; v.lastLabel = iso ? new Date(iso).toLocaleDateString('he-IL') : ''; }
+      visits.set(carId, v);
+    };
+    for (const ticket of tickets) add(ticket.carId, ticket.createdAtISO ?? '');
+    for (const v of legacy) add(v.carId, v.at);
     return cars.map((c) => ({
       ...c,
       visits: visits.get(c.id)?.n ?? 0,
       lastVisit: visits.get(c.id)?.lastLabel ?? '',
     }));
-  }, [cars, tickets]);
+  }, [cars, tickets, legacy]);
 
 
   const columns: Column<Row>[] = [
@@ -77,23 +78,6 @@ export default function CarsPage({ tickets }: { tickets: Ticket[] }) {
     },
     { key: 'visits', header: 'cars.fields.visits', width: 90, render: (c) => c.visits },
     { key: 'lastVisit', header: 'cars.fields.lastVisit', width: 120, render: (c) => c.lastVisit || '—' },
-    {
-      key: 'print',
-      width: 56,
-      render: (c) => (
-        <RowActions>
-          <Button
-            variant="ghost"
-            size="sm"
-            title={t('car.printHistory')}
-            aria-label={t('car.printHistory')}
-            onClick={() => warnIfBlocked(printCarHistory(c, c.owners, tickets.filter((x) => x.carId === c.id)))}
-          >
-            <IconPrint />
-          </Button>
-        </RowActions>
-      ),
-    },
   ];
 
   return (

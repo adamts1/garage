@@ -9,6 +9,7 @@ import { CrudForm } from '../../components/CrudForm';
 import { SelectField, TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
 import { CellInput, CellSelect, RowActions, Table, type Column } from '../../components/Table';
+import { useLegacyVisits } from '../../lib/useLegacyVisits';
 import { PER_PAGE_OPTIONS } from '../../lib/useServerPage';
 import styles from './CustomersPage.module.css';
 import {
@@ -30,13 +31,15 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
   /* Work orders per customer, cancelled ones included: every one of them keeps
      the customer on file (the database refuses the delete), so the button is
      disabled up front rather than left to fail. */
+  const legacy = useLegacyVisits('customer', useMemo(() => rows.map((c) => c.id), [rows]));
   const ticketCount = useMemo(() => {
     const map = new Map<string, number>();
-    for (const ticket of tickets) {
-      if (ticket.customerId) map.set(ticket.customerId, (map.get(ticket.customerId) ?? 0) + 1);
-    }
+    const add = (id: string | null | undefined) => { if (id) map.set(id, (map.get(id) ?? 0) + 1); };
+    for (const ticket of tickets) add(ticket.customerId);
+    // Their cards from the previous system count too — and also keep them on file.
+    for (const v of legacy) add(v.customerId);
     return map;
-  }, [tickets]);
+  }, [tickets, legacy]);
 
 
   /* One open panel at a time. Several would turn the table into a list of

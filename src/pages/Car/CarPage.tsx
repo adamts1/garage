@@ -1,6 +1,5 @@
 import {
-  getCar, isCancelled, listCarLegacyHistory, partLineTotal, shekel,
-  type Car, type CarOwner, type PartRow, type Ticket,
+  getCar, isCancelled, listCarLegacyHistory, shekel, type Car, type CarOwner, type Ticket,
 } from '@garage/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,28 +23,6 @@ const ticketNo = (ticket: Ticket) => Number(ticket.k.split('-')[1]) || 0;
 const byVisit = (a: Ticket, b: Ticket) =>
   (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? '') || ticketNo(b) - ticketNo(a);
 
-/** An imported work order's lines, as the previous system recorded them. */
-function LegacyLines({ ticket }: { ticket: Ticket }) {
-  const { t } = useTranslation();
-  const rows = (ticket.works ?? []).flatMap((w) => w.items);
-  const notes = (ticket.works ?? []).map((w) => w.notes).filter(Boolean);
-  const columns: Column<PartRow>[] = [
-    { key: 'sku', header: 'car.legacy.sku', width: 130, render: (p) => <span dir="ltr">{p.sku || '—'}</span> },
-    { key: 'name', header: 'car.legacy.line', render: (p) => p.name },
-    { key: 'qty', header: 'car.legacy.qty', width: 70, render: (p) => p.qty },
-    { key: 'price', header: 'car.legacy.price', width: 100, render: (p) => shekel(p.price) },
-    { key: 'discount', header: 'car.legacy.discount', width: 80, render: (p) => (p.discount ? `${p.discount}%` : '—') },
-    { key: 'total', header: 'car.legacy.total', width: 110, render: (p) => shekel(partLineTotal(p)) },
-  ];
-  return (
-    <div className={styles.legacyLines}>
-      <p className={styles.legacyNote}>{t('car.legacy.note', { number: ticket.legacy?.number ?? '' })}</p>
-      {notes.map((n, i) => <p key={i}>{n}</p>)}
-      <Table columns={columns} rows={rows} rowKey={(_, i) => String(i)} empty={t('car.legacy.noLines')} />
-    </div>
-  );
-}
-
 export interface CarPageProps {
   /** Every ticket, cancelled ones included — this page is the car's full record. */
   tickets: Ticket[];
@@ -66,7 +43,6 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
   const [owners, setOwners] = useState<CarOwner[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [legacy, setLegacy] = useState<Ticket[]>([]);
-  const [openLegacy, setOpenLegacy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isConfigured || !id) { setLoaded(true); return; }
@@ -186,12 +162,7 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
         columns={columns}
         rows={history}
         rowKey={(ticket) => ticket.k}
-        onRowClick={(ticket) =>
-          ticket.legacy
-            ? setOpenLegacy((open) => (open === ticket.k ? null : ticket.k))
-            : onOpenTicket(ticket.k)}
-        isRowSelected={(ticket) => ticket.k === openLegacy}
-        renderExpanded={(ticket) => (ticket.k === openLegacy ? <LegacyLines ticket={ticket} /> : null)}
+        onRowClick={(ticket) => onOpenTicket(ticket.k)}
         empty={t('car.noTickets')}
         className={styles.table}
       />

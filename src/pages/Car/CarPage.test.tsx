@@ -58,7 +58,7 @@ describe('the car page', () => {
     expect(screen.getByText('4111')).toBeTruthy();
   });
 
-  it('adds the previous system\'s work orders, read-only, with their lines', async () => {
+  it('adds the previous system\'s work orders, and opens one like any ticket', async () => {
     const onOpenTicket = vi.fn();
     render(
       <MemoryRouter initialEntries={['/cars/car-1']}>
@@ -69,9 +69,8 @@ describe('the car page', () => {
 
     expect(screen.getByText('RB-1131')).toBeTruthy();
     expect(screen.getByText('מערכת קודמת')).toBeTruthy();
-    // Opened in place, never as a ticket of ours.
+    // Opened by its key; the ticket route shows an imported card read-only.
     fireEvent.click(screen.getByText('RB-1131'));
-    expect(onOpenTicket).not.toHaveBeenCalled();
-    expect(screen.getByText('מסנן שמן מקורי')).toBeTruthy();
+    expect(onOpenTicket).toHaveBeenCalledWith('RB-1131');
   });
 });

@@ -18,6 +18,7 @@ import { garageLetterhead, garagePrintName } from './auth';
 import {
   VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, type TicketWork,
 } from './catalog';
+import type { PartRow } from './catalog';
 import type { Car, CarOwner, Customer } from './db';
 import { money } from './money';
 import type { Ticket } from './types';
@@ -205,6 +206,8 @@ const CSS = `
   .hist tr.visit td{background:#eef1f5;font-weight:700;border-bottom:1px solid #d8dde5}
   .hist tr.did td{color:#333;padding-right:20px}
   .hist tr.did td .parts{display:block;color:#666;font-size:12px;margin-top:2px}
+  .hist tr.part td{color:#555;font-size:12px;padding-top:1px;padding-bottom:1px;border-bottom:0}
+  .hist tr.part td .sku{color:#888;direction:ltr;unicode-bidi:isolate}
   .hist tfoot td{font-weight:800;font-size:14px;border-top:2px solid #1d2d44;border-bottom:0}
 
   button{margin:18px auto 0;display:block;padding:9px 20px;font-size:14px;cursor:pointer}
@@ -602,13 +605,13 @@ export const carHistoryHtml = (car: Car, owners: readonly CarOwner[], tickets: r
 
   const visit = (t: Ticket): string => {
     const works = t.works ?? [];
+    /* Each work, and under it every part it used, one to a row — the part's
+       name, its catalogue number when it has one, and how many. */
+    const part = (p: PartRow) =>
+      `<tr class="part"><td></td><td colspan="2">${esc(p.name)}${p.sku ? ` <span class="sku">${esc(p.sku)}</span>` : ''}</td>`
+      + `<td>×${esc(String(p.qty))}</td><td></td></tr>`;
     const did = works.length
-      ? works.map((w) =>
-          `<tr class="did"><td colspan="5">${esc(w.name)}${
-            w.items.length
-              ? `<span class="parts">${esc(w.items.map((p) => (p.qty === 1 ? p.name : `${p.name} ×${p.qty}`)).join(' · '))}</span>`
-              : ''
-          }</td></tr>`).join('')
+      ? works.map((w) => `<tr class="did"><td colspan="5">${esc(w.name)}</td></tr>${w.items.map(part).join('')}`).join('')
       : `<tr class="did"><td colspan="5">${esc(t.title || '-')}</td></tr>`;
     return `<tbody class="v">`
       + `<tr class="visit">`
