@@ -17,19 +17,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createCustomer = vi.fn();
 const updateCustomer = vi.fn();
-const listCustomers = vi.fn();
+/* The garage's customers, as the database holds them. The screen asks it —
+   who has this phone, who holds this ת״ז — rather than searching a list. */
+let onFile: Customer[] = [];
+const searchCustomers = vi.fn();
+const customersWithPhone = vi.fn();
+const customerHoldingIdNumber = vi.fn();
 
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
   return {
     ...actual,
-    listCustomers: (...a: unknown[]) => listCustomers(...a),
-    listVehicles: vi.fn(async () => []),
+    searchCustomers: (...a: unknown[]) => searchCustomers(...a),
+    customersWithPhone: (...a: unknown[]) => customersWithPhone(...a),
+    customerHoldingIdNumber: (...a: unknown[]) => customerHoldingIdNumber(...a),
     createCustomer: (...a: unknown[]) => createCustomer(...a),
     updateCustomer: (...a: unknown[]) => updateCustomer(...a),
     subscribeToTable: vi.fn(() => () => {}),
   };
 });
+
+vi.mock('../../lib/supabase', () => ({ isConfigured: true }));
+
+const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+const db = fakeCustomerDb(() => onFile);
 
 await import('../../i18n');
 const { useCustomers, blankCustomer } = await import('./useCustomers');
@@ -61,7 +72,10 @@ const mount = async () => {
 };
 
 beforeEach(() => {
-  listCustomers.mockReset().mockResolvedValue([YOSSI, DANA]);
+  onFile = [YOSSI, DANA];
+  searchCustomers.mockReset().mockImplementation(db.searchCustomers);
+  customersWithPhone.mockReset().mockImplementation(db.customersWithPhone);
+  customerHoldingIdNumber.mockReset().mockImplementation(db.customerHoldingIdNumber);
   createCustomer.mockReset().mockResolvedValue(undefined);
   updateCustomer.mockReset().mockResolvedValue(undefined);
 });

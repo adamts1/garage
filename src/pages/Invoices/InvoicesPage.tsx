@@ -7,7 +7,7 @@ import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
-import { Table, type Column } from '../../components/Table';
+import { PagedTable, type Column } from '../../components/Table';
 import { IconCard, IconCheck, IconDoc } from '../../icons';
 import InvoiceDetail from './InvoiceDetail';
 import styles from './InvoicesPage.module.css';
@@ -112,7 +112,7 @@ export default function InvoicesPage({ onOpenTicket, tickets }: InvoicesPageProp
 
     return (
       <>
-        <Table
+        <PagedTable
           columns={columns}
           rows={inv.shown}
           rowKey={(i) => i.id}

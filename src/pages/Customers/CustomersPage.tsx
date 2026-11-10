@@ -1,13 +1,15 @@
-import { customerKind, phoneDigits, plateKey, type Customer, type Ticket } from '@garage/shared';
+import { customerKind, type Customer, type Ticket } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button';
+import { Pagination } from '../../components/Pagination';
 import { SearchBar } from '../../components/SearchBar';
 import { CrudForm } from '../../components/CrudForm';
 import { SelectField, TextField } from '../../components/Field';
 import { PageHeader } from '../../components/PageHeader';
 import { CellInput, CellSelect, RowActions, Table, type Column } from '../../components/Table';
+import { PER_PAGE_OPTIONS } from '../../lib/useServerPage';
 import styles from './CustomersPage.module.css';
 import {
   blankCustomer, CUSTOMER_KINDS, toDraft, useCustomers, type CustomerDraft,
@@ -19,7 +21,11 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
   /* A customer's kind is stored as a code; this is where it becomes a word.
      The code is shared with the phone app, the Hebrew for it is this app's. */
   const kindLabel = (kind: string) => t(`customers.kinds.${customerKind(kind)}`);
-  const { rows, vehiclesByCustomer, create, update, remove } = useCustomers();
+  /* Searched by everything the counter is likely to have in hand: a name, a
+     phone typed with or without hyphens, an email, a ת״ז, a city, or the plate
+     of one of their cars — by the database, a page at a time. */
+  const [query, setQuery] = useState('');
+  const { rows, total, pager, loaded, searching, vehiclesByCustomer, create, update, remove } = useCustomers(query);
 
   /* Work orders per customer, cancelled ones included: every one of them keeps
      the customer on file (the database refuses the delete), so the button is
@@ -32,20 +38,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
     return map;
   }, [tickets]);
 
-  /* Searched by everything the counter is likely to have in hand: a name, a
-     phone typed with or without hyphens, an email, a ת״ז, a city, or the plate
-     of one of their cars. */
-  const [query, setQuery] = useState('');
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    const qDigits = phoneDigits(q);
-    const qPlate = plateKey(q);
-    return rows.filter((c) =>
-      [c.name, c.email, c.id_number, c.city].some((x) => x?.toLowerCase().includes(q))
-      || (qDigits.length >= 3 && phoneDigits(c.phone).includes(qDigits))
-      || (qPlate && (vehiclesByCustomer.get(c.id) ?? []).some((v) => plateKey(v.plate).includes(qPlate))));
-  }, [rows, query, vehiclesByCustomer]);
 
   /* One open panel at a time. Several would turn the table into a list of
      lists, and the reason to open one is to look at that customer's cars. */
@@ -88,7 +80,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
     {
       key: 'name',
       header: 'customers.fields.name',
-      sortValue: (c) => c.name,
       render: cell('name', (c) => (
         <Link className={styles.name} to={`/customers/${c.id}`}>{c.name}</Link>
       )),
@@ -111,7 +102,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
     {
       key: 'city',
       header: 'customers.fields.city',
-      sortValue: (c) => c.city ?? '',
       render: cell('city', (c) => c.city || t('common.none')),
     },
     {
@@ -119,7 +109,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
       header: 'customers.fields.kind',
       // Sorted by the label, not the code: 'business' before 'private' would put
       // the rows in an order that means nothing to anyone reading Hebrew.
-      sortValue: (c) => kindLabel(c.kind),
       render: (c) =>
         editingId === c.id ? (
           <CellSelect {...editProps('kind')}>
@@ -135,7 +124,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
       key: 'vehicles',
       header: 'customers.fields.vehicles',
       width: 110,
-      sortValue: (c) => vehiclesByCustomer.get(c.id)?.length ?? 0,
       /* The count is the answer most of the time; the panel is for the rest.
          Disabled at zero rather than hidden, so the column reads as "no cars on
          file" instead of "this row is different". */
@@ -158,7 +146,6 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
       key: 'tickets',
       header: 'customers.fields.tickets',
       width: 100,
-      sortValue: (c) => ticketCount.get(c.id) ?? 0,
       render: (c) => ticketCount.get(c.id) ?? 0,
     },
     {
@@ -206,7 +193,7 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
     <>
       <PageHeader
         title="customers.title"
-        count={rows.length}
+        count={total}
         actions={
           <Button variant="primary" onClick={() => setAdding((v) => !v)}>
             {adding ? t('common.cancel') : t('customers.add')}
@@ -240,9 +227,9 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
 
       <Table
         columns={columns}
-        rows={shown}
+        rows={rows}
         rowKey={(c) => c.id}
-        empty={rows.length === 0 ? t('customers.empty') : t('customers.noMatch')}
+        empty={!loaded || searching ? t('app.loading') : query.trim() ? t('customers.noMatch') : t('customers.empty')}
         renderExpanded={(c) =>
           openVehicles === c.id ? (
             <div className={styles.vehicles}>
@@ -265,6 +252,8 @@ export default function CustomersPage({ tickets }: { tickets: Ticket[] }) {
           ) : null
         }
       />
+
+      <Pagination {...pager} perPageOptions={PER_PAGE_OPTIONS} />
     </>
   );
 }

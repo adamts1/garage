@@ -1,5 +1,5 @@
 import {
-  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listCustomers, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { useCloseTicket, useCollectPayment, type CloseResult } from '../../features/ticket/CloseTicketModal';
 import { storedAmount, ticketTotals } from '../../features/ticket/ticketTotals';
 import { payMethodLabel } from '../../lib/payMethodLabel';
+import { isConfigured } from '../../lib/supabase';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
 import {
   showError, showErrorKey, showInfo, showSuccess, useAppDispatch, useBusyRun, useConfirm,
   useModalResult, usePrompt,
@@ -95,7 +97,8 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      told apart from one made here. Compared against, never rendered. */
   const serverRow = useRef<Ticket>(ticket);
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [idHolders, setIdHolders] = useState<Customer[]>([]);
   const [idNumber, setIdNumber] = useState('');
 
   const works = draft.works ?? [];
@@ -159,17 +162,6 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     [invoice, ticketDocs],
   );
 
-  /* The garage's customers: needed to read this ticket's ת״ז, and to say who
-     already holds one that is typed in. */
-  const loadCustomers = useCallback(
-    () => listCustomers().then(setCustomers).catch(() => {}),
-    [],
-  );
-
-  useEffect(() => {
-    void loadCustomers();
-    return subscribeToTable('customers', () => void loadCustomers());
-  }, [loadCustomers]);
 
   /* Which record this ticket belongs to. By the id create_ticket resolved, and
      failing that by the phone — the ticket's `customer` is a denormalised name,
@@ -183,13 +175,22 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      line and stamping a national ID on them is the exact mistake the name match
      was rejected for. No single holder, no record — the ticket still reads and
      saves, only the ת״ז field has nothing to attach to. */
-  const customer = useMemo(() => {
-    if (ticket.customerId) return customers.find((c) => c.id === ticket.customerId) ?? null;
+  /* Asked of the database, one record — not found in a list of every
+     customer, which stopped at 1000 rows and moved the whole table to open
+     one ticket. */
+  const loadCustomer = useCallback(async () => {
+    if (!isConfigured) return;
+    if (ticket.customerId) { setCustomer(await getCustomer(ticket.customerId)); return; }
     const digits = phoneDigits(ticket.phone);
-    if (digits.length < 9) return null;
-    const holders = customers.filter((c) => phoneDigits(c.phone) === digits);
-    return holders.length === 1 ? holders[0] : null;
-  }, [customers, ticket.customerId, ticket.phone]);
+    if (digits.length < 9) { setCustomer(null); return; }
+    const holders = await customersWithPhone(digits);
+    setCustomer(holders.length === 1 ? holders[0] : null);
+  }, [ticket.customerId, ticket.phone]);
+
+  useEffect(() => {
+    void loadCustomer().catch(() => {});
+    return subscribeToTable('customers', () => void loadCustomer().catch(() => {}));
+  }, [loadCustomer]);
 
   /* The stored ת״ז becomes the field's starting value — and re-becomes it
      whenever the record itself changes, unless it is being edited right now. */
@@ -208,16 +209,31 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   const ticketDirty = !same(draft, ticket);
   const dirty = ticketDirty || idDirty;
 
+  /* Who already holds the ת״ז being typed — asked once typing pauses. */
+  const settledId = useDebouncedValue(normalizeIdNumber(idNumber));
+  const loadIdHolders = useCallback(async () => {
+    if (!isConfigured || !settledId) { setIdHolders([]); return; }
+    const holder = await customerHoldingIdNumber(settledId);
+    setIdHolders(holder ? [holder] : []);
+  }, [settledId]);
+  useEffect(() => { void loadIdHolders().catch(() => {}); }, [loadIdHolders]);
+
+  /** After a write to a customer: the record, and who holds the ת״ז, again. */
+  const loadCustomers = useCallback(
+    () => Promise.all([loadCustomer(), loadIdHolders()]).then(() => {}).catch(() => {}),
+    [loadCustomer, loadIdHolders],
+  );
+
   /** Somebody else in this garage already holds the number being typed. Reported,
    *  not decided — same as the intake form's phone warning. */
   const idConflict: PhoneConflict<Customer> | null = useMemo(
     () =>
-      idNumberConflict(customers, {
+      idNumberConflict(idHolders, {
         idNumber,
         name: draft.customer,
         ownerId: customer?.id ?? null,
       }),
-    [customers, draft.customer, idNumber, customer?.id],
+    [idHolders, draft.customer, idNumber, customer?.id],
   );
 
   /** Local edits. Nothing here reaches the database until `save`. */
@@ -762,7 +778,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
 
   return {
     draft, photos, invoice, busy, totals, works, dirty,
-    customer, customers, idNumber, setIdNumber, idConflict, switchCustomer,
+    customer, idNumber, setIdNumber, idConflict, switchCustomer,
     /* What is still creditable, and whether this user may. Both are needed to
        decide the button: a fully credited invoice offers nothing to anybody,
        and a member may not credit at all. */

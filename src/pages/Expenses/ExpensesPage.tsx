@@ -9,7 +9,7 @@ import { CheckboxField, SelectField, TextField } from '../../components/Field';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
-import { RowActions, Table, type Column } from '../../components/Table';
+import { RowActions, PagedTable, type Column } from '../../components/Table';
 import { IconBox, IconCard, IconDoc } from '../../icons';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
@@ -234,7 +234,7 @@ export default function ExpensesPage() {
         </CrudForm>
       )}
 
-      <Table columns={columns} rows={rows} rowKey={(e) => e.id} emptyKey="expenses.empty" />
+      <PagedTable columns={columns} rows={rows} rowKey={(e) => e.id} emptyKey="expenses.empty" />
     </>
   );
 }

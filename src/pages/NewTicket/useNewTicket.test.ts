@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The module reaches lib/supabase, which builds a client against window on import.
 import type { Customer, Vehicle } from '@garage/shared';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { emptyForm, missingRequired, useNewTicket, type TicketForm } from './useNewTicket';
 
@@ -90,20 +90,20 @@ describe('a plate already on file', () => {
     vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
     vi.doMock('@garage/shared', async (importActual) => ({
       ...(await importActual<typeof import('@garage/shared')>()),
-      listCustomers: vi.fn(async () => []),
-      listVehicles: vi.fn(async () => [{
+      // The car on file under that plate, however it was typed — asked of the database.
+      vehiclesForPlate: vi.fn(async (plate: string) => (plate.replace(/\D/g, '') === '12345678' ? [{
         id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
         year: '2022', km: '3000', vehicle_code: '4111',
-      }]),
-      subscribeToTable: vi.fn(() => () => {}),
+      }] : [])),
     }));
     const { useNewTicket: fresh } = await import('./useNewTicket');
     const { result } = renderHook(() => fresh({ tickets: [], setTickets: vi.fn(), onDone: vi.fn() }));
     await act(async () => { await Promise.resolve(); });
 
     act(() => { result.current.set('licensePlate', '12-345-678'); result.current.set('model', 'נירו EV'); });
-    act(() => result.current.fillKnownPlate());
+    await act(async () => { result.current.fillKnownPlate(); await Promise.resolve(); });
 
+    await waitFor(() => expect(result.current.form.manufacturer).toBe('קיה'));
     expect(result.current.form).toMatchObject({
       manufacturer: 'קיה', model: 'נירו EV', year: '2022', vehicleCode: '4111', km: '',
     });

@@ -11,6 +11,7 @@
 
 import { discounted, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
+import { fetchAll } from './paging';
 import { paymentsTotal, type PayMethod, type PaymentPart } from './payment';
 
 /* Four documents, two of which are bills.
@@ -149,12 +150,13 @@ const rowToInvoice = (r: any): Invoice => ({
 
 /** The garage's invoices, newest first. RLS scopes this to the caller's garage. */
 export const listInvoices = async (): Promise<Invoice[]> => {
-  const { data, error } = await getClient()
+  const rows = await fetchAll((from, to) => getClient()
     .from('invoices')
     .select('*')
-    .order('issued_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map(rowToInvoice);
+    .order('issued_at', { ascending: false })
+    .order('id')
+    .range(from, to));
+  return rows.map(rowToInvoice);
 };
 
 /** Whether a ticket carries a live bill — a חשבונית מס or מס-קבלה still

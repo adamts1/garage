@@ -1,11 +1,11 @@
 import {
   CUSTOMER_KINDS, PRIVATE_CUSTOMER,
-  createCustomer, customerByPhone, deleteCustomer, idNumberConflict, listCustomers, listVehicles,
-  nameAndPhoneHolder, phoneDigits,
-  subscribeToTable, updateCustomer,
+  createCustomer, customerByPhone, customerHoldingIdNumber, customersWithPhone, deleteCustomer, getCustomer,
+  nameAndPhoneHolder, phoneDigits, searchCustomers, subscribeToTable, updateCustomer,
   type Customer, type Vehicle,
 } from '@garage/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useBurstReload, useServerPage } from '../../lib/useServerPage';
 import { showError, showErrorKey, showSuccess, useAppDispatch, useConfirm } from '../../store';
 
 export type CustomerDraft = Omit<Customer, 'id'>;
@@ -37,69 +37,46 @@ export const toRow = (draft: CustomerDraft): CustomerDraft => ({
   id_number: draft.id_number?.trim() || null,
 });
 
-export function useCustomers() {
+const onCustomersOrCars = (onChange: () => void) => {
+  const offCustomers = subscribeToTable('customers', onChange);
+  const offVehicles = subscribeToTable('vehicles', onChange);
+  return () => { offCustomers(); offVehicles(); };
+};
+
+/** The customers screen: one page of customers matching `query`, searched by
+ *  the database, and the writes that go with it.
+ *
+ *  It used to load every customer and every car link and filter them here —
+ *  capped at 1000 rows each by PostgREST, so most of a large garage was
+ *  missing, and every visit moved the whole table. */
+export function useCustomers(query = '') {
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
-  const [rows, setRows] = useState<Customer[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  /* An empty list and a list not yet loaded look the same; the customer page
-     needs to tell "no such customer" from "not here yet". */
-  const [loaded, setLoaded] = useState(false);
+  const list = useServerPage(searchCustomers, query);
+  const { rows, reload } = list;
 
-  const load = useCallback(() => {
-    listCustomers()
-      .then(setRows)
-      .catch((e) => dispatch(showError(e)))
-      .finally(() => setLoaded(true));
-  }, [dispatch]);
+  // Another tab — or the ticket intake form — adds a customer or a car; it shows here.
+  useBurstReload(onCustomersOrCars, reload);
 
-  /* The cars are promoted onto a customer by create_ticket, so this list grows
-     without anybody visiting this page. Failing quietly is deliberate: a
-     customer table that will not render because the vehicles call failed is a
-     worse outcome than a customer with no cars listed. */
-  const loadVehicles = useCallback(() => {
-    listVehicles().then(setVehicles).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-    loadVehicles();
-    // Another tab — or the ticket intake form — adds a customer; it shows here.
-    const offCustomers = subscribeToTable('customers', load);
-    const offVehicles = subscribeToTable('vehicles', loadVehicles);
-    return () => { offCustomers(); offVehicles(); };
-  }, [load, loadVehicles]);
-
-  /** Indexed once per change rather than filtered per row, so a garage with a
-   *  few thousand cars does not walk the whole list for every customer. */
-  const vehiclesByCustomer = useMemo(() => {
-    const map = new Map<string, Vehicle[]>();
-    for (const v of vehicles) {
-      const list = map.get(v.customer_id);
-      if (list) list.push(v);
-      else map.set(v.customer_id, [v]);
-    }
-    return map;
-  }, [vehicles]);
+  /** Each customer's cars, from the page that brought the customer. */
+  const vehiclesByCustomer = useMemo(
+    () => new Map<string, Vehicle[]>(rows.map((c) => [c.id, c.vehicles ?? []])),
+    [rows],
+  );
 
   /* A ת״ז is unique per garage — `customers_garage_id_number_key`. Left to the
      database, a second holder comes back as a constraint name, which says
-     nothing about which customer to go and look at. Caught here, it names them.
-
-     The list this checks is the one on screen, and it is kept live by the
-     subscription above; the database still has the last word, and showError
-     turns that constraint into a sentence if this is ever raced. */
+     nothing about which customer to go and look at. Asked here first, it names
+     them. Asked of the database, not of the page on screen, which holds 50. */
   const idTaken = useCallback(
-    (draft: CustomerDraft, ownerId?: string) => {
-      const clash = idNumberConflict(rows, {
-        idNumber: draft.id_number ?? '',
-        name: draft.name,
-        ownerId,
-      });
-      if (clash) dispatch(showErrorKey('customers.idTaken', { name: clash.customer.name }));
-      return Boolean(clash);
+    async (draft: CustomerDraft, ownerId?: string) => {
+      const wanted = draft.id_number?.trim();
+      if (!wanted) return false;
+      const holder = await customerHoldingIdNumber(wanted, ownerId);
+      if (holder) dispatch(showErrorKey('customers.idTaken', { name: holder.name }));
+      return Boolean(holder);
     },
-    [dispatch, rows],
+    [dispatch],
   );
 
   /* Name + phone together are one customer, and the database will not store
@@ -113,52 +90,56 @@ export function useCustomers() {
      alone does not re-ask about a sharing somebody already accepted. */
   const nameAndPhoneOk = useCallback(
     async (draft: CustomerDraft, owner?: Customer) => {
-      const twin = nameAndPhoneHolder(rows, { phone: draft.phone, name: draft.name, exceptId: owner?.id });
+      const holders = await customersWithPhone(draft.phone);
+      const twin = nameAndPhoneHolder(holders, { phone: draft.phone, name: draft.name, exceptId: owner?.id });
       if (twin) {
         dispatch(showErrorKey('customers.namePhoneTaken', { name: twin.name }));
         return false;
       }
       if (owner && phoneDigits(owner.phone) === phoneDigits(draft.phone)) return true;
-      const sharer = customerByPhone(rows.filter((c) => c.id !== owner?.id), draft.phone);
+      const sharer = customerByPhone(holders.filter((c) => c.id !== owner?.id), draft.phone);
       if (!sharer) return true;
       return confirm({ bodyKey: 'customers.phoneTakenConfirm', values: { name: sharer.name } });
     },
-    [confirm, dispatch, rows],
+    [confirm, dispatch],
   );
 
   const create = useCallback(
     async (draft: CustomerDraft) => {
       if (!draft.name.trim()) return false;
-      if (idTaken(draft)) return false;
-      if (!(await nameAndPhoneOk(draft))) return false;
       try {
+        if (await idTaken(draft)) return false;
+        if (!(await nameAndPhoneOk(draft))) return false;
         await createCustomer(toRow(draft));
         dispatch(showSuccess('customers.created'));
-        load();
+        void reload();
         return true;
       } catch (e) {
         dispatch(showError(e));
         return false;
       }
     },
-    [dispatch, idTaken, load, nameAndPhoneOk],
+    [dispatch, idTaken, nameAndPhoneOk, reload],
   );
 
   const update = useCallback(
     async (id: string, draft: CustomerDraft) => {
-      if (idTaken(draft, id)) return false;
-      if (!(await nameAndPhoneOk(draft, rows.find((c) => c.id === id)))) return false;
       try {
+        if (await idTaken(draft, id)) return false;
+        // The record as it stands — off the page if need be, so "keeping their
+        // own name and phone" is never mistaken for taking somebody else's.
+        const owner = rows.find((c) => c.id === id) ?? (await getCustomer(id)) ?? undefined;
+        if (!(await nameAndPhoneOk(draft, owner))) return false;
         await updateCustomer(id, toRow(draft));
         dispatch(showSuccess('customers.updated'));
-        load();
+        void reload();
         return true;
       } catch (e) {
         dispatch(showError(e));
         return false;
       }
     },
-    [dispatch, idTaken, load, nameAndPhoneOk, rows],
+    [dispatch, idTaken, nameAndPhoneOk, reload, rows],
   );
 
   const remove = useCallback(
@@ -172,13 +153,13 @@ export function useCustomers() {
       try {
         await deleteCustomer(customer.id);
         dispatch(showSuccess('customers.deleted'));
-        load();
+        void reload();
       } catch (e) {
         dispatch(showError(e));
       }
     },
-    [confirm, dispatch, load],
+    [confirm, dispatch, reload],
   );
 
-  return { rows, loaded, vehiclesByCustomer, create, update, remove };
+  return { ...list, vehiclesByCustomer, create, update, remove };
 }

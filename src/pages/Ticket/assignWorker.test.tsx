@@ -25,7 +25,6 @@ vi.mock('@garage/shared', async (importActual) => {
     listItems: vi.fn(async () => []),
     listInvoices: vi.fn(async () => []),
     subscribeToInvoices: vi.fn(() => () => {}),
-    listCustomers: vi.fn(async () => []),
     updateCustomer: vi.fn(async () => {}),
     subscribeToTable: vi.fn(() => () => {}),
   };

@@ -105,32 +105,29 @@ export default function App() {
     });
   }, []);
 
-  // The sidebar is a narrow rail that expands on hover, unless pinned open.
+  /* The sidebar is a narrow rail that opens over the page on hover (its own
+     state, so hovering never re-renders the app), or pinned open beside it. */
   const [pinned, setPinned] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const expanded = pinned || hovered;
 
   /* Paid tickets that have aged past the cutoff leave the board for the
      archive. Derived, so it recomputes as time passes — no stored flag to keep
      in sync. */
-  const activeTickets = tickets.filter((x) => !isArchived(x));
-  const archivedTickets = tickets.filter((x) => isArchived(x));
+  const activeTickets = useMemo(() => tickets.filter((x) => !isArchived(x)), [tickets]);
+  const archivedTickets = useMemo(() => tickets.filter((x) => isArchived(x)), [tickets]);
   /* Money and workload are about jobs that happened. A cancelled ticket is kept
      on file and listed under its customer and in the archive, but counts for
      nothing in a report. */
-  const liveTickets = tickets.filter((x) => !isCancelled(x));
+  const liveTickets = useMemo(() => tickets.filter((x) => !isCancelled(x)), [tickets]);
 
-  const openTicket = (k: string) => navigate(ticketPath(k));
+  const openTicket = useCallback((k: string) => navigate(ticketPath(k)), [navigate]);
 
   return (
-    <div className={`app-shell${expanded ? '' : ' rail'}`}>
+    <div className={`app-shell${pinned ? '' : ' rail'}`}>
       <Sidebar
         activeCount={activeTickets.length}
         workers={workers}
-        expanded={expanded}
         pinned={pinned}
         onPinToggle={() => setPinned((v) => !v)}
-        onHoverChange={setHovered}
         onSignOut={() => {
           void leaveGuard.confirmDiscard().then((ok) => { if (ok) void signOut(); });
         }}

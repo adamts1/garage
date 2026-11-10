@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { blankCustomer, toRow } from './useCustomers';
+import { describe, expect, it, vi } from 'vitest';
+
+// useCustomers pulls in the browser's Supabase client; these are pure helpers.
+vi.mock('../../lib/supabase', () => ({ isConfigured: false }));
+const { blankCustomer, toRow } = await import('./useCustomers');
 
 /* A customer saved without a ת״ז must reach the database as NULL. A stored ''
    is a value under the per-garage unique index, so the second such customer

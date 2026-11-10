@@ -1,5 +1,7 @@
-import { customerKind, isCancelled, shekel, type Ticket } from '@garage/shared';
-import { useMemo, useState } from 'react';
+import {
+  customerKind, getCustomer, isCancelled, shekel, subscribeToTable, type CustomerWithVehicles, type Ticket,
+} from '@garage/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
@@ -9,8 +11,15 @@ import { Table, type Column } from '../../components/Table';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
 import { IconPrint } from '../../icons';
 import { printCustomerHistory, warnIfBlocked } from '../../lib/print';
+import { isConfigured } from '../../lib/supabase';
+import { useBurstReload } from '../../lib/useServerPage';
 import styles from './CustomerPage.module.css';
-import { useCustomers } from './useCustomers';
+
+const onCustomersOrCars = (onChange: () => void) => {
+  const offCustomers = subscribeToTable('customers', onChange);
+  const offVehicles = subscribeToTable('vehicles', onChange);
+  return () => { offCustomers(); offVehicles(); };
+};
 
 type TabId = 'tickets' | 'vehicles';
 const TABS: readonly TabDef<TabId>[] = [
@@ -50,11 +59,19 @@ export interface CustomerPageProps {
 export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProps) {
   const { t } = useTranslation();
   const { id } = useParams();
-  const { rows, loaded, vehiclesByCustomer } = useCustomers();
+  /* This one customer and their cars — not the whole customer list, which
+     stopped at 1000 rows and moved the table to show one record. */
+  const [customer, setCustomer] = useState<CustomerWithVehicles | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const load = useCallback(() => {
+    if (!isConfigured || !id) { setLoaded(true); return; }
+    getCustomer(id).then(setCustomer).catch(() => {}).finally(() => setLoaded(true));
+  }, [id]);
+  useEffect(load, [load]);
+  useBurstReload(onCustomersOrCars, load);
   const [tab, setTab] = useState<TabId>('tickets');
   const [filter, setFilter] = useState<StatusFilter>('all');
 
-  const customer = rows.find((c) => c.id === id);
 
   const theirs = useMemo(
     () => tickets.filter((ticket) => ticket.customerId === id).sort((a, b) => ticketNo(b) - ticketNo(a)),
@@ -76,7 +93,7 @@ export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProp
     );
   }
 
-  const cars = vehiclesByCustomer.get(customer.id) ?? [];
+  const cars = customer.vehicles ?? [];
 
   const columns: Column<Ticket>[] = [
     {

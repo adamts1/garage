@@ -20,15 +20,23 @@ import type { Customer } from '@garage/shared';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const listCustomers = vi.fn();
+/* The customers on file, as the database holds them. The form asks it who
+   answers a phone and who holds a ת״ז, once typing pauses. */
+let onFile: Customer[] = [];
+const customersWithPhone = vi.fn();
+const customerHoldingIdNumber = vi.fn();
 
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
+  const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+  const db = fakeCustomerDb(() => onFile);
   return {
     ...actual,
-    listCustomers: (...a: unknown[]) => listCustomers(...a),
-    listVehicles: vi.fn(async () => []),
-    subscribeToTable: vi.fn(() => () => {}),
+    searchCustomers: db.searchCustomers,
+    getCustomer: db.getCustomer,
+    customersWithPhone: (...a: unknown[]) => customersWithPhone(...a),
+    customerHoldingIdNumber: (...a: unknown[]) => customerHoldingIdNumber(...a),
+    vehiclesForPlate: db.vehiclesForPlate,
   };
 });
 
@@ -45,11 +53,13 @@ const customer = (over: Partial<Customer>): Customer =>
 const DANA = customer({ id: 'dana', name: 'דנה כהן', phone: '052-111-2233', id_number: '311111111' });
 
 const setup = async (rows: Customer[] = [DANA]) => {
-  listCustomers.mockResolvedValue(rows);
+  onFile = rows;
+  const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+  const db = fakeCustomerDb(() => onFile);
+  customersWithPhone.mockReset().mockImplementation(db.customersWithPhone);
+  customerHoldingIdNumber.mockReset().mockImplementation(db.customerHoldingIdNumber);
   const onDone = vi.fn();
   const view = renderHook(() => useNewTicket({ tickets: [], setTickets: vi.fn(), onDone }));
-  // The hook loads the customer list in an effect; the rules below are about it.
-  await waitFor(() => expect(listCustomers).toHaveBeenCalled());
   return { ...view, onDone };
 };
 

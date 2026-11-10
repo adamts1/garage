@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { Pill } from '../../components/Pill';
 import { PageHeader } from '../../components/PageHeader';
-import { Table, type Column } from '../../components/Table';
+import { PagedTable, type Column } from '../../components/Table';
 import { IconClock } from '../../icons';
 import { epicChip } from '../../lib/epic';
 import styles from './ArchivePage.module.css';
@@ -150,7 +150,7 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         </Filter>
       </FilterBar>
 
-      <Table
+      <PagedTable
         columns={columns}
         rows={rows}
         rowKey={(ticket) => ticket.k}
