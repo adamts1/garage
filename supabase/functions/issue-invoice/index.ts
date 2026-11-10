@@ -50,25 +50,77 @@ function netUnit(price: unknown, pct: unknown): number {
   return d ? Math.round(p * (1 - d / 100) * 100) / 100 : p;
 }
 
+/** Which work a line was billed under: its position among the ticket's works
+ *  and its name. Stored on every line, so the grouping a document is printed
+ *  with is frozen with it rather than worked out later from a ticket that may
+ *  have changed since. */
+interface LineWork { group: number; work: string; kind: 'work' | 'part' }
+
 /** Build invoice lines from the ticket's OWN works: one line per work's labour,
  *  one per part, each after its discount. Prices are pre-VAT (as stored).
- *  Returns lines + pre-VAT subtotal. */
-function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number } {
+ *  Returns lines + pre-VAT subtotal, and for each line the work it came from. */
+function linesFromWorks(works: Work[]): { items: InvoiceItem[]; subtotal: number; owners: LineWork[] } {
   const items: InvoiceItem[] = [];
-  for (const w of works ?? []) {
+  const owners: LineWork[] = [];
+  (works ?? []).forEach((w, group) => {
+    const work = w.name || 'עבודה';
     const labour = netUnit(w.labor, w.labor_discount);
     if (labour > 0) {
-      items.push({ description: w.name || 'עבודה', unitprice: labour, quantity: 1 });
+      items.push({ description: work, unitprice: labour, quantity: 1 });
+      owners.push({ group, work, kind: 'work' });
     }
     for (const p of w.work_items ?? []) {
       const unit = netUnit(p.price, p.discount);
       if (unit !== 0) {
-        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1 });
+        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1, indent: true });
+        owners.push({ group, work, kind: 'part' });
       }
     }
-  }
+  });
   const subtotal = items.reduce((s, i) => s + i.unitprice * i.quantity, 0);
-  return { items, subtotal };
+  return { items, subtotal, owners };
+}
+
+/** The car, as the ticket had it when the document was issued. */
+interface VehicleSnapshot {
+  plate: string | null;
+  car: string | null;
+  km: string | null;
+  /** When the car came in — the ticket's creation. */
+  opened_at: string | null;
+  /** When the work was finished — the ticket first reaching done or paid. */
+  closed_at: string | null;
+}
+
+const blank = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+
+function vehicleOf(t: { plate?: unknown; car?: unknown; km?: unknown; created_at?: unknown; closed_at?: unknown }): VehicleSnapshot | null {
+  const v: VehicleSnapshot = {
+    plate: blank(t.plate),
+    car: blank(t.car),
+    km: blank(t.km),
+    opened_at: blank(t.created_at),
+    closed_at: blank(t.closed_at),
+  };
+  return v.plate || v.car || v.km ? v : null;
+}
+
+/** A date as the garage reads it — Israel time, day first. */
+const ilDate = (iso: string | null) => (iso
+  ? new Date(iso).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })
+  : null);
+
+/** The car on one line of text, for the provider's remark field. */
+function vehicleNote(v: VehicleSnapshot | null): string | undefined {
+  if (!v) return undefined;
+  const parts = [
+    v.plate && `מספר רכב: ${v.plate}`,
+    v.car,
+    v.km && `ק״מ: ${v.km}`,
+    v.opened_at && `כניסה: ${ilDate(v.opened_at)}`,
+    v.closed_at && `סיום: ${ilDate(v.closed_at)}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -272,7 +324,7 @@ Deno.serve(async (req) => {
       // Caller's JWT -> RLS guarantees this is their garage's ticket, or nothing.
       const { data: ticket, error: tErr } = await userClient
         .from('tickets')
-        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, labor_discount, work_items(name, qty, price, discount))')
+        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, plate, car, km, created_at, closed_at, works(name, labor, labor_discount, work_items(name, qty, price, discount))')
         .eq('id', ticketId)
         .maybeSingle();
       if (tErr) return json({ error: tErr.message }, 400);
@@ -322,7 +374,8 @@ Deno.serve(async (req) => {
         return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
-      const { items, subtotal } = linesFromWorks(ticket.works as unknown as Work[]);
+      const { items, subtotal, owners } = linesFromWorks(ticket.works as unknown as Work[]);
+      const vehicle = vehicleOf(ticket);
       if (items.length === 0) {
         await release('no priced works');
         return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
@@ -363,6 +416,7 @@ Deno.serve(async (req) => {
         payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
         payments: payments ?? undefined,
         total,
+        note: vehicleNote(vehicle),
       }));
       if (doc instanceof Response) return doc;
 
@@ -381,7 +435,11 @@ Deno.serve(async (req) => {
         customer_id_number: ticket.id_number,
         customer_address: ticket.address,
         customer_phone: ticket.phone,
-        lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        lines: items.map((i, n) => ({
+          desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity),
+          ...owners[n],
+        })),
+        vehicle,
         subtotal,
         vat_rate: vatRate,
         vat,
@@ -734,8 +792,8 @@ Deno.serve(async (req) => {
       const { subtotal, vat, total } = priced;
 
       const items: InvoiceItem[] = untouched
-        ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number }>).map((l) => ({
-            description: l.desc, unitprice: l.unit_price, quantity: l.qty,
+        ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
+            description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
         : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
 

@@ -138,3 +138,45 @@ describe('rounding', () => {
     expect(groupInvoiceLines(inv([line('עבודה', 1, 100)]), w)).toBeNull();
   });
 });
+
+/* Since 20261110090000 each line says which work it was billed under, and the
+   grouping is part of the issued document: no ticket is needed, and an edit to
+   the ticket after billing changes nothing. */
+describe('lines that carry their work', () => {
+  const owned = (desc: string, qty: number, unit: number, group: number, work: string, kind: 'work' | 'part'): InvoiceLine =>
+    ({ ...line(desc, qty, unit), group, work, kind });
+
+  const frozen = {
+    lines: [
+      owned('החלפת רפידות', 1, 300, 0, 'החלפת רפידות', 'work'),
+      owned('רפידות קדמיות', 2, 100, 0, 'החלפת רפידות', 'part'),
+      owned('נוזל בלמים', 1, 45, 0, 'החלפת רפידות', 'part'),
+      owned('מסנן', 1, 30, 1, 'טיפול', 'part'),
+    ],
+  } as Pick<Invoice, 'lines'>;
+
+  it('groups them with no ticket at all', () => {
+    const groups = groupInvoiceLines(frozen, undefined)!;
+    expect(groups.map((g) => g.name)).toEqual(['החלפת רפידות', 'טיפול']);
+    expect(groups[0].labour?.desc).toBe('החלפת רפידות');
+    expect(groups[0].parts.map((p) => p.desc)).toEqual(['רפידות קדמיות', 'נוזל בלמים']);
+  });
+
+  /* A work charged for its parts only still gets its heading. */
+  it('names a work that has parts and no labour line', () => {
+    const groups = groupInvoiceLines(frozen, undefined)!;
+    expect(groups[1]).toMatchObject({ name: 'טיפול', labour: null });
+    expect(groups[1].parts).toHaveLength(1);
+  });
+
+  it('ignores a ticket edited since', () => {
+    const edited: TicketWork[] = [{ uid: 'w9', code: 'X', name: 'שם אחר', labor: 999, items: [] }];
+    expect(groupInvoiceLines(frozen, edited)!.map((g) => g.name)).toEqual(['החלפת רפידות', 'טיפול']);
+  });
+
+  /* Half-marked lines are not trusted: the old check decides, as before. */
+  it('falls back to checking against the works when any line is unmarked', () => {
+    const mixed = { lines: [frozen.lines[0], line('רפידות קדמיות', 2, 100)] } as Pick<Invoice, 'lines'>;
+    expect(groupInvoiceLines(mixed, undefined)).toBeNull();
+  });
+});

@@ -137,7 +137,15 @@ export const printInvoice = (
   const t = opts.ticket;
   const groups = groupInvoiceLines(inv, t?.works);
   const cancelled = inv.status === 'cancelled';
-  const hasVehicle = Boolean(t && (t.plate || t.car || t.year || t.km));
+  /* The car the document was issued for, frozen with it since
+     20261110090000. Older documents have none, and fall back to the ticket as
+     it is now — the best there is for them, and what this printed before. */
+  const v = inv.vehicle ?? (t
+    ? { plate: t.plate || null, car: t.car || null, km: t.km || null, openedAt: t.createdAtISO ?? null, closedAt: t.closedAt ?? null }
+    : null);
+  const year = inv.vehicle ? null : t?.year;
+  const hasVehicle = Boolean(v && (v.plate || v.car || v.km || year));
+  const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('he-IL') : null);
 
   const lines = groups
     ? groups.map(invoiceGroup).join('')
@@ -174,10 +182,12 @@ export const printInvoice = (
         <section>
           <div class="sub-t">הרכב</div>
           ${hasVehicle ? `<table class="kv">
-            ${row('מספר רישוי', t!.plate)}
-            ${row('רכב / דגם', t!.car)}
-            ${row('שנת ייצור', t!.year)}
-            ${row('קילומטראז׳', t!.km)}
+            ${row('מספר רישוי', v!.plate)}
+            ${row('רכב / דגם', v!.car)}
+            ${row('שנת ייצור', year)}
+            ${row('קילומטראז׳', v!.km)}
+            ${row('תאריך כניסה', day(v!.openedAt))}
+            ${row('תאריך סיום', day(v!.closedAt))}
           </table>` : `<div class="note" style="color:#888">פרטי הרכב אינם זמינים למסמך זה</div>`}
         </section>
       </div>

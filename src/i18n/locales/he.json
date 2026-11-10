@@ -755,7 +755,10 @@
       "subtotal": "סכום לפני מע״מ",
       "vat": "מע״מ ({{percent}}%)",
       "total": "סה״כ",
-      "credited": "מתוכו זוכה"
+      "credited": "מתוכו זוכה",
+      "vehicle": "רכב",
+      "km": "{{km}} ק״מ",
+      "visit": "כניסה – סיום"
     }
   },
   "expenses": {
