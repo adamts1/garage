@@ -7,7 +7,7 @@
 // InvoiceProvider shape — nothing here needs to change.
 
 import type {
-  InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
+  InvoiceItem, InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
   PaymentPart, ProviderCredentials, RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
 import { NotIssued } from './provider.ts';
@@ -126,18 +126,42 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
   };
 }
 
+/* Lines as iCount gets them. Its documents are a flat list with no styling of
+   ours, so a part is set under the work above it by its text alone: indented
+   with no-break spaces, then the "◦" the printed copy uses — the line order
+   (work, then its parts) does the rest. No-break spaces because a renderer
+   collapses ordinary ones; the mark because it may trim even those, and then
+   the part is still told apart from the work. */
+const PART_INDENT = '\u00A0'.repeat(6) + '◦ ';
+const icountItems = (items: InvoiceItem[]) => items.map(({ indent, ...item }) => (
+  indent ? { ...item, description: `${PART_INDENT}${item.description}` } : item
+));
+
+/* The document's free-text remark — where the car, its mileage and its dates
+   go, since iCount has no fields of its own for them.
+
+   UNVERIFIED: `hwc` is the remark field of iCount's older create_doc API, and
+   v3 kept most of those names, but this has not been seen printed on a v3
+   document yet (the trial account had expired). So it may be ignored; and if
+   iCount refuses the request because of it, the document is issued again
+   without it. A refusal is iCount's definite "no" — nothing was created — so
+   the second attempt cannot make a duplicate. A remark is never worth a
+   document that was not issued. */
+const NOTE_FIELD = 'hwc';
+
 export const icountAdapter: InvoiceProvider = {
   async issue(input: IssueInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
     const doctype = DOCTYPE[input.docType];
-    const data = await call(c, 'doc/create', {
+    const create = (note?: string) => call(c, 'doc/create', {
+      ...(note ? { [NOTE_FIELD]: note } : {}),
       doctype,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
       client_address: input.customer.address || undefined,
       lang: 'he',
       currency: 'ILS',
-      items: input.items,
+      items: icountItems(input.items),
       /* A payment block only on the document that IS a payment. An invrec is
          rejected without one; a plain invoice describes money not yet received,
          and claiming it was paid is the one thing that would make the document
@@ -146,6 +170,14 @@ export const icountAdapter: InvoiceProvider = {
       email_to_client: false,
       send_email: false,
     });
+    let data;
+    try {
+      data = await create(input.note);
+    } catch (e) {
+      if (!(input.note && e instanceof NotIssued)) throw e;
+      console.warn(`iCount refused the document with a remark; issuing without it: ${e.message}`);
+      data = await create();
+    }
     const docnum = String(data.docnum);
     const info = await docInfo(c, doctype, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
@@ -195,7 +227,7 @@ export const icountAdapter: InvoiceProvider = {
       client_idno: input.customer.idNo || undefined,
       lang: 'he',
       currency: 'ILS',
-      items: input.items,
+      items: icountItems(input.items),
       refundreason: input.reason,
       based_on: [{ doctype: DOCTYPE.invoice_receipt, docnum: input.basedOnDocnum }],
     });

@@ -326,6 +326,40 @@ describe('printInvoice', () => {
     expect(html).not.toContain('קוד רכב');
   });
 
+  /* The car as it was when the document was issued wins over the ticket as it
+     is now — a plate corrected or a later visit's mileage typed over must not
+     rewrite what an issued bill said. */
+  it('prints the car and the visit dates frozen with the document', () => {
+    printInvoice({
+      ...invoice,
+      vehicle: {
+        plate: '98-765-43', car: 'טויוטה קורולה', km: '45000',
+        openedAt: '2026-11-01T08:00:00.000Z', closedAt: '2026-11-03T15:00:00.000Z',
+      },
+    } as Invoice, { ticket });
+    const html = doc();
+    expect(html).toContain('98-765-43');
+    expect(html).not.toContain('12-345-67');     // the ticket's current plate
+    expect(html).toContain('45000');
+    expect(html).toContain('תאריך כניסה');
+    expect(html).toContain(new Date('2026-11-01T08:00:00.000Z').toLocaleDateString('he-IL'));
+    expect(html).toContain('תאריך סיום');
+    expect(html).toContain(new Date('2026-11-03T15:00:00.000Z').toLocaleDateString('he-IL'));
+  });
+
+  it('groups parts under their work from the lines alone', () => {
+    printInvoice({
+      ...invoice,
+      lines: [
+        { desc: 'החלפת רפידות', qty: 1, unit_price: 300, line_total: 300, group: 0, work: 'החלפת רפידות', kind: 'work' },
+        { desc: 'רפידות קדמיות', qty: 2, unit_price: 100, line_total: 200, group: 0, work: 'החלפת רפידות', kind: 'part' },
+      ],
+    } as Invoice);
+    const html = doc();
+    expect(html).toContain('<tbody class="w">');
+    expect(html).toContain('רפידות קדמיות');
+  });
+
   it('says the vehicle is unavailable when the ticket is gone', () => {
     printInvoice(invoice);
     expect(doc()).toContain('פרטי הרכב אינם זמינים');
