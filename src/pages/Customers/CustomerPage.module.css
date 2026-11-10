@@ -120,3 +120,14 @@
     gap: 2px;
   }
 }
+
+/* An imported work order, opened under its row on a car's page. */
+.legacyLines {
+  padding: 8px 12px 12px;
+}
+
+.legacyNote {
+  margin: 0 0 8px;
+  color: var(--muted-d);
+  font-size: 13px;
+}

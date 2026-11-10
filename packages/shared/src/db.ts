@@ -482,6 +482,7 @@ const rowToTicket = (r: any): Ticket => ({
   boardHidden: r.board_hidden ?? undefined,
   cancelledAt: r.cancelled_at ?? null,
   cancelReason: r.cancel_reason ?? null,
+  legacy: r.legacy_source ? { source: r.legacy_source, number: r.legacy_number ?? '' } : null,
   works: (r.works ?? [])
     .slice()
     .sort((a: any, b: any) => a.position - b.position)
@@ -558,11 +559,35 @@ const ticketToRow = (t: Ticket) => ({
   ...(t.boardHidden !== undefined && { board_hidden: t.boardHidden }),
 });
 
+/* Postgres' "undefined column": the app has reached a database the migration
+   that adds the column has not. */
+const isMissingColumn = (e: { code?: string } | null) => e?.code === '42703';
+
+/** The garage's own work orders. Imported history (legacy_source) is left out
+ *  here, at the source, so the board, archive and reports never see it; only a
+ *  car's page asks for it, through listCarLegacyHistory. */
 export const listTickets = async (): Promise<Ticket[]> => {
-  const { data, error } = await getClient()
+  const query = () => getClient()
     .from('tickets')
     .select('*, works(*, work_items(*))')
     .order('created_at', { ascending: false });
+  let { data, error } = await query().is('legacy_source', null);
+  // Before 20261110100000 there is no column, and so no imported history.
+  if (isMissingColumn(error)) ({ data, error } = await query());
+  if (error) throw error;
+  return (data ?? []).map(rowToTicket);
+};
+
+/** A car's work orders from the garage's previous system, newest first. Empty
+ *  where nothing was imported, or where the column does not exist yet. */
+export const listCarLegacyHistory = async (carId: string): Promise<Ticket[]> => {
+  const { data, error } = await getClient()
+    .from('tickets')
+    .select('*, works(*, work_items(*))')
+    .eq('car_id', carId)
+    .not('legacy_source', 'is', null)
+    .order('created_at', { ascending: false });
+  if (isMissingColumn(error)) return [];
   if (error) throw error;
   return (data ?? []).map(rowToTicket);
 };

@@ -14,10 +14,21 @@ vi.mock('@garage/shared', async (importActual) => ({
     car: { id: 'car-1', plate: '12345678', manufacturer: 'קיה', model: 'נירו', year: '2022', km: '3000', vehicle_code: '4111' },
     owners: [{ id: 'c-a', name: 'דנה', phone: null }, { id: 'c-b', name: 'יוסי', phone: null }],
   })),
+  listCarLegacyHistory: vi.fn(async () => [
+    {
+      k: 'RB-1131', st: 'done', title: 'טיפול', plate: '12345678', customer: 'דנה', amount: 0,
+      carId: 'car-1', createdAtISO: '2021-04-07T08:00:00Z', legacy: { source: 'ricbi', number: '1131' },
+      works: [{ uid: 'w', code: '', name: 'טיפול', labor: 0, items: [
+        { sku: '90915-YZZE1', name: 'מסנן שמן מקורי', qty: 1, price: 70 },
+      ] }],
+    },
+  ]),
 }));
 
 await import('../../i18n');
 const { default: CarPage } = await import('./CarPage');
+
+const { fireEvent } = await import('@testing-library/react');
 
 const ticket = (k: string, over: Partial<Ticket>): Ticket =>
   ({ k, st: 'paid', title: 'טיפול', plate: '12345678', customer: '', amount: 0, ...over }) as Ticket;
@@ -45,5 +56,22 @@ describe('the car page', () => {
     expect(screen.getAllByText('דנה').length).toBeGreaterThan(0);
     expect(screen.getAllByText('יוסי').length).toBeGreaterThan(0);
     expect(screen.getByText('4111')).toBeTruthy();
+  });
+
+  it('adds the previous system\'s work orders, read-only, with their lines', async () => {
+    const onOpenTicket = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/cars/car-1']}>
+        <Routes><Route path="/cars/:id" element={<CarPage tickets={[]} onOpenTicket={onOpenTicket} />} /></Routes>
+      </MemoryRouter>,
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('RB-1131')).toBeTruthy();
+    expect(screen.getByText('מערכת קודמת')).toBeTruthy();
+    // Opened in place, never as a ticket of ours.
+    fireEvent.click(screen.getByText('RB-1131'));
+    expect(onOpenTicket).not.toHaveBeenCalled();
+    expect(screen.getByText('מסנן שמן מקורי')).toBeTruthy();
   });
 });
