@@ -189,6 +189,9 @@ const CSS = `
   .sheet.wo .grand-l{font-size:15px}
   .sheet.wo .grand-v{font-size:17px}
   .sheet.wo .note{font-size:14px}
+  /* What the customer asked for is read before the work list, so it is bigger. */
+  .sheet.wo .notes .sub-t{font-size:15px}
+  .sheet.wo .notes .note{font-size:17px;line-height:1.55}
   .sheet.wo .sigrow{font-size:13.5px;margin-top:26px}
   .sheet.wo .foot{font-size:12.5px}
 
@@ -361,6 +364,16 @@ export const letterheadHtml = (): string => {
     </div>`;
 };
 
+/* Intake stores the car as "טויוטה קורולה 2019" (carLabel), but the work order
+   has its own year row — so the year is dropped here rather than printed twice.
+   Only a trailing year that matches the ticket's is removed. */
+const carWithoutYear = (car?: string, year?: string): string | undefined => {
+  const y = year?.trim();
+  if (!car || !y || !/^\d+$/.test(y)) return car;
+  const stripped = car.trim().replace(new RegExp(`\\s+${y}$`), '');
+  return stripped || car;
+};
+
 /** What the window or the print dialog is called. */
 export const workOrderTitle = (t: Ticket): string => `כרטיס עבודה ${t.k}`;
 
@@ -390,7 +403,7 @@ export const workOrderHtml = (
       : '',
   ].join('');
   const notesBlock = notes
-    ? `<div class="box"><div class="sub-t">הערות</div>${notes}</div>`
+    ? `<div class="box notes"><div class="sub-t">הערות</div>${notes}</div>`
     : '';
 
   /* A cancelled ticket still prints — it is a kept record — but must never be
@@ -428,7 +441,7 @@ export const workOrderHtml = (
           <div class="sub-t">הרכב</div>
           <table class="kv">
             ${row('מספר רישוי', t.plate)}
-            ${row('רכב / דגם', t.car)}
+            ${row('רכב / דגם', carWithoutYear(t.car, t.year))}
             ${row('שנת ייצור', t.year)}
             ${row('קילומטראז׳', t.km)}
             ${row('קוד רכב', t.vehicleCode)}
@@ -436,6 +449,8 @@ export const workOrderHtml = (
         </section>
       </div>
     </div>
+
+    ${notesBlock}
 
     <div class="box tight grow">
       <table class="lines wo">
@@ -466,8 +481,6 @@ export const workOrderHtml = (
         </div>
       </div>
     </div>
-
-    ${notesBlock}
 
     <div class="sigs">
       <div class="sigrow">
