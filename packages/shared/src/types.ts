@@ -133,6 +133,12 @@ export interface Ticket {
    *  by ticketToRow — cancelTicket is the only way in. */
   cancelledAt?: string | null;
   cancelReason?: string | null;
+
+  /** Set on a work order imported from the garage's previous system
+   *  (tickets.legacy_source / legacy_number). History only: read-only, never
+   *  billed, never on the board. listTickets leaves these out; a car's page
+   *  loads them with listCarLegacyHistory. */
+  legacy?: { source: string; number: string } | null;
 }
 
 export const isCancelled = (t: Pick<Ticket, 'st'>): boolean => t.st === 'cancelled';
