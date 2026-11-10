@@ -70,6 +70,28 @@ describe('workOrderHtml', () => {
     expect(html).toContain('אי-תן שירותי רכב בע&quot;מ');
     expect(html).toContain('02-6522306');
   });
+
+  /* Intake stores "מאזדה 3 2005" in car; the year has its own row on the sheet. */
+  it('prints the car without the year that already has its own row', () => {
+    const html = workOrderHtml({ ...ticket, car: 'מאזדה 3 2005', year: '2005' }, totals);
+    expect(html).toContain('<td>מאזדה 3</td>');
+    expect(html).not.toContain('מאזדה 3 2005');
+    expect(html).toContain('2005');
+  });
+
+  it('keeps the car whole when the model itself is the year', () => {
+    const html = workOrderHtml({ ...ticket, car: '2005', year: '2005' }, totals);
+    expect(html).toContain('רכב / דגם');
+    expect(html.match(/>2005</g)?.length).toBe(2);
+  });
+
+  /* What the customer asked for is read before the work list, not after it. */
+  it('puts the notes between the customer and the work lines', () => {
+    const html = workOrderHtml({ ...ticket, notes: 'לבדוק גם את המזגן' }, totals);
+    const at = (s: string) => html.indexOf(s);
+    expect(at('הלקוח')).toBeLessThan(at('לבדוק גם את המזגן'));
+    expect(at('לבדוק גם את המזגן')).toBeLessThan(at('תיאור העבודה'));
+  });
 });
 
 describe('carHistoryHtml', () => {
