@@ -39,9 +39,10 @@ export default function InvoiceDetail({
   const { t } = useTranslation();
 
   const lineColumns: Column<Line>[] = [
-    /* A part sits under the work it was used in, marked the way the issued
-       document marks it. Older documents do not say, and stay flat. */
-    { key: 'desc', header: 'invoices.lines.desc', render: (l) => (l.kind === 'part' ? `└ ${l.desc}` : l.desc) },
+    /* A part sits under the work it was used in: the work on a grey band, its
+       parts indented on white beneath it (see rowClassName below). Older
+       documents do not say which is which, and stay flat. */
+    { key: 'desc', header: 'invoices.lines.desc', render: (l) => l.desc },
     { key: 'qty', header: 'invoices.lines.qty', width: 80, cellClassName: styles.muted, render: (l) => l.qty },
     { key: 'unit', header: 'invoices.lines.unit', width: 110, cellClassName: styles.muted, render: (l) => money(l.unit_price) },
     { key: 'total', header: 'invoices.lines.total', width: 120, render: (l) => <strong>{money(l.line_total)}</strong> },
@@ -136,6 +137,7 @@ export default function InvoiceDetail({
           /* Line items have no id — they are a frozen JSON array on the
              document, never sorted, so position is their identity. */
           rowKey={(_line, i) => String(i)}
+          rowClassName={(l) => (l.kind === 'work' ? styles.workLine : l.kind === 'part' ? styles.partLine : undefined)}
           className={styles.lines}
         />
       )}

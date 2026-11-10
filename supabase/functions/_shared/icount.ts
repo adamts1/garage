@@ -126,12 +126,15 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
   };
 }
 
-/* Lines as iCount gets them. Its documents are a flat list, so a part is
-   marked as belonging to the work above it by a leading "└" — the line order
-   (work, then its parts) does the rest. A leading character rather than spaces,
-   which a document renderer is free to trim. */
+/* Lines as iCount gets them. Its documents are a flat list with no styling of
+   ours, so a part is set under the work above it by its text alone: indented
+   with no-break spaces, then the "◦" the printed copy uses — the line order
+   (work, then its parts) does the rest. No-break spaces because a renderer
+   collapses ordinary ones; the mark because it may trim even those, and then
+   the part is still told apart from the work. */
+const PART_INDENT = '\u00A0'.repeat(6) + '◦ ';
 const icountItems = (items: InvoiceItem[]) => items.map(({ indent, ...item }) => (
-  indent ? { ...item, description: `└ ${item.description}` } : item
+  indent ? { ...item, description: `${PART_INDENT}${item.description}` } : item
 ));
 
 /* The document's free-text remark — where the car, its mileage and its dates

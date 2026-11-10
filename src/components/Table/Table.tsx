@@ -24,6 +24,9 @@ export interface TableProps<Row> {
   empty?: ReactNode;
   onRowClick?: (row: Row) => void;
   isRowSelected?: (row: Row) => boolean;
+  /** Extra class for a whole row — for rows that differ in kind, not state:
+   *  an invoice's work lines against the parts listed under them. */
+  rowClassName?: (row: Row, index: number) => string | undefined;
   defaultSort?: SortState | null;
   /** A full-width detail row underneath this one — a panel that belongs to the
    *  row rather than a column of it. Return null for the closed state, which is
@@ -56,6 +59,7 @@ export default function Table<Row>({
   empty,
   onRowClick,
   isRowSelected,
+  rowClassName,
   defaultSort = null,
   renderExpanded,
   footer,
@@ -128,6 +132,7 @@ export default function Table<Row>({
                   className={[
                     onRowClick ? styles.clickable : null,
                     isRowSelected?.(row) ? styles.selected : null,
+                    rowClassName?.(row, i),
                   ].filter(Boolean).join(' ')}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
