@@ -1,13 +1,56 @@
-import { isCancelled, shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { isCancelled, searchLegacyTickets, shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { Pill } from '../../components/Pill';
 import { PageHeader } from '../../components/PageHeader';
-import { Table, type Column } from '../../components/Table';
+import { Pagination } from '../../components/Pagination';
+import { SearchBar } from '../../components/SearchBar';
+import { PagedTable, Table, type Column } from '../../components/Table';
+import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
 import { IconClock } from '../../icons';
 import { epicChip } from '../../lib/epic';
+import { PER_PAGE_OPTIONS, useServerPage } from '../../lib/useServerPage';
 import styles from './ArchivePage.module.css';
+
+type TabId = 'own' | 'legacy';
+const TABS: readonly TabDef<TabId>[] = [
+  { id: 'own', label: 'archive.title' },
+  { id: 'legacy', label: 'car.legacy.tab' },
+];
+
+/** Work cards imported from the previous system (RB-…): searched and paged by
+ *  the database, since they are not in the board's list — a garage moving
+ *  over can bring tens of thousands. Each opens read-only. */
+function LegacyArchive({ onOpenTicket }: { onOpenTicket: (k: string) => void }) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState('');
+  const { rows, total, pager, loaded, searching } = useServerPage(searchLegacyTickets, query);
+  const columns: Column<Ticket>[] = [
+    { key: 'k', header: 'archive.fields.key', width: 96, cellClassName: styles.key, render: (x) => x.k },
+    { key: 'date', header: 'customer.fields.created', width: 110, render: (x) => x.createdAt ?? '—' },
+    { key: 'title', header: 'archive.fields.title', render: (x) => x.title || t('common.untitled') },
+    { key: 'customer', header: 'archive.fields.customer', render: (x) => x.customer || '—' },
+    { key: 'plate', header: 'archive.fields.plate', render: (x) => <span className={styles.plate}>{x.plate}</span> },
+    { key: 'car', header: 'archive.fields.car', render: (x) => x.car },
+    { key: 'amount', header: 'archive.fields.amount', width: 120, cellClassName: styles.amount, render: (x) => (x.amount ? shekel(x.amount) : '-') },
+  ];
+  return (
+    <>
+      <p className={styles.hint}>{t('car.legacy.archiveHint')} · {total}</p>
+      <SearchBar value={query} onChange={setQuery} placeholder="car.legacy.searchPlaceholder" />
+      <Table
+        columns={columns}
+        rows={rows}
+        rowKey={(x) => x.k}
+        onRowClick={(x) => onOpenTicket(x.k)}
+        empty={!loaded || searching ? t('app.loading') : t('archive.noMatch')}
+        className={styles.table}
+      />
+      <Pagination {...pager} perPageOptions={PER_PAGE_OPTIONS} />
+    </>
+  );
+}
 
 export interface ArchivePageProps {
   /** Already filtered to archived tickets — paid and aged past the cutoff, or
@@ -23,6 +66,7 @@ export interface ArchivePageProps {
 
 export default function ArchivePage({ tickets, workerChips, onOpenTicket }: ArchivePageProps) {
   const { t } = useTranslation();
+  const [tab, setTab] = useState<TabId>('own');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | 'paid' | 'cancelled'>('all');
 
@@ -128,6 +172,14 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         icon={<IconClock />}
       />
 
+      <Tabs tabs={TABS} selected={tab} onSelect={setTab} label="archive.title" />
+
+      {tab === 'legacy' ? (
+        <TabPanel id="legacy">
+          <LegacyArchive onOpenTicket={onOpenTicket} />
+        </TabPanel>
+      ) : (
+        <TabPanel id="own">
       <FilterBar>
         <Filter label="archive.search">
           {(id) => (
@@ -150,7 +202,7 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         </Filter>
       </FilterBar>
 
-      <Table
+      <PagedTable
         columns={columns}
         rows={rows}
         rowKey={(ticket) => ticket.k}
@@ -158,6 +210,8 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         empty={rows.length === 0 && tickets.length > 0 ? t('archive.noMatch') : t('archive.empty')}
         className={styles.table}
       />
+        </TabPanel>
+      )}
     </>
   );
 }

@@ -1,5 +1,8 @@
-import { customerKind, isCancelled, shekel, type Ticket } from '@garage/shared';
-import { useMemo, useState } from 'react';
+import {
+  customerKind, getCustomer, isCancelled, listCustomerLegacyHistory, shekel, subscribeToTable,
+  type CustomerWithVehicles, type Ticket,
+} from '@garage/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
@@ -9,8 +12,15 @@ import { Table, type Column } from '../../components/Table';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
 import { IconPrint } from '../../icons';
 import { printCustomerHistory, warnIfBlocked } from '../../lib/print';
+import { isConfigured } from '../../lib/supabase';
+import { useBurstReload } from '../../lib/useServerPage';
 import styles from './CustomerPage.module.css';
-import { useCustomers } from './useCustomers';
+
+const onCustomersOrCars = (onChange: () => void) => {
+  const offCustomers = subscribeToTable('customers', onChange);
+  const offVehicles = subscribeToTable('vehicles', onChange);
+  return () => { offCustomers(); offVehicles(); };
+};
 
 type TabId = 'tickets' | 'vehicles';
 const TABS: readonly TabDef<TabId>[] = [
@@ -35,6 +45,11 @@ const TONE: Record<Ticket['st'], PillTone> = {
    as a number, newest first. */
 const ticketNo = (ticket: Ticket) => Number(ticket.k.split('-')[1]) || 0;
 
+/* The garage's own cards and the previous system's (RB-…) are two number
+   sequences, so the list is in the order the visits happened. */
+const byVisit = (a: Ticket, b: Ticket) =>
+  (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? '') || ticketNo(b) - ticketNo(a);
+
 export interface CustomerPageProps {
   /** Every ticket, cancelled ones included — this page is the full record. */
   tickets: Ticket[];
@@ -50,15 +65,33 @@ export interface CustomerPageProps {
 export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProps) {
   const { t } = useTranslation();
   const { id } = useParams();
-  const { rows, loaded, vehiclesByCustomer } = useCustomers();
+  /* This one customer and their cars — not the whole customer list, which
+     stopped at 1000 rows and moved the table to show one record. */
+  const [customer, setCustomer] = useState<CustomerWithVehicles | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const load = useCallback(() => {
+    if (!isConfigured || !id) { setLoaded(true); return; }
+    getCustomer(id).then(setCustomer).catch(() => {}).finally(() => setLoaded(true));
+  }, [id]);
+  useEffect(load, [load]);
+  useBurstReload(onCustomersOrCars, load);
   const [tab, setTab] = useState<TabId>('tickets');
   const [filter, setFilter] = useState<StatusFilter>('all');
 
-  const customer = rows.find((c) => c.id === id);
+
+  /* Their cards from the previous system: not in the board's list, asked for
+     here, for this customer only. */
+  const [legacy, setLegacy] = useState<Ticket[]>([]);
+  useEffect(() => {
+    if (!isConfigured || !id) return;
+    let alive = true;
+    listCustomerLegacyHistory(id).then((rows) => alive && setLegacy(rows)).catch(() => {});
+    return () => { alive = false; };
+  }, [id]);
 
   const theirs = useMemo(
-    () => tickets.filter((ticket) => ticket.customerId === id).sort((a, b) => ticketNo(b) - ticketNo(a)),
-    [tickets, id],
+    () => [...tickets.filter((ticket) => ticket.customerId === id), ...legacy].sort(byVisit),
+    [tickets, legacy, id],
   );
   const shown = useMemo(() => theirs.filter((ticket) => matches(filter, ticket)), [theirs, filter]);
   const counts = useMemo(
@@ -76,7 +109,7 @@ export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProp
     );
   }
 
-  const cars = vehiclesByCustomer.get(customer.id) ?? [];
+  const cars = customer.vehicles ?? [];
 
   const columns: Column<Ticket>[] = [
     {
@@ -107,7 +140,9 @@ export default function CustomerPage({ tickets, onOpenTicket }: CustomerPageProp
     {
       key: 'status',
       header: 'customer.fields.status',
-      render: (ticket) => (
+      render: (ticket) => ticket.legacy ? (
+        <Pill tone="neutral">{t('car.legacy.badge')}</Pill>
+      ) : (
         <>
           <Pill tone={TONE[ticket.st]}>{t(`customer.status.${ticket.st}`)}</Pill>
           {isCancelled(ticket) && (

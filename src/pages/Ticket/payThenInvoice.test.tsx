@@ -39,7 +39,6 @@ vi.mock('@garage/shared', async (importActual) => {
     listItems: vi.fn(async () => []),
     listInvoices: (...a: unknown[]) => listInvoices(...a),
     subscribeToInvoices: vi.fn(() => () => {}),
-    listCustomers: vi.fn(async () => []),
     updateCustomer: vi.fn(async () => {}),
     subscribeToTable: vi.fn(() => () => {}),
     isGarageAdmin: () => true,

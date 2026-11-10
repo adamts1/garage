@@ -318,7 +318,6 @@ export default function TicketPage({
               </div>
               {!billLocked && switching && (
                 <SwitchCustomer
-                  customers={page.customers}
                   currentId={draft.customerId ?? null}
                   onPick={page.switchCustomer}
                   onClose={() => setSwitching(false)}

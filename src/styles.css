@@ -419,6 +419,17 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 }
 .app-shell.rail { grid-template-columns: 76px 1fr; }
 
+/* A hovered rail opens over the page rather than pushing it: the grid keeps its
+   76px column, so nothing on the page re-lays out. It grows leftward (RTL),
+   away from the pointer, so the edge under the cursor never moves. */
+.app-shell.rail > .sidebar.is-floating {
+  position: relative;
+  z-index: 40;
+  width: 240px;
+  justify-self: start;
+  box-shadow: -12px 0 32px rgba(15, 23, 42, 0.28);
+}
+
 .app-shell > .sidebar {
   grid-column: 1;
   grid-row: 1;
@@ -1521,3 +1532,17 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
 /* In the rail the avatar is the whole thing, and it stacks with the status dot
    and the power button the footer already centres. */
 .sidebar.is-rail .who-avatar { margin-bottom: 10px; }
+/* A list's pager sits at the foot of the page — however short the list — and
+   stays in view while a long one scrolls. The panel holding it (and whichever
+   wrapper the pager is inside: a tab panel, a section) grows to the full
+   height, so the pager's auto margin pushes it to the bottom. */
+.main-content > .panel:has(.pager-foot) { flex: 1 0 auto; display: flex; flex-direction: column; }
+.main-content > .panel:has(.pager-foot) > :has(.pager-foot) { flex: 1 0 auto; display: flex; flex-direction: column; }
+.pager-foot {
+  margin-top: auto;
+  position: sticky;
+  bottom: -22px;            /* the scroll box's own bottom padding */
+  z-index: 2;
+  background: var(--surface);
+  padding-bottom: 12px;
+}

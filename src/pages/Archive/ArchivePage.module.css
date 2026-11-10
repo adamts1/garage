@@ -49,3 +49,10 @@
   font-weight: 800;
   white-space: nowrap;
 }
+
+/* The line above the previous-system tab: what these are, and how many. */
+.hint {
+  margin: 4px 0 10px;
+  color: var(--muted-d);
+  font-size: 13px;
+}
