@@ -542,6 +542,11 @@ Deno.serve(async (req) => {
       const total = round2(subtotal + vat);
 
       const payMethod = docType === 'invoice_receipt' ? (body.pay_method as string | null) ?? null : null;
+      /* The car, when one was given: the same snapshot a ticket's invoice
+         freezes, minus what a counter sale does not know (model, km, dates).
+         Optional here so a client from before 2026-11-11 still issues; the
+         dialog is what requires it. */
+      const vehicle = vehicleOf({ plate: body.vehicle_plate });
 
       const doc = await provide(() => adapter.issue({
         credentials,
@@ -554,6 +559,7 @@ Deno.serve(async (req) => {
         items,
         payMethod,
         total,
+        note: vehicleNote(vehicle),
       }));
       if (doc instanceof Response) return doc;
 
@@ -573,6 +579,7 @@ Deno.serve(async (req) => {
         customer_address: (body.customer_address as string) || null,
         customer_phone: (body.customer_phone as string) || null,
         lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        vehicle,
         subtotal,
         vat_rate: vatRate,
         vat,

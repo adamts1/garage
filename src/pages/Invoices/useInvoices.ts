@@ -113,6 +113,7 @@ export function useInvoices() {
         customerIdNumber: sale.customerIdNumber || null,
         customerPhone: sale.customerPhone || null,
         customerAddress: sale.customerAddress || null,
+        vehiclePlate: sale.plate,
         docType: sale.docType,
         payMethod: sale.payMethod,
         lines: sale.lines,

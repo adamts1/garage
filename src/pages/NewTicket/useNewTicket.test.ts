@@ -155,6 +155,8 @@ describe('the picked customer id', () => {
     expect(result.current.form.licensePlate).toBe('98-765-43');
     expect(result.current.form.manufacturer).toBe('מאזדה');
     expect(result.current.vehicleChoices).toEqual([]);
+    // The car's last reading is not this visit's: km is left for the advisor to read off.
+    expect(result.current.form.km).toBe('');
   });
 });
 
