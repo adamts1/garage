@@ -86,21 +86,21 @@ const photoLines = (photos: readonly TicketPhoto[]): string[] => {
    underneath reads as a second charge. */
 /* Prices are after the discount, with the percentage named beside them — the
    same figures the printed sheet totals, so the two agree. */
-const discTag = (pct?: number): string => {
+const discTag = (pct?: number, vatDiscount?: boolean): string => {
   const d = clampDiscount(pct);
-  return d ? ` (הנחה ${d}%)` : '';
+  return (d ? ` (הנחה ${d}%)` : '') + (vatDiscount ? ' (כולל מע״מ)' : '');
 };
 
 const partLine = (p: PartRow): string =>
   p.qty > 1
-    ? `   ◦ ${p.name} ×${p.qty} (${money(partUnitNet(p))} ליח׳) - ${money(partLineTotal(p))}${discTag(p.discount)}`
-    : `   ◦ ${p.name} - ${money(partLineTotal(p))}${discTag(p.discount)}`;
+    ? `   ◦ ${p.name} ×${p.qty} (${money(partUnitNet(p))} ליח׳) - ${money(partLineTotal(p))}${discTag(p.discount, p.vatDiscount)}`
+    : `   ◦ ${p.name} - ${money(partLineTotal(p))}${discTag(p.discount, p.vatDiscount)}`;
 
 const workLines = (w: TicketWork): string[] => [
   /* With no parts the header is the labour, so its discount is named there. */
-  `• ${w.name} - ${money(workTotal(w))}${w.items.length ? '' : discTag(w.laborDiscount)}`,
+  `• ${w.name} - ${money(workTotal(w))}${w.items.length ? '' : discTag(w.laborDiscount, w.laborVatDiscount)}`,
   ...(w.items.length
-    ? [...(w.labor ? [`   ◦ עבודה: ${money(laborNet(w))}${discTag(w.laborDiscount)}`] : []), ...w.items.map(partLine)]
+    ? [...(w.labor ? [`   ◦ עבודה: ${money(laborNet(w))}${discTag(w.laborDiscount, w.laborVatDiscount)}`] : []), ...w.items.map(partLine)]
     : []),
 ];
 
@@ -118,6 +118,14 @@ export interface WaMessageInput {
   total: number;
   photos?: readonly TicketPhoto[];
 }
+
+/* The lines are listed at the price they show, so with a VAT discount they no
+   longer add up to the pre-VAT total by themselves: say what they come to and
+   what the VAT discount took off, then the total VAT goes on. */
+const vatDiscountLines = (sum: ReturnType<typeof worksSummary>): string[] =>
+  sum.vatDiscount > 0
+    ? [`סה״כ: ${money(sum.labor + sum.parts)}`, `מע״מ הכלול במחירים: -${money(sum.vatDiscount)}`]
+    : [];
 
 export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput): string {
   const works: TicketWork[] = ticket.works ?? [];
@@ -146,7 +154,7 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
       // Only when there is something to list — an empty header reads as a bug.
       ...(works.length ? ['העבודות שבוצעו:', ...works.flatMap(workLines), ''] : []),
       ...(works.length && vat > 0
-        ? [`סה״כ לפני מע״מ: ${money(sum.net)}`, `מע״מ (${Math.round(VAT * 100)}%): ${money(vat)}`]
+        ? [...vatDiscountLines(sum), `סה״כ לפני מע״מ: ${money(sum.net)}`, `מע״מ (${Math.round(VAT * 100)}%): ${money(vat)}`]
         : []),
       `סה״כ לתשלום: ${money(total)}`,
       ticket.paid ? paidLine(ticket.payMethod) : 'התשלום יתבצע בעת האיסוף.',
@@ -163,6 +171,7 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
     '',
     ...(works.length ? works.flatMap(workLines) : [`• ${ticket.title || 'טיפול'}`]),
     '',
+    ...vatDiscountLines(sum),
     `סה״כ לפני מע״מ: ${money(sum.net)}`,
     `מע״מ (${Math.round(VAT * 100)}%): ${money(sum.vat)}`,
     `סה״כ לתשלום: ${money(sum.total)}`,
