@@ -18,7 +18,7 @@ const bill = (over: Partial<SupplierExpense>): SupplierExpense => ({
   id: Math.random().toString(36).slice(2),
   supplierId: 'sup-1', supplierName: 'ספק א',
   date: '2026-08-01',
-  description: null, category: null, reference: null,
+  description: null, category: null, reference: null, lines: [],
   subtotal: 1000, vatRate: 0.18, vat: 180, total: 1180,
   paid: false, dueDate: null, chequeNumber: null, chequeDate: null,
   provider: 'icount', providerExpenseId: null,

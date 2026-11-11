@@ -30,6 +30,20 @@ export const printExpense = (e: SupplierExpense) =>
       ${row('תשלום', e.paid ? 'שולם' : 'טרם שולם')}
       ${e.providerExpenseId ? row('אסמכתא iCount', '#' + e.providerExpenseId) : ''}
     </table>
+    ${e.lines.length ? `<table class="lines">
+      <thead><tr>
+        <th style="width:52%">פריט</th>
+        <th class="n" style="width:14%">כמות</th>
+        <th class="n" style="width:17%">מחיר יח׳ (₪)</th>
+        <th class="n" style="width:17%">סה״כ (₪)</th>
+      </tr></thead>
+      <tbody>${e.lines.map((l) => `<tr>
+        <td class="desc">${esc(l.desc)}</td>
+        <td class="n">${l.qty}</td>
+        <td class="n">${esc(money(l.unit_price))}</td>
+        <td class="n">${esc(money(l.qty * l.unit_price))}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : ''}
     <table class="totals">
       ${row('סכום לפני מע״מ', money(e.subtotal))}
       ${row('מע״מ', money(e.vat))}

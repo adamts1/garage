@@ -5,3 +5,5 @@ export { CellInput, CellSelect, RowActions } from './RowControls';
 export type { CellInputProps, CellSelectProps, RowActionsProps } from './RowControls';
 export type { Column, SortState } from './types';
 export { compareValues, sortRows, useTable } from './useTable';
+export { RowMenu } from './RowMenu';
+export type { RowMenuItem } from './RowMenu';

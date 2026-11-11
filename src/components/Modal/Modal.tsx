@@ -17,6 +17,10 @@ export interface ModalProps {
   /** Deeper than the first — draws a lighter scrim so the modal below shows. */
   stacked?: boolean;
   size?: 'sm' | 'md';
+  /** 'drawer' is a full-height panel on the reading side of the screen, for a
+   *  form long enough to want the height (2026-11-11, the expense form). The
+   *  behaviour is the dialog's: same Escape, focus and scroll lock. */
+  variant?: 'dialog' | 'drawer';
 }
 
 /** The shell every modal shares: scrim, panel, heading, footer. What goes in
@@ -30,13 +34,15 @@ export default function Modal({
   isTop = true,
   stacked = false,
   size = 'md',
+  variant = 'dialog',
 }: ModalProps) {
+  const drawer = variant === 'drawer';
   const { t } = useTranslation();
   const { panelRef } = useModal({ isTop, onClose });
 
   return (
     <div
-      className={[styles.scrim, stacked ? styles.stacked : null].filter(Boolean).join(' ')}
+      className={[styles.scrim, stacked ? styles.stacked : null, drawer ? styles.drawerScrim : null].filter(Boolean).join(' ')}
       /* Only a click that both starts and ends on the scrim closes it. Without
          the target check, selecting text in the body and releasing outside the
          panel threw the dialog away mid-edit. */
@@ -46,7 +52,7 @@ export default function Modal({
     >
       <div
         ref={panelRef}
-        className={[styles.panel, size === 'sm' ? styles.sm : null].filter(Boolean).join(' ')}
+        className={[styles.panel, size === 'sm' ? styles.sm : null, drawer ? styles.drawer : null].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal="true"
         aria-label={t(title, titleValues)}

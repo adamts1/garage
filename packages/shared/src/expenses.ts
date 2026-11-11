@@ -83,6 +83,9 @@ export interface SupplierExpense {
   description: string | null;
   category: string | null;
   reference: string | null;
+  /** The items on the supplier's invoice. Empty on an expense entered as a
+   *  single figure (everything before 2026-11-11). */
+  lines: ExpenseLine[];
   subtotal: number;
   vatRate: number;
   vat: number;
@@ -104,6 +107,29 @@ export interface SupplierExpense {
   createdAt: string;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** One item on a supplier's invoice. Pre-VAT, like every price in this system. */
+export interface ExpenseLine {
+  desc: string;
+  qty: number;
+  unit_price: number;
+}
+
+/** What the lines add up to, before VAT — the expense's subtotal. */
+export const linesSubtotal = (lines: readonly ExpenseLine[]): number =>
+  round2(lines.reduce((s, l) => s + l.qty * l.unit_price, 0));
+
+/** The lines in one line of text — for a list cell, or the provider's
+ *  description when none was typed. "x2" only where it is more than one. */
+export const linesSummary = (lines: readonly ExpenseLine[]): string =>
+  lines.map((l) => (l.qty === 1 ? l.desc : `${l.desc} ×${l.qty}`)).join(', ');
+
+const toLines = (raw: unknown): ExpenseLine[] =>
+  Array.isArray(raw)
+    ? raw.map((l) => ({ desc: String(l?.desc ?? ''), qty: Number(l?.qty) || 0, unit_price: Number(l?.unit_price) || 0 }))
+    : [];
+
 const rowToExpense = (r: any): SupplierExpense => ({
   id: r.id,
   supplierId: r.supplier_id,
@@ -112,6 +138,7 @@ const rowToExpense = (r: any): SupplierExpense => ({
   description: r.description ?? null,
   category: r.category ?? null,
   reference: r.reference ?? null,
+  lines: toLines(r.lines),
   subtotal: Number(r.subtotal),
   vatRate: Number(r.vat_rate),
   vat: Number(r.vat),
@@ -126,8 +153,6 @@ const rowToExpense = (r: any): SupplierExpense => ({
   syncError: r.sync_error ?? null,
   createdAt: r.created_at,
 });
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const listExpenses = async (): Promise<SupplierExpense[]> => {
   const rows = await fetchAll((from, to) => getClient()
@@ -145,6 +170,9 @@ export interface ExpenseInput {
   description?: string;
   category?: string;
   reference?: string;
+  /** The items. When given, the subtotal is their sum and `subtotal` below is
+   *  ignored — one figure, worked out in one place. */
+  lines?: readonly ExpenseLine[];
   subtotal: number;
   vatRate: number;   // e.g. 0.18; 0 for a VAT-free expense
   paid?: boolean;
@@ -164,8 +192,10 @@ export const dueOn = (e: SupplierExpense): string => e.dueDate ?? e.date;
  *  and total are derived from subtotal + rate so the stored figures are
  *  consistent. Returns the row; sync to the provider is a separate call. */
 export const createExpense = async (e: ExpenseInput): Promise<SupplierExpense> => {
-  const vat = round2(e.subtotal * e.vatRate);
-  const total = round2(e.subtotal + vat);
+  const lines = (e.lines ?? []).map((l) => ({ desc: l.desc, qty: l.qty, unit_price: l.unit_price }));
+  const subtotal = lines.length ? linesSubtotal(lines) : e.subtotal;
+  const vat = round2(subtotal * e.vatRate);
+  const total = round2(subtotal + vat);
   const { data, error } = await getClient()
     .from('supplier_expenses')
     .insert({
@@ -174,7 +204,8 @@ export const createExpense = async (e: ExpenseInput): Promise<SupplierExpense> =
       description: e.description ?? null,
       category: e.category ?? null,
       reference: e.reference ?? null,
-      subtotal: e.subtotal,
+      lines,
+      subtotal,
       vat_rate: e.vatRate,
       vat,
       total,
@@ -190,8 +221,10 @@ export const createExpense = async (e: ExpenseInput): Promise<SupplierExpense> =
 };
 
 export const updateExpense = async (id: string, e: ExpenseInput) => {
-  const vat = round2(e.subtotal * e.vatRate);
-  const total = round2(e.subtotal + vat);
+  const lines = (e.lines ?? []).map((l) => ({ desc: l.desc, qty: l.qty, unit_price: l.unit_price }));
+  const subtotal = lines.length ? linesSubtotal(lines) : e.subtotal;
+  const vat = round2(subtotal * e.vatRate);
+  const total = round2(subtotal + vat);
   const { error } = await getClient()
     .from('supplier_expenses')
     .update({
@@ -200,7 +233,10 @@ export const updateExpense = async (id: string, e: ExpenseInput) => {
       description: e.description ?? null,
       category: e.category ?? null,
       reference: e.reference ?? null,
-      subtotal: e.subtotal,
+      /* Only when given: an update that does not mention the items must not
+         erase the ones on file. */
+      ...(e.lines ? { lines } : {}),
+      subtotal,
       vat_rate: e.vatRate,
       vat,
       total,
