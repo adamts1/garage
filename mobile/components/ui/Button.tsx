@@ -91,11 +91,17 @@ export function Button({
           <ActivityIndicator color={variant === 'primary' ? C.onInk : color} />
         </View>
       ) : (
+        /* Centred both ways: Android pads text for accents above and below
+           (includeFontPadding), which sits a Hebrew label low in its pill, and
+           a label that wraps is otherwise aligned to one side. */
         <Text
           style={{
             color: text,
             fontSize: small ? 13 : 15,
             fontWeight: variant === 'primary' ? '800' : '700',
+            textAlign: 'center',
+            includeFontPadding: false,
+            textAlignVertical: 'center',
           }}
         >
           {label}
