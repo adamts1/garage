@@ -246,3 +246,34 @@
   color: var(--ink);
   font-weight: 400;
 }
+
+/* The percent discount and, beside it, the VAT discount. */
+.discountCell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vatToggle {
+  flex: none;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vatToggle:hover {
+  border-color: var(--primary);
+}
+
+/* On: this line is VAT-discounted. */
+.vatToggleOn {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-d);
+}

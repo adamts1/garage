@@ -1,4 +1,6 @@
-import { VAT, laborNet, partsTotal, worksDiscount, type Ticket, type TicketWork } from '@garage/shared';
+import {
+  VAT, laborNet, partsTotal, worksCharged, worksDiscount, worksVatDiscount, type Ticket, type TicketWork,
+} from '@garage/shared';
 
 export interface TicketTotals {
   /** Labour only, after discounts, before VAT. */
@@ -11,14 +13,21 @@ export interface TicketTotals {
   /** What the line discounts took off, before VAT. Already out of the figures
    *  above — this only says how much. */
   discount: number;
+  /** What the VAT discounts (הנחת מע״מ) take off labour + items. NOT already
+   *  out of them: those are the lines as shown, and VAT goes on what is left. */
+  vatDiscount: number;
 }
 
 /** What the summary panel, the printed ticket and the issue dialog all show. */
 export function ticketTotals(works: readonly TicketWork[]): TicketTotals {
   const labour = works.reduce((s, w) => s + laborNet(w), 0);
   const items = works.reduce((s, w) => s + partsTotal(w), 0);
-  const vat = (labour + items) * VAT;
-  return { labour, items, vat, total: labour + items + vat, discount: worksDiscount(works) };
+  const charged = worksCharged(works);
+  const vat = charged * VAT;
+  return {
+    labour, items, vat, total: charged + vat,
+    discount: worksDiscount(works), vatDiscount: worksVatDiscount(works),
+  };
 }
 
 /**
@@ -31,8 +40,7 @@ export function ticketTotals(works: readonly TicketWork[]): TicketTotals {
  * report, and changing it is a decision about money, not a tidy-up.
  */
 export function storedAmount(works: readonly TicketWork[]): number {
-  const { labour, items } = ticketTotals(works);
-  return Math.round((labour + items) * (1 + VAT));
+  return Math.round(worksCharged(works) * (1 + VAT));
 }
 
 /** Work is finished — enough to notify the customer. */

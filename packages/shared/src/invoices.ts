@@ -9,7 +9,7 @@
 
    See docs/PRODUCTION.md §4a and migration 20260727000000_invoices.sql. */
 
-import { discounted, type TicketWork } from './catalog';
+import { laborCharged, partUnitCharged, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
 import { fetchAll } from './paging';
 import { paymentsTotal, type PayMethod, type PaymentPart } from './payment';
@@ -551,15 +551,15 @@ export const groupInvoiceLines = (
     const group: InvoiceGroup = { name: w.name, labour: null, parts: [] };
 
     // `> 0`, and the fallback name, exactly as the issuing function has them.
-    // After the discount, as issue-invoice bills it (see catalog.ts).
-    const labour = discounted(Number(w.labor), w.laborDiscount);
+    // After both discounts, as issue-invoice bills it (see catalog.ts).
+    const labour = laborCharged({ ...w, labor: Number(w.labor) });
     if (labour > 0) {
       const line = take(w.name || 'עבודה', 1, labour);
       if (!line) return null;
       group.labour = line;
     }
     for (const p of w.items) {
-      const unit = discounted(Number(p.price), p.discount);
+      const unit = partUnitCharged({ ...p, price: Number(p.price) });
       if (unit === 0) continue;
       const line = take(p.name || 'חלק', Number(p.qty) || 1, unit);
       if (!line) return null;
