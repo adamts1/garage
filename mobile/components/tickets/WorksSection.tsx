@@ -8,7 +8,6 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   VAT,
-  clampDiscount,
   isGarageAdmin,
   laborNet,
   money,
@@ -38,11 +37,6 @@ export function WorksSection({
   const [pickPartFor, setPickPartFor] = useState<string | null>(null); // work uid
   const [pricing, setPricing] = useState<{ uid: string; index: number; part: PartRow } | null>(null);
   const [laborFor, setLaborFor] = useState<TicketWork | null>(null);
-  /* A percent discount being typed: on a work's labour (index null) or on one
-     of its parts. Open to every member, unlike the labour price itself. */
-  const [discountFor, setDiscountFor] = useState<
-    { uid: string; index: number | null; name: string; value: number } | null
-  >(null);
   /* Free text: 'work' for a new work, or the uid of the work a part goes on. */
   const [freeFor, setFreeFor] = useState<'work' | string | null>(null);
 
@@ -111,17 +105,6 @@ export function WorksSection({
     setLaborFor(null);
   };
 
-  /* Over 100 is 100, and zero is stored as nothing — a line that never had a
-     discount must not read back as edited. */
-  const applyDiscount = (pct: number) => {
-    if (discountFor) {
-      const d = clampDiscount(pct) || undefined;
-      if (discountFor.index === null) patchWork(discountFor.uid, { laborDiscount: d });
-      else patchPart(discountFor.uid, discountFor.index, { discount: d });
-    }
-    setDiscountFor(null);
-  };
-
   return (
     <>
       <SectionHead
@@ -145,11 +128,6 @@ export function WorksSection({
           onPatchPart={(i, patch) => patchPart(w.uid, i, patch)}
           onEditPrice={(i, p) => setPricing({ uid: w.uid, index: i, part: p })}
           onEditLabor={() => setLaborFor(w)}
-          onEditLaborDiscount={() =>
-            setDiscountFor({ uid: w.uid, index: null, name: w.name, value: w.laborDiscount ?? 0 })}
-          onEditPartDiscount={(i, p) =>
-            setDiscountFor({ uid: w.uid, index: i, name: p.name, value: p.discount ?? 0 })}
-          onToggleLaborVat={() => patchWork(w.uid, { laborVatDiscount: w.laborVatDiscount ? undefined : true })}
           onNotes={(notes) => patchWork(w.uid, { notes })}
           onRemovePart={(i) => removePart(w.uid, i)}
           onRemove={() => removeWork(w.uid)}
@@ -207,15 +185,6 @@ export function WorksSection({
       />
 
       <NumberPrompt
-        visible={Boolean(discountFor)}
-        title={t('works.discountTitle')}
-        subtitle={discountFor?.name}
-        value={discountFor?.value ?? 0}
-        onCancel={() => setDiscountFor(null)}
-        onSubmit={applyDiscount}
-      />
-
-      <NumberPrompt
         visible={Boolean(laborFor)}
         title={t('works.laborTitle')}
         subtitle={laborFor?.name}
@@ -254,9 +223,6 @@ function WorkCard({
   onPatchPart,
   onEditPrice,
   onEditLabor,
-  onEditLaborDiscount,
-  onEditPartDiscount,
-  onToggleLaborVat,
   onNotes,
   onRemovePart,
   onRemove,
@@ -271,9 +237,6 @@ function WorkCard({
   onPatchPart: (idx: number, patch: Partial<PartRow>) => void;
   onEditPrice: (idx: number, part: PartRow) => void;
   onEditLabor: () => void;
-  onEditLaborDiscount: () => void;
-  onEditPartDiscount: (idx: number, part: PartRow) => void;
-  onToggleLaborVat: () => void;
   onNotes: (notes: string) => void;
   onRemovePart: (idx: number) => void;
   onRemove: () => void;
@@ -325,36 +288,16 @@ function WorkCard({
             <Text style={[s.dim, { fontSize: 11, paddingBottom: 6 }]}>{t('works.adminOnly')}</Text>
           ) : null}
 
-          {/* The discount on that labour, for anyone to set. The price above
-              stays the list price; what it comes to is beside the percentage. */}
-          <Pressable
-            onPress={onEditLaborDiscount}
-            style={[s.rowBetween, { paddingVertical: 6 }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('works.discountTitle')}
-          >
-            <Text style={[s.body, { fontSize: 13 }]}>{t('works.laborDiscount')}</Text>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink, ...rtl }}>
-              {w.laborDiscount
-                ? `${w.laborDiscount}% · ${money(laborNet(w))}`
-                : t('works.noDiscount')}
+          {/* Discounts and כולל מע״מ are set on the web only. One already set
+              is said here, so the figures on the card still add up. */}
+          {w.laborDiscount || w.laborVatDiscount ? (
+            <Text style={[s.dim, { fontSize: 12, fontWeight: '700', textAlign: 'right', paddingBottom: 6 }]}>
+              {[
+                w.laborDiscount ? `${t('works.discountTag', { pct: w.laborDiscount })} · ${money(laborNet(w))}` : '',
+                w.laborVatDiscount ? t('works.vatDiscount') : '',
+              ].filter(Boolean).join(' · ')}
             </Text>
-          </Pressable>
-
-          {/* הנחת מע״מ on that labour, for anyone, like the percent discount:
-              the price stays as shown and the customer pays exactly that. */}
-          <Pressable
-            onPress={onToggleLaborVat}
-            style={[s.rowBetween, { paddingVertical: 6 }]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: w.laborVatDiscount === true }}
-            accessibilityLabel={t('works.vatDiscount')}
-          >
-            <Text style={[s.body, { fontSize: 13 }]}>{t('works.vatDiscount')}</Text>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: w.laborVatDiscount ? C.ok : C.ink, ...rtl }}>
-              {w.laborVatDiscount ? '✓' : t('works.noDiscount')}
-            </Text>
-          </Pressable>
+          ) : null}
 
           {/* What was actually done, against the work it was done on. Open to
               everyone: it records labour, it does not price it.
@@ -393,33 +336,14 @@ function WorkCard({
                 >
                   {p.name}
                 </Text>
-                <Pressable
-                  onPress={() => onEditPartDiscount(i, p)}
-                  hitSlop={6}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('works.discountTitle')}
-                >
+                {p.discount || p.vatDiscount ? (
                   <Text style={[s.dim, { fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 2 }]}>
-                    {p.discount ? t('works.discountTag', { pct: p.discount }) : t('works.addDiscount')}
+                    {[
+                      p.discount ? t('works.discountTag', { pct: p.discount }) : '',
+                      p.vatDiscount ? t('works.vatDiscount') : '',
+                    ].filter(Boolean).join(' · ')}
                   </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onPatchPart(i, { vatDiscount: p.vatDiscount ? undefined : true })}
-                  hitSlop={6}
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: p.vatDiscount === true }}
-                  accessibilityLabel={t('works.vatDiscount')}
-                >
-                  <Text
-                    style={[
-                      s.dim,
-                      { fontSize: 12, fontWeight: '700', textAlign: 'right', marginTop: 4 },
-                      p.vatDiscount ? { color: C.ok } : null,
-                    ]}
-                  >
-                    {p.vatDiscount ? `✓ ${t('works.vatDiscount')}` : `+ ${t('works.vatDiscount')}`}
-                  </Text>
-                </Pressable>
+                ) : null}
               </View>
               <Stepper value={p.qty} onChange={(n) => onPatchPart(i, { qty: n })} />
               <Pressable onPress={() => onEditPrice(i, p)} style={{ width: 90, alignItems: 'center' }}>
