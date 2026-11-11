@@ -13,7 +13,8 @@
     "none": "-",
     "loading": "טוען…",
     "count": "{{count}}",
-    "untitled": "ללא תיאור"
+    "untitled": "ללא תיאור",
+    "actions": "פעולות"
   },
   "table": {
     "empty": "אין נתונים להצגה",
@@ -767,12 +768,20 @@
     "empty": "לא נרשמו הוצאות",
     "noSuppliersTitle": "אין ספקים",
     "noSuppliersBody": "הוצאה נרשמת על שם ספק. יש להוסיף ספק אחד לפחות בעמוד ספקים.",
-    "saveAndSync": "שמור וסנכרן",
     "saving": "שומר…",
     "pickSupplier": "בחר ספק…",
-    "preview": "מע״מ {{vat}} · סה״כ {{total}}",
-    "vat18": "מע״מ 18%",
     "vatNone": "ללא מע״מ",
+    "lines": {
+      "title": "פריטים",
+      "fromCatalogue": "הוסף מהקטלוג",
+      "desc": "תיאור",
+      "descPlaceholder": "שם הפריט",
+      "qty": "כמות",
+      "unitPrice": "מחיר יחידה",
+      "total": "סה״כ",
+      "add": "הוסף פריט",
+      "remove": "הסר פריט"
+    },
     "paid": "שולם",
     "unpaid": "לתשלום",
     "togglePaid": "החלף מצב תשלום",
@@ -810,10 +819,35 @@
       "sync": "סנכרון",
       "dueDate": "מועד תשלום",
       "chequeNumber": "מספר צ׳ק",
-      "chequeDate": "תאריך על הצ׳ק"
+      "chequeDate": "תאריך על הצ׳ק",
+      "status": "סטטוס תשלום"
     },
     "dueDateHint": "ריק - לתשלום עם קבלת החשבונית",
-    "chequeDateHint": "היום שבו הכסף יורד מהחשבון"
+    "chequeDateHint": "היום שבו הכסף יורד מהחשבון",
+    "subtitle": "ניהול הוצאות ותשלומים לספקים",
+    "awaitingPayment": "ממתין לתשלום",
+    "markPaid": "סמן כשולם",
+    "markUnpaid": "סמן כלא שולם",
+    "retrySync": "סנכרן שוב ל-iCount",
+    "noMatch": "אין הוצאות שמתאימות לסינון",
+    "filters": {
+      "all": "הכל",
+      "month": "חודש",
+      "status": "סטטוס",
+      "searchPlaceholder": "חיפוש לפי ספק, מספר מסמך, תיאור או פריט"
+    },
+    "drawer": {
+      "title": "הוצאה חדשה",
+      "save": "שמור הוצאה",
+      "details": "פרטי ההוצאה",
+      "payment": "פרטי תשלום",
+      "reference": "מספר מסמך",
+      "pickCategory": "בחר קטגוריה…",
+      "vat": "מע״מ",
+      "vatLine": "מע״מ ({{percent}}%)",
+      "paid": "ההוצאה שולמה",
+      "total": "סה״כ לתשלום"
+    }
   },
   "customers": {
     "title": "רשימת לקוחות",

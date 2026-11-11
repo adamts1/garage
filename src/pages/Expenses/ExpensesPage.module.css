@@ -2,11 +2,16 @@
   color: var(--ink);
 }
 
-/* The live VAT and total under the add form — the number someone checks
-   against the supplier's invoice before saving. */
-.preview {
-  font-size: 14.5px;
-  color: var(--muted-d);
-  font-weight: 600;
-  white-space: nowrap;
+.pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* A long list of items must not stretch the row to three lines. */
+.desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
