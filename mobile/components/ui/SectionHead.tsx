@@ -7,6 +7,7 @@
 import { Text, View } from 'react-native';
 import { s } from '../../lib/theme';
 import { Button } from './Button';
+import { ScrollRow } from './ScrollRow';
 
 export function SectionHead({
   title,
@@ -24,7 +25,7 @@ export function SectionHead({
   onSecondary?: () => void;
 }) {
   return (
-    <View style={s.rowBetween}>
+    <ScrollRow>
       <Text style={s.h2}>
         {title} ({count})
       </Text>
@@ -36,6 +37,6 @@ export function SectionHead({
           <Button label={`${action} +`} onPress={onAction} variant="secondary" size="sm" />
         ) : null}
       </View>
-    </View>
+    </ScrollRow>
   );
 }
