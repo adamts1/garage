@@ -1,0 +1,128 @@
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+.section:first-child {
+  padding-top: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* Two fields side by side; one under the other on a narrow screen. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+@media (max-width: 520px) {
+  .pair { grid-template-columns: 1fr; }
+}
+
+/* ---- the items ---- */
+.line {
+  display: grid;
+  grid-template-columns: 1fr 64px 96px 92px 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Dressed like the fields above them (Field.module.css .control), so the
+   items do not read as a different, plainer form. */
+.line input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+  font-size: 15px;
+  text-align: right;
+}
+.line input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.lineLabels {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted-d);
+  margin-bottom: -4px;
+}
+
+/* A figure, not a field — grey so nobody tries to type into it. */
+.lineTotal {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.addRow {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted-d);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addRow:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ---- the sum ---- */
+.summary {
+  margin-top: 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15.5px;
+}
+.summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.grand {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.save {
+  flex: 1;
+}

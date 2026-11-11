@@ -72,6 +72,9 @@ Deno.serve(async (req) => {
     const credentials = sec.credentials as ProviderCredentials;
 
     const supplier = exp.suppliers ?? {};
+    const itemsText = (raw: unknown) => (Array.isArray(raw)
+      ? raw.map((l) => (Number(l?.qty) === 1 ? String(l?.desc ?? '') : `${l?.desc ?? ''} ×${l?.qty}`)).join(', ')
+      : '');
     // iCount requires a document number; fall back to a stable per-expense token.
     const docnum = (exp.reference && String(exp.reference).trim()) || `EXP-${String(exp.id).slice(0, 8)}`;
 
@@ -90,7 +93,9 @@ Deno.serve(async (req) => {
         docnum,
         subtotal: Number(exp.subtotal),
         vat: Number(exp.vat),
-        description: exp.description || undefined,
+        /* The typed description, else the items (2026-11-11) — so the
+           accountant sees what was bought, not a blank line. */
+        description: exp.description || itemsText(exp.lines) || undefined,
       });
 
       // Persist the provider supplier id for reuse (only if newly created).

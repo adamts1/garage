@@ -83,3 +83,43 @@
 .foot > :last-child {
   margin-inline-start: auto;
 }
+
+/* ---- drawer ----
+
+   Full height, against the start edge — the right, in Hebrew — beside the
+   sidebar rather than over the middle of the list it is adding to. */
+.drawerScrim {
+  place-items: stretch start;
+  padding: 10px;
+}
+
+.drawer {
+  width: min(580px, 100%);
+  max-height: none;
+  height: 100%;
+  animation: drawer-in 0.18s ease-out;
+}
+
+.drawer .head {
+  padding: 20px 24px;
+}
+.drawer .head h3 {
+  font-size: 22px;
+  font-weight: 800;
+}
+.drawer .body {
+  flex: 1;
+  padding: 6px 24px 18px;
+}
+.drawer .foot {
+  padding: 14px 24px;
+  background: var(--surface);
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(30px); opacity: 0.5; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer { animation: none; }
+}

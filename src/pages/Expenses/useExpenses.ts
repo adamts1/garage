@@ -1,7 +1,7 @@
 import {
   createExpense, deleteExpense, listExpenses, listSuppliers, setExpensePaid,
-  subscribeToExpenses, syncExpense,
-  type Supplier, type SupplierExpense,
+  linesSubtotal, subscribeToExpenses, syncExpense,
+  type ExpenseLine, type Supplier, type SupplierExpense,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showErrorKey, showSuccess, useAppDispatch, useBusyRun, useConfirm } from '../../store';
@@ -12,7 +12,9 @@ export interface ExpenseDraft {
   description: string;
   category: string;
   reference: string;
-  subtotal: string;
+  /** The items on the supplier's invoice. Strings, because they are what was
+   *  typed; readyLines() turns them into figures. */
+  lines: DraftLine[];
   vatRate: string;
   paid: boolean;
   /** Blank means on receipt — see dueOn() in @garage/shared. */
@@ -21,11 +23,45 @@ export interface ExpenseDraft {
   chequeDate: string;
 }
 
+export interface DraftLine {
+  /** Local only — React needs a stable key. */
+  uid: string;
+  desc: string;
+  qty: string;
+  unitPrice: string;
+}
+
+let lineSeq = 0;
+export const blankLine = (): DraftLine => ({ uid: `l${lineSeq++}`, desc: '', qty: '1', unitPrice: '' });
+
+/** The typed lines as figures, and whether any of them is half-filled.
+ *
+ *  A line nobody touched is dropped. A line with a price but no description,
+ *  or a description with no quantity, is not — it is reported as incomplete,
+ *  because quietly leaving it out would save a smaller expense than the one on
+ *  the supplier's invoice. */
+export function readyLines(lines: readonly DraftLine[]): { lines: ExpenseLine[]; incomplete: boolean } {
+  const out: ExpenseLine[] = [];
+  let incomplete = false;
+  for (const l of lines) {
+    const desc = l.desc.trim();
+    const qty = Number(l.qty) || 0;
+    const unitPrice = Number(l.unitPrice) || 0;
+    if (!desc && !l.unitPrice.trim()) continue;
+    if (!desc || qty <= 0 || unitPrice < 0) { incomplete = true; continue; }
+    out.push({ desc, qty, unit_price: unitPrice });
+  }
+  return { lines: out, incomplete };
+}
+
+/** The pre-VAT sum of the lines, as the form shows it. */
+export const draftSubtotal = (lines: readonly DraftLine[]) => linesSubtotal(readyLines(lines).lines);
+
 export const today = () => new Date().toISOString().slice(0, 10);
 
 export const blankExpense = (): ExpenseDraft => ({
   supplierId: '', date: today(), description: '', category: '',
-  reference: '', subtotal: '', vatRate: '0.18', paid: false,
+  reference: '', lines: [blankLine()], vatRate: '0.18', paid: false,
   dueDate: '', chequeNumber: '', chequeDate: '',
 });
 
@@ -41,6 +77,34 @@ export function previewTotals(subtotal: string, vatRate: string) {
   return { subtotal: sub, vat, total: round2(sub + vat) };
 }
 
+export type ExpenseStatusFilter = 'all' | 'paid' | 'unpaid' | 'unsynced';
+
+export interface ExpenseFilters {
+  supplierId: string;   // '' = every supplier
+  month: string;        // YYYY-MM, '' = any
+  status: ExpenseStatusFilter;
+  query: string;
+}
+
+export const NO_FILTERS: ExpenseFilters = { supplierId: '', month: '', status: 'all', query: '' };
+
+/** The rows the filter bar asks for. Pure, so it can be tested on its own.
+ *  The search reads the supplier, the supplier's document number, the
+ *  description and the items — what someone holding the paper would type. */
+export function filterExpenses(rows: readonly SupplierExpense[], f: ExpenseFilters): SupplierExpense[] {
+  const q = f.query.trim().toLowerCase();
+  return rows.filter((e) => {
+    if (f.supplierId && e.supplierId !== f.supplierId) return false;
+    if (f.month && !e.date.startsWith(f.month)) return false;
+    if (f.status === 'paid' && !e.paid) return false;
+    if (f.status === 'unpaid' && e.paid) return false;
+    if (f.status === 'unsynced' && e.syncStatus === 'synced') return false;
+    if (!q) return true;
+    return [e.supplierName, e.reference, e.description, e.category, ...e.lines.map((l) => l.desc)]
+      .some((v) => v?.toLowerCase().includes(q));
+  });
+}
+
 export function useExpenses() {
   const dispatch = useAppDispatch();
   const run = useBusyRun();
@@ -48,6 +112,12 @@ export function useExpenses() {
   const [rows, setRows] = useState<SupplierExpense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [busy, setBusy] = useState(false);
+  const [filters, setFilters] = useState<ExpenseFilters>(NO_FILTERS);
+  const shown = useMemo(() => filterExpenses(rows, filters), [rows, filters]);
+  const usedCategories = useMemo(
+    () => [...new Set(rows.map((e) => e.category ?? '').filter(Boolean))].sort(),
+    [rows],
+  );
 
   const load = useCallback(() => {
     listExpenses().then(setRows).catch((e) => dispatch(showError(e)));
@@ -61,7 +131,9 @@ export function useExpenses() {
 
   const create = useCallback(
     async (draft: ExpenseDraft) => {
-      if (!draft.supplierId || !(Number(draft.subtotal) > 0)) return false;
+      const { lines, incomplete } = readyLines(draft.lines);
+      const subtotal = linesSubtotal(lines);
+      if (!draft.supplierId || incomplete || !(subtotal > 0)) return false;
       setBusy(true);
       try {
         const created = await run('busy.savingExpense', () => createExpense({
@@ -70,7 +142,8 @@ export function useExpenses() {
           description: draft.description,
           category: draft.category,
           reference: draft.reference,
-          subtotal: Number(draft.subtotal),
+          lines,
+          subtotal,
           vatRate: Number(draft.vatRate),
           paid: draft.paid,
           /* Empty strings become nulls: a date input left alone is "nobody
@@ -165,5 +238,12 @@ export function useExpenses() {
     [rows],
   );
 
-  return { rows, suppliers, busy, totals, create, retrySync, togglePaid, remove };
+  /* The cards count every expense, not the filtered ones: they answer "what
+     do we owe", which a search box should not change. */
+  return {
+    rows, shown, suppliers, usedCategories, busy, totals,
+    filters, setFilters,
+    filtered: (Object.keys(NO_FILTERS) as (keyof ExpenseFilters)[]).some((k) => filters[k] !== NO_FILTERS[k]),
+    create, retrySync, togglePaid, remove,
+  };
 }
