@@ -19,7 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
    `customers`, and it is unique per garage, so a number already held by someone
    else is refused here rather than by a constraint error afterwards. */
 
-const listCustomers = vi.fn();
+/* The customers on file, as the database holds them. The page asks for this
+   ticket's record, for who holds a ת״ז being typed, and (switching) searches. */
+let onFile: Customer[] = [];
+const searchCustomers = vi.fn();
+const getCustomer = vi.fn();
 const updateCustomer = vi.fn();
 const customerHoldingIdNumber = vi.fn();
 
@@ -34,11 +38,17 @@ vi.mock('@garage/shared', async (importActual) => {
     listInvoices: vi.fn(async () => []),
     subscribeToInvoices: vi.fn(() => () => {}),
     subscribeToTable: vi.fn(() => () => {}),
-    listCustomers: (...a: unknown[]) => listCustomers(...a),
+    searchCustomers: (...a: unknown[]) => searchCustomers(...a),
+    getCustomer: (...a: unknown[]) => getCustomer(...a),
     updateCustomer: (...a: unknown[]) => updateCustomer(...a),
     customerHoldingIdNumber: (...a: unknown[]) => customerHoldingIdNumber(...a),
   };
 });
+
+vi.mock('../../lib/supabase', () => ({ isConfigured: true }));
+
+const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+const db = fakeCustomerDb(() => onFile);
 
 await import('../../i18n');
 const { default: TicketPage } = await import('./TicketPage');
@@ -87,7 +97,8 @@ const renderPage = async (t: Ticket = ticket()) => {
       </MemoryRouter>
     </Provider>,
   );
-  await act(async () => { await Promise.resolve(); });
+  // The customer record arrives from the database after the first paint.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
   const notes = screen.getByPlaceholderText(/הוסף הערה/) as HTMLTextAreaElement;
   const idField = screen.getByLabelText('ת״ז') as HTMLInputElement;
@@ -109,9 +120,11 @@ const renderPage = async (t: Ticket = ticket()) => {
 };
 
 beforeEach(() => {
-  listCustomers.mockReset().mockResolvedValue([DANA, YOSSI]);
+  onFile = [DANA, YOSSI];
+  searchCustomers.mockReset().mockImplementation(db.searchCustomers);
+  getCustomer.mockReset().mockImplementation(db.getCustomer);
   updateCustomer.mockReset().mockResolvedValue(undefined);
-  customerHoldingIdNumber.mockReset().mockResolvedValue(null);
+  customerHoldingIdNumber.mockReset().mockImplementation(db.customerHoldingIdNumber);
 });
 
 afterEach(cleanup);
@@ -145,7 +158,7 @@ describe('editing a ticket', () => {
 
 describe('the ת״ז on a ticket', () => {
   it('shows what the customer record holds', async () => {
-    listCustomers.mockResolvedValue([customer({ ...DANA, id_number: '312345678' }), YOSSI]);
+    onFile = [customer({ ...DANA, id_number: '312345678' }), YOSSI];
     const { idField } = await renderPage();
 
     expect(idField.value).toBe('312345678');
@@ -163,7 +176,8 @@ describe('the ת״ז on a ticket', () => {
     const { idField, type } = await renderPage();
     await type(idField, '311111111');   // יוסי לוי holds this one
 
-    expect(screen.getByText(/יוסי לוי/)).toBeTruthy();
+    // Asked of the database once typing pauses.
+    expect(await screen.findByText(/יוסי לוי/)).toBeTruthy();
   });
 
   it('refuses to save a ת״ז held by another customer — neither table is touched', async () => {
@@ -175,14 +189,13 @@ describe('the ת״ז on a ticket', () => {
     expect(saveTicket).not.toHaveBeenCalled();
   });
 
-  /* The list on this screen was loaded when it opened. A customer entered at
-     another counter since is not in it, so the in-memory check cannot see the
-     clash and the database is the one that knows. */
+  /* The warning is asked once typing pauses; a save pressed before it arrives
+     must still be refused — the save asks the database again itself. */
   it('refuses a number the database says is taken, even when the page cannot see it', async () => {
     customerHoldingIdNumber.mockResolvedValue({ ...YOSSI, id_number: '399999999' });
     const { idField, type, press, toasts, saveTicket } = await renderPage();
 
-    await type(idField, '399999999');   // nobody in the loaded list holds this
+    await type(idField, '399999999');   // saved at once, before the warning's question is sent
     expect(screen.queryByText(/יוסי לוי/)).toBeNull();
 
     await press('שמור');
@@ -194,7 +207,7 @@ describe('the ת״ז on a ticket', () => {
   });
 
   it('cannot be edited on a ticket with no customer record', async () => {
-    listCustomers.mockResolvedValue([]);
+    onFile = [];
     const { idField } = await renderPage();
 
     expect(idField.disabled).toBe(true);

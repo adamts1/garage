@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Customer, Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
    different person changes which record it belongs to and leaves both records
    alone. Once billed, neither: the invoice was printed with this customer. */
 
-const listCustomers = vi.fn();
+/* The customers on file, as the database holds them. The page asks for this
+   ticket's record, for who holds a ת״ז being typed, and (switching) searches. */
+let onFile: Customer[] = [];
+const searchCustomers = vi.fn();
+const getCustomer = vi.fn();
 const updateCustomer = vi.fn();
 const customerHoldingIdNumber = vi.fn();
 const createCustomer = vi.fn();
@@ -29,15 +33,20 @@ vi.mock('@garage/shared', async (importActual) => {
     listWorkDefs: vi.fn(async () => []),
     listItems: vi.fn(async () => []),
     listInvoices: (...a: unknown[]) => listInvoices(...a),
-    listVehicles: vi.fn(async () => []),
     createCustomer: (...a: unknown[]) => createCustomer(...a),
     subscribeToInvoices: vi.fn(() => () => {}),
     subscribeToTable: vi.fn(() => () => {}),
-    listCustomers: (...a: unknown[]) => listCustomers(...a),
+    searchCustomers: (...a: unknown[]) => searchCustomers(...a),
+    getCustomer: (...a: unknown[]) => getCustomer(...a),
     updateCustomer: (...a: unknown[]) => updateCustomer(...a),
     customerHoldingIdNumber: (...a: unknown[]) => customerHoldingIdNumber(...a),
   };
 });
+
+vi.mock('../../lib/supabase', () => ({ isConfigured: true }));
+
+const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+const db = fakeCustomerDb(() => onFile);
 
 await import('../../i18n');
 const { default: TicketPage } = await import('./TicketPage');
@@ -86,7 +95,8 @@ const renderPage = async (t: Ticket = ticket()) => {
       </MemoryRouter>
     </Provider>,
   );
-  await act(async () => { await Promise.resolve(); });
+  // The customer record arrives from the database after the first paint.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
   const notes = screen.getByPlaceholderText(/הוסף הערה/) as HTMLTextAreaElement;
   const idField = screen.getByLabelText('ת״ז') as HTMLInputElement;
@@ -108,9 +118,11 @@ const renderPage = async (t: Ticket = ticket()) => {
 };
 
 beforeEach(() => {
-  listCustomers.mockReset().mockResolvedValue([DANA, YOSSI]);
+  onFile = [DANA, YOSSI];
+  searchCustomers.mockReset().mockImplementation(db.searchCustomers);
+  getCustomer.mockReset().mockImplementation(db.getCustomer);
   updateCustomer.mockReset().mockResolvedValue(undefined);
-  customerHoldingIdNumber.mockReset().mockResolvedValue(null);
+  customerHoldingIdNumber.mockReset().mockImplementation(db.customerHoldingIdNumber);
   createCustomer.mockReset();
   listInvoices.mockReset().mockResolvedValue([]);
 });
@@ -165,6 +177,7 @@ describe('moving a ticket to another customer', () => {
     const { type, press, written } = await renderPage();
     await press('העברה ללקוח אחר');
     await type(screen.getByLabelText('חיפוש לפי שם, טלפון או מספר רישוי'), 'יוסי');
+    await screen.findByText('יוסי לוי');   // searched once typing pauses
     await press('יוסי לוי');
     await press('אישור');
 
@@ -176,6 +189,9 @@ describe('moving a ticket to another customer', () => {
     const { type, press } = await renderPage();
     await press('העברה ללקוח אחר');
     await type(screen.getByLabelText('חיפוש לפי שם, טלפון או מספר רישוי'), 'דנה');
+    // The database finds her; the panel leaves her out.
+    await waitFor(() => expect(searchCustomers).toHaveBeenCalledWith(expect.objectContaining({ query: 'דנה' })));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
     expect(screen.getByText('לא נמצא לקוח תואם')).toBeTruthy();
   });

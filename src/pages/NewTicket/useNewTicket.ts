@@ -1,12 +1,42 @@
 import {
-  EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, idNumberConflict,
-  intakeFlags, isUsablePhone, listCustomers, listVehicles, matchCustomers, matchVehiclesByPlate, nextTicketNumbers, plateKey,
-  phoneConflict,
-  subscribeToTable, subtasksFromWorks, titleFromWorks, worksSummary,
-  type Customer, type PhoneConflict, type Priority, type Ticket, type TicketWork, type Vehicle,
+  CUSTOMER_MATCH_LIMIT, EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, customerHoldingIdNumber,
+  customersWithPhone, getCustomer, idNumberConflict, intakeFlags, isUsablePhone, matchCustomers,
+  matchVehiclesByPlate, nextTicketNumbers, phoneConflict, searchCustomers, subtasksFromWorks,
+  titleFromWorks, vehiclesForPlate, worksSummary,
+  type Customer, type CustomerWithVehicles, type PhoneConflict, type Priority, type Ticket, type TicketWork,
+  type Vehicle,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { isConfigured } from '../../lib/supabase';
+import { useDebouncedValue } from '../../lib/useDebouncedValue';
+
+/* How many customers one search brings back to pick the shortcut list from.
+   More than the list shows, because one page is split three ways: by name or
+   phone, by plate, and the rest of a household. */
+const SEARCH_FETCH = 20;
+
+/** A query sent once typing pauses, its answer kept only if it is still the
+ *  question: a slow reply to "ab" must not land after the one to "abc". */
+function useServerAnswer<T>(key: string, ask: (key: string) => Promise<T>, empty: T): T {
+  const settled = useDebouncedValue(key);
+  const [answer, setAnswer] = useState<{ key: string; value: T }>({ key: '', value: empty });
+  useEffect(() => {
+    if (!isConfigured || !settled) return;
+    let alive = true;
+    ask(settled).then((value) => { if (alive) setAnswer({ key: settled, value }); }).catch(() => {});
+    return () => { alive = false; };
+    // `ask` is a module-level function at every call site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled]);
+  return key && answer.key === key ? answer.value : empty;
+}
+
+const NO_CUSTOMERS: CustomerWithVehicles[] = [];
+const NONE: Customer[] = [];
+const askSearch = (q: string) =>
+  searchCustomers({ query: q, pageSize: SEARCH_FETCH }).then((p) => p.rows);
+const askPhone = (phone: string) => customersWithPhone(phone);
+const askIdNumber = (id: string) => customerHoldingIdNumber(id).then((c) => (c ? [c] : []));
 
 export interface TicketForm {
   customerSearch: string;
@@ -135,22 +165,13 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [started]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showMatches, setShowMatches] = useState(false);
   const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
 
-  /* Known customers and their vehicles, for the search-and-autofill box. */
-  useEffect(() => {
-    if (!isConfigured) return;
-    const loadCustomers = () => listCustomers().then(setCustomers).catch(() => {});
-    const loadVehicles = () => listVehicles().then(setVehicles).catch(() => {});
-    void loadCustomers();
-    void loadVehicles();
-    const offCustomers = subscribeToTable('customers', () => void loadCustomers());
-    const offVehicles = subscribeToTable('vehicles', () => void loadVehicles());
-    return () => { offCustomers(); offVehicles(); };
-  }, []);
+  /* Known customers, asked of the database as the box is typed in. This used
+     to load every customer and every car up front and filter them here — which
+     PostgREST capped at 1000, so most of a large garage could not be found. */
+  const found = useServerAnswer(form.customerSearch.trim(), askSearch, NO_CUSTOMERS);
 
   /* Typing over any of the three identity fields drops the picked customer:
      the advisor is no longer describing the record they chose. Everything else
@@ -165,22 +186,24 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     [],
   );
 
+  /* The same split the box always made, over what the server found: by name or
+     phone, and — separately — by the plate of a car. */
   const matches = useMemo(
-    () => matchCustomers(customers, form.customerSearch),
-    [customers, form.customerSearch],
+    () => matchCustomers(found, form.customerSearch).slice(0, CUSTOMER_MATCH_LIMIT),
+    [found, form.customerSearch],
   );
 
   /* The car half of the same box: a known plate, and whose it is. A vehicle
      whose owner is not loaded (yet) is left out rather than offered without a
      customer to fill. */
   const plateMatches = useMemo(() => {
-    const byId = new Map(customers.map((c) => [c.id, c]));
-    return matchVehiclesByPlate(vehicles, form.customerSearch)
+    const byId = new Map(found.map((c) => [c.id, c]));
+    return matchVehiclesByPlate(found.flatMap((c) => c.vehicles ?? []), form.customerSearch)
       .flatMap((vehicle) => {
         const owner = byId.get(vehicle.customer_id);
-        return owner ? [{ vehicle, customer: owner }] : [];
+        return owner ? [{ vehicle, customer: owner as Customer }] : [];
       });
-  }, [customers, vehicles, form.customerSearch]);
+  }, [found, form.customerSearch]);
 
   const fillVehicle = useCallback((v: Vehicle) => {
     setForm((prev) => ({
@@ -211,11 +234,17 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
       }));
       setShowMatches(false);
 
-      const owned = vehicles.filter((v) => v.customer_id === c.id);
-      if (owned.length === 1) { fillVehicle(owned[0]); setVehicleChoices([]); }
-      else setVehicleChoices(owned);
+      /* Their cars came with the search; a customer reached another way (the
+         phone or ת״ז warning) is asked for them. */
+      const offer = (owned: Vehicle[]) => {
+        if (owned.length === 1) { fillVehicle(owned[0]); setVehicleChoices([]); }
+        else setVehicleChoices(owned);
+      };
+      const known = (c as Partial<CustomerWithVehicles>).vehicles;
+      if (known) offer(known);
+      else if (isConfigured) getCustomer(c.id).then((full) => offer(full?.vehicles ?? [])).catch(() => {});
     },
-    [fillVehicle, vehicles],
+    [fillVehicle],
   );
 
   const pickVehicle = useCallback((v: Vehicle) => {
@@ -228,10 +257,8 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
    *  still blank and leaves alone what was typed; the database does the same
    *  on save (tickets_resolve_car). The km is this visit's, never copied. */
   const fillKnownPlate = useCallback(() => {
-    setForm((prev) => {
-      const k = plateKey(prev.licensePlate);
-      const known = k ? vehicles.find((v) => plateKey(v.plate) === k) : undefined;
-      if (!known) return prev;
+    if (!isConfigured || !form.licensePlate.trim()) return;
+    void vehiclesForPlate(form.licensePlate).then(([known]) => known && setForm((prev) => {
       return {
         ...prev,
         manufacturer: prev.manufacturer || known.manufacturer || '',
@@ -239,8 +266,8 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
         year: prev.year || known.year || '',
         vehicleCode: prev.vehicleCode || known.vehicle_code || '',
       };
-    });
-  }, [vehicles]);
+    })).catch(() => {});
+  }, [form.licensePlate]);
 
   /** Picking by plate: the owner, and that car — not a question about which of
    *  their cars it was. */
@@ -287,13 +314,15 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
      It used to be neither an offer nor a decision but a silent fact: the phone
      was the identity, create_ticket attached the ticket to the holder, and the
      card showed the newly typed name of a person no record was ever made for. */
+  const phoneHolders = useServerAnswer(
+    isUsablePhone(form.customerPhone) ? form.customerPhone.replace(/\D/g, '') : '', askPhone, NONE);
   const conflict: PhoneConflict<Customer> | null = useMemo(
-    () => phoneConflict(customers, {
+    () => phoneConflict(phoneHolders, {
       phone: form.customerPhone,
       name: form.customerName,
       pickedId: form.customerId,
     }),
-    [customers, form.customerPhone, form.customerName, form.customerId],
+    [phoneHolders, form.customerPhone, form.customerName, form.customerId],
   );
 
   /* The ת״ז is the opposite case, and gets the opposite treatment. It is
@@ -305,13 +334,14 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
 
      So this one blocks. Two ways out, both the advisor's to choose: attach the
      ticket to the customer who holds the number, or correct the number. */
+  const idHolders = useServerAnswer(form.idNumber.trim(), askIdNumber, NONE);
   const idConflict: PhoneConflict<Customer> | null = useMemo(
-    () => idNumberConflict(customers, {
+    () => idNumberConflict(idHolders, {
       idNumber: form.idNumber,
       name: form.customerName,
       ownerId: form.customerId,
     }),
-    [customers, form.idNumber, form.customerName, form.customerId],
+    [idHolders, form.idNumber, form.customerName, form.customerId],
   );
 
   /** "This is the same customer" — adopt the record that holds the number, the

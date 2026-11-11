@@ -10,6 +10,7 @@
    See docs/PRODUCTION.md §4c and migration 20260728000000_suppliers_and_expenses.sql. */
 
 import { getClient } from './client';
+import { fetchAll } from './paging';
 
 /* ---------------- suppliers ---------------- */
 
@@ -47,9 +48,9 @@ const supplierToRow = (s: Partial<Supplier>) => ({
 });
 
 export const listSuppliers = async (): Promise<Supplier[]> => {
-  const { data, error } = await getClient().from('suppliers').select('*').order('name');
-  if (error) throw error;
-  return (data ?? []).map(rowToSupplier);
+  const rows = await fetchAll((from, to) =>
+    getClient().from('suppliers').select('*').order('name').order('id').range(from, to));
+  return rows.map(rowToSupplier);
 };
 
 export const createSupplier = async (s: Omit<Supplier, 'id' | 'providerSupplierId' | 'createdAt'>): Promise<Supplier> => {
@@ -129,12 +130,13 @@ const rowToExpense = (r: any): SupplierExpense => ({
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const listExpenses = async (): Promise<SupplierExpense[]> => {
-  const { data, error } = await getClient()
+  const rows = await fetchAll((from, to) => getClient()
     .from('supplier_expenses')
     .select('*, suppliers(name)')
-    .order('expense_date', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map(rowToExpense);
+    .order('expense_date', { ascending: false })
+    .order('id')
+    .range(from, to));
+  return rows.map(rowToExpense);
 };
 
 export interface ExpenseInput {

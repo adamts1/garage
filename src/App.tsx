@@ -27,6 +27,7 @@ const NewTicketPage = lazy(() => import('./pages/NewTicket').then((m) => ({ defa
 const ReportsPage = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
 const SuppliersPage = lazy(() => import('./pages/Suppliers').then((m) => ({ default: m.SuppliersPage })));
 const TicketPage = lazy(() => import('./pages/Ticket').then((m) => ({ default: m.TicketPage })));
+const LegacyTicketPage = lazy(() => import('./pages/Ticket/LegacyTicketPage'));
 const WorkersPage = lazy(() => import('./pages/Workers').then((m) => ({ default: m.WorkersPage })));
 
 export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`;
@@ -38,21 +39,15 @@ export const ticketPath = (key: string) => `/tickets/${encodeURIComponent(key)}`
 function TicketRoute({ tickets, ...rest }: {
   tickets: Ticket[];
 } & Omit<React.ComponentProps<typeof TicketPage>, 'ticket'>) {
-  const { t } = useTranslation();
   const { key } = useParams();
   const ticket = tickets.find((x) => x.k === key);
 
-  /* A key that matches nothing is a real case now that the URL is typeable and
-     shareable — a mistyped number, or a link from another garage. Say so rather
-     than rendering an empty panel. No loading branch: the routes render only
-     once the tickets have arrived. */
-  if (!ticket) {
-    return (
-      <div className="db-error">
-        {t('app.ticketNotFound', { key })} <Link to="/">{t('app.backToBoard')}</Link>
-      </div>
-    );
-  }
+  /* Not in the board's list: an imported card from the previous system (RB-…),
+     which listTickets leaves out and is fetched on its own — or a key that
+     matches nothing at all (a typo, another garage's link), which that page
+     says plainly. No loading branch for the list itself: the routes render
+     only once the tickets have arrived. */
+  if (!ticket) return <LegacyTicketPage ticketKey={key ?? ''} />;
   return <TicketPage ticket={ticket} {...rest} />;
 }
 
@@ -105,32 +100,29 @@ export default function App() {
     });
   }, []);
 
-  // The sidebar is a narrow rail that expands on hover, unless pinned open.
+  /* The sidebar is a narrow rail that opens over the page on hover (its own
+     state, so hovering never re-renders the app), or pinned open beside it. */
   const [pinned, setPinned] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const expanded = pinned || hovered;
 
   /* Paid tickets that have aged past the cutoff leave the board for the
      archive. Derived, so it recomputes as time passes — no stored flag to keep
      in sync. */
-  const activeTickets = tickets.filter((x) => !isArchived(x));
-  const archivedTickets = tickets.filter((x) => isArchived(x));
+  const activeTickets = useMemo(() => tickets.filter((x) => !isArchived(x)), [tickets]);
+  const archivedTickets = useMemo(() => tickets.filter((x) => isArchived(x)), [tickets]);
   /* Money and workload are about jobs that happened. A cancelled ticket is kept
      on file and listed under its customer and in the archive, but counts for
      nothing in a report. */
-  const liveTickets = tickets.filter((x) => !isCancelled(x));
+  const liveTickets = useMemo(() => tickets.filter((x) => !isCancelled(x)), [tickets]);
 
-  const openTicket = (k: string) => navigate(ticketPath(k));
+  const openTicket = useCallback((k: string) => navigate(ticketPath(k)), [navigate]);
 
   return (
-    <div className={`app-shell${expanded ? '' : ' rail'}`}>
+    <div className={`app-shell${pinned ? '' : ' rail'}`}>
       <Sidebar
         activeCount={activeTickets.length}
         workers={workers}
-        expanded={expanded}
         pinned={pinned}
         onPinToggle={() => setPinned((v) => !v)}
-        onHoverChange={setHovered}
         onSignOut={() => {
           void leaveGuard.confirmDiscard().then((ok) => { if (ok) void signOut(); });
         }}

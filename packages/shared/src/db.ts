@@ -5,6 +5,7 @@
 import { getClient, getProjectUrl, invokeError } from './client';
 import type { Ticket, Worker } from './types';
 import { clampDiscount, type PartRow, type TicketWork, type WorkDef } from './catalog';
+import { fetchAll, pageRange, PAGE_SIZE, type Page } from './paging';
 
 /* ---------------- a code that is already taken ----------------
 
@@ -40,14 +41,6 @@ export interface Customer {
   id_number: string | null;
 }
 
-export const listCustomers = async (): Promise<Customer[]> => {
-  const { data, error } = await getClient()
-    .from('customers')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return data as Customer[];
-};
 
 export const createCustomer = async (c: Omit<Customer, 'id'>) => {
   const { data, error } = await getClient().from('customers').insert(c).select().single();
@@ -121,21 +114,90 @@ export interface CarOwner {
   phone: string | null;
 }
 
-/** Every car in the garage with who drives it — the vehicles screen. */
-export const listCars = async (): Promise<(Car & { owners: CarOwner[] })[]> => {
-  const { data, error } = await getClient()
-    .from('cars')
-    .select('id, plate, manufacturer, model, year, km, vehicle_code, vehicles(customers(id, name, phone))')
-    .order('created_at', { ascending: false });
+
+/* ---------------- searching, a page at a time ----------------
+
+   The customers and cars tables are read here, never whole: the database
+   searches (search_customers / search_cars, 20261110120000) and only the page
+   on screen comes back, with the count for the pager. Matching is the same
+   the screens used to do in memory — name, phone by its digits, ת״ז, email,
+   city, or a car's plate; for cars the plate, make, model or an owner. */
+
+export type CustomerWithVehicles = Customer & { vehicles: Vehicle[] };
+export type CarWithOwners = Car & { owners: CarOwner[] };
+
+export interface PageQuery {
+  query?: string;
+  /** 1-based. */
+  page?: number;
+  pageSize?: number;
+}
+
+/** One page of the garage's customers matching `query`, each with their cars.
+ *  An empty query lists them all, newest first. */
+export const searchCustomers = async (
+  { query = '', page = 1, pageSize = PAGE_SIZE }: PageQuery = {},
+): Promise<Page<CustomerWithVehicles>> => {
+  const [from, to] = pageRange(page, pageSize);
+  const { data, error, count } = await getClient()
+    .rpc('search_customers', { q: query.trim() }, { count: 'exact' })
+    .select('*, vehicles(*)')
+    .range(from, to);
   if (error) throw error;
-  // A many-to-one embed: PostgREST returns the customer as an object, not a list.
-  return ((data ?? []) as unknown as (Car & { vehicles: { customers: CarOwner | null }[] })[]).map(
-    ({ vehicles, ...car }) => ({
-      ...car,
-      owners: (vehicles ?? []).map((v) => v.customers).filter((c): c is CarOwner => Boolean(c)),
-    }),
-  );
+  return { rows: (data ?? []) as CustomerWithVehicles[], total: count ?? 0 };
 };
+
+/** One customer with their cars, or null. */
+export const getCustomer = async (id: string): Promise<CustomerWithVehicles | null> => {
+  const { data, error } = await getClient()
+    .from('customers').select('*, vehicles(*)').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as CustomerWithVehicles) ?? null;
+};
+
+/** Everyone whose phone is these digits — what the duplicate-phone warning and
+ *  the name+phone rule are checked against. Asked of the database, so a
+ *  customer beyond any loaded page is still seen. */
+export const customersWithPhone = async (phone: string | null | undefined): Promise<Customer[]> => {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  if (digits.length < 3) return [];
+  const { data, error } = await getClient()
+    .rpc('search_customers', { q: digits })
+    .select('*')
+    .range(0, 49);
+  if (error) throw error;
+  return ((data ?? []) as Customer[]).filter((c) => (c.phone ?? '').replace(/\D/g, '') === digits);
+};
+
+/** One page of the garage's cars matching `query`, each with who drives it. */
+export const searchCars = async (
+  { query = '', page = 1, pageSize = PAGE_SIZE }: PageQuery = {},
+): Promise<Page<CarWithOwners>> => {
+  const [from, to] = pageRange(page, pageSize);
+  const { data, error, count } = await getClient()
+    .rpc('search_cars', { q: query.trim() }, { count: 'exact' })
+    .select('id, plate, manufacturer, model, year, km, vehicle_code, vehicles(customers(id, name, phone))')
+    .range(from, to);
+  if (error) throw error;
+  return { rows: ((data ?? []) as unknown as CarRow[]).map(withOwners), total: count ?? 0 };
+};
+
+/** The car on file under this plate, however it was typed, with its links. */
+export const vehiclesForPlate = async (plate: string): Promise<Vehicle[]> => {
+  const key = plate.toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
+  if (!key) return [];
+  const { data, error } = await getClient()
+    .from('cars').select('vehicles(*)').eq('plate_key', key).maybeSingle();
+  if (error) throw error;
+  return ((data as { vehicles?: Vehicle[] } | null)?.vehicles ?? []);
+};
+
+type CarRow = Car & { vehicles: { customers: CarOwner | null }[] };
+// A many-to-one embed: PostgREST returns the customer as an object, not a list.
+const withOwners = ({ vehicles, ...car }: CarRow): CarWithOwners => ({
+  ...car,
+  owners: (vehicles ?? []).map((v) => v.customers).filter((c): c is CarOwner => Boolean(c)),
+});
 
 export const getCar = async (id: string): Promise<{ car: Car; owners: CarOwner[] } | null> => {
   const { data, error } = await getClient()
@@ -153,14 +215,6 @@ export const getCar = async (id: string): Promise<{ car: Car; owners: CarOwner[]
   };
 };
 
-export const listVehicles = async (): Promise<Vehicle[]> => {
-  const { data, error } = await getClient()
-    .from('vehicles')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as Vehicle[];
-};
 
 /* ---------------- items (parts catalog / stock) ---------------- */
 
@@ -173,8 +227,8 @@ export interface Item {
 }
 
 export const listItems = async (): Promise<Item[]> => {
-  const { data, error } = await getClient().from('items').select('*').order('sku');
-  if (error) throw error;
+  const data = await fetchAll((from, to) =>
+    getClient().from('items').select('*').order('sku').order('id').range(from, to));
   return (data ?? []).map((r) => ({ ...r, price: Number(r.price), stock: Number(r.stock) })) as Item[];
 };
 
@@ -482,6 +536,7 @@ const rowToTicket = (r: any): Ticket => ({
   boardHidden: r.board_hidden ?? undefined,
   cancelledAt: r.cancelled_at ?? null,
   cancelReason: r.cancel_reason ?? null,
+  legacy: r.legacy_source ? { source: r.legacy_source, number: r.legacy_number ?? '' } : null,
   works: (r.works ?? [])
     .slice()
     .sort((a: any, b: any) => a.position - b.position)
@@ -558,13 +613,112 @@ const ticketToRow = (t: Ticket) => ({
   ...(t.boardHidden !== undefined && { board_hidden: t.boardHidden }),
 });
 
+/* Postgres' "undefined column": the app has reached a database the migration
+   that adds the column has not. */
+const isMissingColumn = (e: { code?: string } | null) => e?.code === '42703';
+
+/** The garage's own work orders. Imported history (legacy_source) is left out
+ *  here, at the source, so the board, archive and reports never see it; only a
+ *  car's page asks for it, through listCarLegacyHistory. */
 export const listTickets = async (): Promise<Ticket[]> => {
-  const { data, error } = await getClient()
-    .from('tickets')
-    .select('*, works(*, work_items(*))')
-    .order('created_at', { ascending: false });
+  const query = (from: number, to: number, own: boolean) => {
+    const q = getClient().from('tickets').select('*, works(*, work_items(*))');
+    return (own ? q.is('legacy_source', null) : q)
+      .order('created_at', { ascending: false })
+      .order('id')
+      .range(from, to);
+  };
+  // Tickets carry their works and parts, so a smaller bite than the default.
+  const read = (own: boolean) => fetchAll((from, to) => query(from, to, own), 500);
+  try {
+    return (await read(true)).map(rowToTicket);
+  } catch (e) {
+    // Before 20261110100000 there is no column, and so no imported history.
+    if (!isMissingColumn(e as { code?: string })) throw e;
+    return (await read(false)).map(rowToTicket);
+  }
+};
+
+/* ---------------- imported history (legacy_source) ----------------
+
+   Kept out of listTickets, so the board and the reports never carry it; each
+   screen that shows it asks for just the part it shows. Every reader returns
+   empty, not an error, on a database the 20261110100000 columns have not
+   reached. */
+
+/** Header columns only: what a list of cards shows, without their lines. */
+const LEGACY_HEADER = 'id, key, status, type, epic, priority, points, title, plate, car, customer_id, car_id, '
+  + 'customer_name, phone, km, year, amount, done, subtasks, flags, created_at, closed_at, paid, '
+  + 'legacy_source, legacy_number';
+
+const legacyRows = async (q: PromiseLike<{ data: unknown[] | null; error: { code?: string } | null }>) => {
+  const { data, error } = await q;
+  if (isMissingColumn(error)) return [];
   if (error) throw error;
   return (data ?? []).map(rowToTicket);
+};
+
+/** A car's work orders from the garage's previous system, newest first, with
+ *  their lines — one car's worth is small, and its printed history lists them. */
+export const listCarLegacyHistory = async (carId: string): Promise<Ticket[]> =>
+  legacyRows(getClient()
+    .from('tickets').select('*, works(*, work_items(*))')
+    .eq('car_id', carId).not('legacy_source', 'is', null)
+    .order('created_at', { ascending: false }));
+
+/** A customer's work orders from the previous system, newest first. */
+export const listCustomerLegacyHistory = async (customerId: string): Promise<Ticket[]> =>
+  legacyRows(getClient()
+    .from('tickets').select(LEGACY_HEADER)
+    .eq('customer_id', customerId).not('legacy_source', 'is', null)
+    .order('created_at', { ascending: false }));
+
+/** One ticket by its key, works and parts included, whether or not it is in
+ *  the board's list — the way an imported card (RB-…) is opened. */
+export const getTicketByKey = async (key: string): Promise<Ticket | null> => {
+  const { data, error } = await getClient()
+    .from('tickets').select('*, works(*, work_items(*))').eq('key', key).maybeSingle();
+  if (error) throw error;
+  return data ? rowToTicket(data) : null;
+};
+
+/** When each of these cars or customers came in under the previous system:
+ *  enough for a list's "visits" and "last visit" columns, for one page of rows. */
+export const legacyVisits = async (
+  { carIds = [], customerIds = [] }: { carIds?: string[]; customerIds?: string[] },
+): Promise<{ carId: string | null; customerId: string | null; at: string }[]> => {
+  if (!carIds.length && !customerIds.length) return [];
+  let q = getClient().from('tickets').select('car_id, customer_id, created_at').not('legacy_source', 'is', null);
+  q = carIds.length ? q.in('car_id', carIds) : q.in('customer_id', customerIds);
+  const { data, error } = await q.range(0, 9999);
+  if (isMissingColumn(error)) return [];
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ carId: r.car_id ?? null, customerId: r.customer_id ?? null, at: r.created_at }));
+};
+
+/** One page of the imported cards, newest first, searched by number, title,
+ *  plate or customer — the archive's "previous system" tab. */
+export const searchLegacyTickets = async (
+  { query = '', page = 1, pageSize = PAGE_SIZE }: PageQuery = {},
+): Promise<Page<Ticket>> => {
+  const [from, to] = pageRange(page, pageSize);
+  // PostgREST's or=() is comma- and paren-delimited; those are never searched for.
+  const q = query.trim().replace(/[,()*%\\]/g, ' ').trim();
+  let req = getClient()
+    .from('tickets').select(LEGACY_HEADER, { count: 'exact' })
+    .not('legacy_source', 'is', null);
+  if (q) {
+    const plate = q.toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
+    req = req.or([
+      `key.ilike.*${q}*`, `title.ilike.*${q}*`, `customer_name.ilike.*${q}*`, `phone.ilike.*${q}*`,
+      ...(plate ? [`plate.ilike.*${plate}*`] : []),
+    ].join(','));
+  }
+  const { data, error, count } = await req
+    .order('created_at', { ascending: false }).order('id').range(from, to);
+  if (isMissingColumn(error)) return { rows: [], total: 0 };
+  if (error) throw error;
+  return { rows: (data ?? []).map(rowToTicket), total: count ?? 0 };
 };
 
 const ticketIdByKey = async (key: string): Promise<string> => {

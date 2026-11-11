@@ -1,14 +1,14 @@
 import {
-  isUsablePhone, listVehicles, matchCustomers, matchVehiclesByPlate,
-  type Customer, type Vehicle,
+  CUSTOMER_MATCH_LIMIT, isUsablePhone, searchCustomers,
+  type Customer, type CustomerWithVehicles,
 } from '@garage/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isConfigured } from '../../../lib/supabase';
+import { useDebouncedValue } from '../../../lib/useDebouncedValue';
 import styles from './SwitchCustomer.module.css';
 
 interface SwitchCustomerProps {
-  customers: readonly Customer[];
   /** The customer the ticket is on now — not offered as a destination. */
   currentId: string | null;
   /** Resolves true once the ticket has moved. */
@@ -19,29 +19,31 @@ interface SwitchCustomerProps {
 /** Moving a ticket to a different customer: one already on file, found the way
  *  the intake form finds them (name, phone, plate), or a new one from a name
  *  and a phone. */
-export default function SwitchCustomer({ customers, currentId, onPick, onClose }: SwitchCustomerProps) {
+export default function SwitchCustomer({ currentId, onPick, onClose }: SwitchCustomerProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
+  /* Searched in the database — name, phone, plate — once typing pauses. A
+     reply to an older query is dropped rather than shown under a newer one. */
+  const settled = useDebouncedValue(query.trim());
+  const [found, setFound] = useState<{ q: string; rows: CustomerWithVehicles[] }>({ q: '', rows: [] });
   useEffect(() => {
-    if (isConfigured) listVehicles().then(setVehicles).catch(() => {});
-  }, []);
+    if (!isConfigured || !settled) return;
+    let alive = true;
+    searchCustomers({ query: settled, pageSize: CUSTOMER_MATCH_LIMIT + 1 })
+      .then((p) => alive && setFound({ q: settled, rows: p.rows }))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [settled]);
 
-  const matches = useMemo(() => {
-    const byId = new Map(customers.map((c) => [c.id, c]));
-    const byPlate = matchVehiclesByPlate(vehicles, query)
-      .map((v) => byId.get(v.customer_id))
-      .filter((c): c is Customer => Boolean(c));
-    const seen = new Set<string>();
-    return [...byPlate, ...matchCustomers(customers, query)].filter((c) => {
-      if (c.id === currentId || seen.has(c.id)) return false;
-      seen.add(c.id);
-      return true;
-    });
-  }, [customers, currentId, query, vehicles]);
+  const matches = useMemo(
+    () => (query.trim() && found.q === query.trim() ? found.rows : [])
+      .filter((c) => c.id !== currentId)
+      .slice(0, CUSTOMER_MATCH_LIMIT) as Customer[],
+    [found, query, currentId],
+  );
 
   const pick = async (to: Customer | { name: string; phone: string }) => {
     if (await onPick(to)) onClose();
