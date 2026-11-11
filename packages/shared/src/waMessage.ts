@@ -88,7 +88,7 @@ const photoLines = (photos: readonly TicketPhoto[]): string[] => {
    same figures the printed sheet totals, so the two agree. */
 const discTag = (pct?: number, vatDiscount?: boolean): string => {
   const d = clampDiscount(pct);
-  return (d ? ` (הנחה ${d}%)` : '') + (vatDiscount ? ' (הנחת מע״מ)' : '');
+  return (d ? ` (הנחה ${d}%)` : '') + (vatDiscount ? ' (כולל מע״מ)' : '');
 };
 
 const partLine = (p: PartRow): string =>
@@ -124,7 +124,7 @@ export interface WaMessageInput {
    what the VAT discount took off, then the total VAT goes on. */
 const vatDiscountLines = (sum: ReturnType<typeof worksSummary>): string[] =>
   sum.vatDiscount > 0
-    ? [`סה״כ: ${money(sum.labor + sum.parts)}`, `הנחת מע״מ: -${money(sum.vatDiscount)}`]
+    ? [`סה״כ: ${money(sum.labor + sum.parts)}`, `מע״מ הכלול במחירים: -${money(sum.vatDiscount)}`]
     : [];
 
 export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput): string {

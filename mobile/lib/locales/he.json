@@ -231,7 +231,7 @@
     "priceTitle": "מחיר ליחידה",
     "laborTitle": "מחיר העבודה",
     "discountTitle": "הנחה באחוזים",
-    "vatDiscount": "הנחת מע״מ",
+    "vatDiscount": "כולל מע״מ",
     "laborDiscount": "הנחה על העבודה",
     "noDiscount": "ללא",
     "addDiscount": "+ הנחה",
@@ -242,7 +242,7 @@
     "totals": {
       "net": "סה״כ לפני מע״מ",
       "discount": "מזה הנחה",
-      "vatDiscount": "הנחת מע״מ",
+      "vatDiscount": "מע״מ הכלול במחירים",
       "vat": "מע״מ ({{percent}}%)",
       "total": "סה״כ לתשלום"
     },

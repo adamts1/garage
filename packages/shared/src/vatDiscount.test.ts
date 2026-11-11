@@ -91,7 +91,7 @@ describe('the printed sheet', () => {
 
   it('keeps the line price and names the VAT discount on it', () => {
     expect(html).toContain('350.00');
-    expect(html).toContain('<div class="disc">הנחת מע״מ</div>');
+    expect(html).toContain('<div class="disc">כולל מע״מ</div>');
   });
 
   it('takes it off in the totals, before VAT', () => {
@@ -105,7 +105,8 @@ describe('the printed sheet', () => {
       { ...ticket, works: [{ ...oil, laborVatDiscount: undefined, items: [] }] },
       { labour: 350, items: 0, vat: 63, total: 413 },
     );
-    expect(plain).not.toContain('הנחת מע״מ');
+    expect(plain).not.toContain('<div class="disc">כולל מע״מ</div>');
+    expect(plain).not.toContain('מע״מ הכלול במחירים');
   });
 });
 
@@ -116,8 +117,8 @@ describe('the WhatsApp message', () => {
       closed: false,
       total: 0,
     });
-    expect(msg).toContain('(הנחת מע״מ)');
-    expect(msg).toContain('הנחת מע״מ: -₪76.27');
+    expect(msg).toContain('(כולל מע״מ)');
+    expect(msg).toContain('מע״מ הכלול במחירים: -₪76.27');
     expect(msg).toContain('סה״כ לפני מע״מ: ₪423.73');
     expect(msg).toContain('סה״כ לתשלום: ₪500.00');
   });
