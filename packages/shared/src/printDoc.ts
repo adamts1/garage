@@ -306,7 +306,7 @@ const priceCell = (price: number, pct?: number, vatDiscount?: boolean): string =
   const d = clampDiscount(pct);
   return `<td class="n">${esc(money(price))}`
     + (d ? `<div class="disc">הנחה ${d}%</div>` : '')
-    + (vatDiscount ? `<div class="disc">הנחת מע״מ</div>` : '')
+    + (vatDiscount ? `<div class="disc">כולל מע״מ</div>` : '')
     + `</td>`;
 };
 
@@ -481,7 +481,7 @@ export const workOrderHtml = (
           ${row('סה״כ חלקים', money(totals.items))}
           ${row('סכום ביניים', money(totals.labour + totals.items))}
           ${discount > 0 ? row('מזה הנחה', `-${money(discount)}`) : ''}
-          ${vatDiscount > 0 ? row('הנחת מע״מ', `-${money(vatDiscount)}`) : ''}
+          ${vatDiscount > 0 ? row('מע״מ הכלול במחירים', `-${money(vatDiscount)}`) : ''}
           ${vatDiscount > 0 ? row('סה״כ לפני מע״מ', money(totals.labour + totals.items - vatDiscount)) : ''}
           ${row(`מע״מ ${Math.round(VAT * 100)}%`, money(totals.vat))}
         </table>` : ''}
