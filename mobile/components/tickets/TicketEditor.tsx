@@ -23,7 +23,7 @@ import type { Status, Ticket, TicketWork, Worker } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import { C, s } from '../../lib/theme';
-import { Button } from '../ui';
+import { Button, ScrollRow } from '../ui';
 import { ChecklistTab } from './tabs/ChecklistTab';
 import { DetailsTab } from './tabs/DetailsTab';
 import { NotesTab } from './tabs/NotesTab';
@@ -387,14 +387,16 @@ function TabBar({
   onSelect: (id: Tab) => void;
 }) {
   return (
-    <View style={{ flexDirection: 'row-reverse', borderBottomWidth: 1, borderBottomColor: C.line }}>
+    /* Scrolls rather than squeezing when a large system font makes five tabs
+       wider than the screen; when they fit, each still takes an equal share. */
+    <ScrollRow gap={0} justify="flex-start" style={{ borderBottomWidth: 1, borderBottomColor: C.line }}>
       {tabs.map((tab) => {
         const on = tab.id === active;
         return (
           <Pressable
             key={tab.id}
             onPress={() => onSelect(tab.id)}
-            style={{ flex: 1, alignItems: 'center', paddingVertical: 12, gap: 6 }}
+            style={{ flexGrow: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, gap: 6 }}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
           >
@@ -415,7 +417,7 @@ function TabBar({
           </Pressable>
         );
       })}
-    </View>
+    </ScrollRow>
   );
 }
 
