@@ -39,6 +39,9 @@ export interface CounterSale {
   customerIdNumber: string;
   customerPhone: string;
   customerAddress: string;
+  /** The car the sale was for. Required here (2026-11-11): the garage's
+   *  documents name a car, and a counter sale is still a sale for one. */
+  plate: string;
   docType: 'invoice_receipt' | 'tax_invoice';
   payMethod: string | null;
   lines: StandaloneLine[];
@@ -70,6 +73,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [plate, setPlate] = useState('');
   const [docType, setDocType] = useState<CounterSale['docType']>('invoice_receipt');
   const [payMethod, setPayMethod] = useState<string>('cash');
   const [rows, setRows] = useState<Row[]>([blank('r0')]);
@@ -106,7 +110,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
 
   const priced = rows.filter((r) => r.desc.trim() && r.qty > 0);
   const subtotal = priced.reduce((s, r) => s + r.qty * r.unit_price, 0);
-  const canIssue = Boolean(customerName.trim()) && priced.length > 0 && subtotal > 0;
+  const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0;
 
   const answer = (value: CounterSale | null) => {
     settleModal(resultId, value);
@@ -134,6 +138,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
               customerIdNumber: customerIdNumber.trim(),
               customerPhone: customerPhone.trim(),
               customerAddress: customerAddress.trim(),
+              plate: plate.trim(),
               docType,
               payMethod: docType === 'invoice_receipt' ? payMethod : null,
               lines: priced.map((r) => ({ desc: r.desc.trim(), qty: r.qty, unit_price: r.unit_price })),
@@ -156,6 +161,10 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder={t('counterSale.fields.namePlaceholder')}
             />
+          </Field>
+          <Field label={t('counterSale.fields.plate')}>
+            <input className="input" dir="ltr" required
+              value={plate} onChange={(e) => setPlate(e.target.value)} />
           </Field>
           <Field label={t('counterSale.fields.idNumber')}>
             <input className="input" dir="ltr" inputMode="numeric"

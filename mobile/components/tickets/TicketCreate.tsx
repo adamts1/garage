@@ -81,7 +81,9 @@ export default function TicketCreate({
       manufacturer: v.manufacturer ?? '',
       model: v.model ?? '',
       year: v.year ?? '',
-      km: v.km ?? '',
+      /* Blank, not the car's last reading: km is this visit's odometer, and a
+         stale figure looks filled in and gets saved unread (2026-11-11). */
+      km: '',
       vehicleCode: v.vehicle_code ?? '',
     }));
 

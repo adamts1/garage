@@ -11,6 +11,12 @@ import { signIn } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '../../app/auth.module.css';
+/* 192px for a 96px box on a retina screen, ~4KB as WebP — under Vite's inline
+   limit, so it ships inside the bundle and paints with the card. It used to be
+   /logo.png: 117KB, uncached (Netlify's max-age=0 for anything outside
+   /assets), and only requested once React had rendered — the last thing on the
+   screen to appear. */
+import logo from './logo.webp';
 
 /** Provider messages are English and not ours to show. Only the two we can
  *  actually act on get their own wording; anything else is the same advice. */
@@ -58,7 +64,7 @@ export default function LoginPage() {
   return (
     <div className={styles.signIn}>
       <form className={styles.loginCard} onSubmit={submit}>
-        <img className={styles.logo} src="/logo.png" alt="" />
+        <img className={styles.logo} src={logo} width={96} height={96} alt="" />
         <h1 className={styles.title}>{t('login.brand')}</h1>
         <p className={styles.tagline}>{t('login.tagline')}</p>
 

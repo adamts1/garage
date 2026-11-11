@@ -76,12 +76,17 @@ export default function InvoiceDetail({
                 {[invoice.vehicle.plate, invoice.vehicle.car, invoice.vehicle.km && t('invoices.detail.km', { km: invoice.vehicle.km })]
                   .filter(Boolean).join(' · ') || '-'}
               </dd>
-              <dt><IconCard /> {t('invoices.detail.visit')}</dt>
-              <dd>
-                {invoice.vehicle.openedAt ? fmt(invoice.vehicle.openedAt) : '-'}
-                {' – '}
-                {invoice.vehicle.closedAt ? fmt(invoice.vehicle.closedAt) : '-'}
-              </dd>
+              {/* A counter sale names a car but had no visit — no dates to show. */}
+              {(invoice.vehicle.openedAt || invoice.vehicle.closedAt) && (
+                <>
+                  <dt><IconCard /> {t('invoices.detail.visit')}</dt>
+                  <dd>
+                    {invoice.vehicle.openedAt ? fmt(invoice.vehicle.openedAt) : '-'}
+                    {' – '}
+                    {invoice.vehicle.closedAt ? fmt(invoice.vehicle.closedAt) : '-'}
+                  </dd>
+                </>
+              )}
             </>
           )}
 
