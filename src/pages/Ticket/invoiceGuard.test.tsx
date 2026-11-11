@@ -38,8 +38,9 @@ vi.mock('@garage/shared', async (importActual) => {
     creditInvoice: (...a: unknown[]) => creditInvoice(...a),
     isGarageAdmin: () => isGarageAdmin(),
     subscribeToInvoices: vi.fn(() => () => {}),
-    // The page reads the garage's customers to show (and warn about) the ת״ז.
-    listCustomers: vi.fn(async () => []),
+    // The page reads the ticket's customer record to show (and warn about) the ת״ז.
+    getCustomer: vi.fn(async () => null),
+    customersWithPhone: vi.fn(async () => []),
     updateCustomer: vi.fn(async () => {}),
     subscribeToTable: vi.fn(() => () => {}),
   };
@@ -78,7 +79,7 @@ const renderPage = async (t: Ticket = ticket()) => {
         <CatalogProvider>
           <TicketPage
             ticket={t}
-            setTickets={() => {}}
+            saveTicket={async () => {}}
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}

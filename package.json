@@ -15,6 +15,8 @@
     "db:push": "supabase db push",
     "db:lint": "supabase db lint",
     "functions:status": "node scripts/functions-status.mjs",
+    "functions:status:staging": "node scripts/functions-drift.mjs --env staging",
+    "functions:status:prod": "node scripts/functions-drift.mjs --env production",
     "mobile:status": "node scripts/mobile-status.mjs",
     "functions:push": "supabase functions deploy --project-ref poksqsdklnhaumozriqd",
     "functions:push:prod": "supabase functions deploy --project-ref farpgkljbmlaeiocrore",
@@ -28,6 +30,7 @@
     "seed:catalog:prod": "node --env-file=.env.production.local scripts/seed-catalog.mjs",
     "seed:board": "node --env-file=.env.local scripts/seed-board.mjs",
     "seed:board:prod": "node --env-file=.env.production.local scripts/seed-board.mjs",
+    "import:ricbi": "node --env-file=.env.local scripts/ricbi/import-ricbi.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
     "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs"
   },

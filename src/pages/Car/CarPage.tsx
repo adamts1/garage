@@ -1,4 +1,6 @@
-import { getCar, isCancelled, shekel, type Car, type CarOwner, type Ticket } from '@garage/shared';
+import {
+  getCar, isCancelled, listCarLegacyHistory, shekel, type Car, type CarOwner, type Ticket,
+} from '@garage/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -15,6 +17,11 @@ const TONE: Record<Ticket['st'], PillTone> = {
 };
 
 const ticketNo = (ticket: Ticket) => Number(ticket.k.split('-')[1]) || 0;
+
+/* Newest visit first. The garage's own numbers and the previous system's are
+   two sequences, so they are ordered by when the visit was, not by number. */
+const byVisit = (a: Ticket, b: Ticket) =>
+  (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? '') || ticketNo(b) - ticketNo(a);
 
 export interface CarPageProps {
   /** Every ticket, cancelled ones included — this page is the car's full record. */
@@ -35,6 +42,7 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
   const [car, setCar] = useState<Car | null>(null);
   const [owners, setOwners] = useState<CarOwner[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [legacy, setLegacy] = useState<Ticket[]>([]);
 
   useEffect(() => {
     if (!isConfigured || !id) { setLoaded(true); return; }
@@ -50,9 +58,19 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
     return () => { alive = false; };
   }, [id]);
 
+  // Work orders from the previous system: not in the store, read-only, here only.
+  useEffect(() => {
+    if (!isConfigured || !id) return;
+    let alive = true;
+    listCarLegacyHistory(id)
+      .then((rows) => alive && setLegacy(rows))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [id]);
+
   const history = useMemo(
-    () => tickets.filter((ticket) => ticket.carId === id).sort((a, b) => ticketNo(b) - ticketNo(a)),
-    [tickets, id],
+    () => [...tickets.filter((ticket) => ticket.carId === id), ...legacy].sort(byVisit),
+    [tickets, legacy, id],
   );
 
   if (!car) {
@@ -78,7 +96,9 @@ export default function CarPage({ tickets, onOpenTicket }: CarPageProps) {
     {
       key: 'status',
       header: 'customer.fields.status',
-      render: (ticket) => (
+      render: (ticket) => ticket.legacy ? (
+        <Pill tone="neutral">{t('car.legacy.badge')}</Pill>
+      ) : (
         <>
           <Pill tone={TONE[ticket.st]}>{t(`customer.status.${ticket.st}`)}</Pill>
           {isCancelled(ticket) && ticket.cancelReason && (

@@ -1,4 +1,5 @@
 import { garageName, isGarageAdmin, signedInAs, type Worker } from '@garage/shared';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -38,12 +39,10 @@ export interface SidebarProps {
      Passed in rather than fetched: the shell already keeps it live for the
      board's avatars, and a rename on the staff screen has to reach here too. */
   workers: Worker[];
-  /* Both flags live in the shell: its grid is narrow or wide depending on the
-     result, so it cannot be told after the fact. */
-  expanded: boolean;
+  /* Pinned lives in the shell: its grid is narrow or wide depending on it.
+     Hover does not — see `hovered` below. */
   pinned: boolean;
   onPinToggle: () => void;
-  onHoverChange: (hovered: boolean) => void;
   /* From the shell rather than signOut() directly: an open ticket may have
      unsaved edits, and signing out unmounts it without a navigation for the
      router to hold. */
@@ -51,10 +50,18 @@ export interface SidebarProps {
 }
 
 export default function Sidebar({
-  activeCount, workers, expanded, pinned, onPinToggle, onHoverChange, onSignOut,
+  activeCount, workers, pinned, onPinToggle, onSignOut,
 }: SidebarProps) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+
+  /* Hover is the rail's own business. It used to be the shell's, which made
+     every pass of the pointer re-render the whole app — the board and the open
+     page with it — and animate the grid, re-laying out every card on the board
+     each frame. Now a hovered rail opens OVER the page (is-floating) and the
+     page never hears of it; only pinning moves the content aside. */
+  const [hovered, setHovered] = useState(false);
+  const expanded = pinned || hovered;
 
   /* Who is signed in. Two people share a counter and one browser more often than
      anyone admits, and until now the only thing on screen that changed with the
@@ -64,9 +71,9 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`sidebar${expanded ? '' : ' is-rail'}`}
-      onMouseEnter={() => onHoverChange(true)}
-      onMouseLeave={() => onHoverChange(false)}
+      className={`sidebar${expanded ? '' : ' is-rail'}${hovered && !pinned ? ' is-floating' : ''}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div className="brand">
         <div className="brand-logo">מ</div>

@@ -57,7 +57,7 @@ export default function Pagination({
   const { t } = useTranslation();
 
   return (
-    <div className={styles.foot}>
+    <div className={`${styles.foot} pager-foot`}>
       <label className={styles.perPage}>
         <span>{t('pagination.perPage')}</span>
         <select value={perPage} onChange={(e) => onPerPage(Number(e.target.value))}>

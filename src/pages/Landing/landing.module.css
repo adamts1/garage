@@ -1,0 +1,245 @@
+/* The landing page runs its own palette and reads no app token, so restyling
+   the shop window can never move a colour inside the product. */
+
+.page {
+  --ink: #1b2740;
+  --ink-deep: #141d31;
+  --body: #46536b;
+  --muted: #6b778c;
+  --accent: #4a6898;
+  --accent-soft: #e8eef7;
+  --tint: #f5f7fb;
+  --line: #dce3ee;
+  --ok: #2e8b57;
+
+  min-height: 100vh;
+  color: var(--ink);
+  background: #fff;
+  font-size: 17px;
+  line-height: 1.6;
+  text-align: right;
+  overflow-x: hidden;
+}
+
+.page h1, .page h2, .page h3, .page p { margin: 0; }
+.page h1, .page h2 { font-weight: 800; letter-spacing: -0.5px; }
+.page h2 { font-size: 40px; line-height: 1.2; }
+.page h3 { font-size: 21px; font-weight: 700; }
+.page img { display: block; max-width: 100%; height: auto; }
+.page figure { margin: 0; }
+.page ol, .page ul { margin: 0; padding: 0; list-style: none; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- buttons ---------- */
+
+.btnPrimary, .btnGhost, .btnOutline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btnPrimary { border: 0; background: var(--ink); color: #fff; cursor: pointer; }
+.btnPrimary:hover { background: var(--accent); }
+.btnGhost { background: #fff; color: var(--ink); border: 1px solid #cbd4e2; }
+.btnGhost:hover { border-color: var(--accent); }
+.btnOutline { align-self: flex-start; gap: 10px; color: #fff; border: 1px solid var(--accent); }
+.btnOutline:hover { background: rgba(255, 255, 255, 0.08); }
+.btnLarge { min-height: 52px; padding: 14px 28px; border-radius: 12px; font-size: 18px; }
+
+.page a:focus-visible, .page button:focus-visible, .page input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- nav ---------- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e3e8f0;
+}
+.nav .container { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
+
+.brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.brand img { border-radius: 10px; }
+.brand span { font-weight: 800; font-size: 22px; }
+
+.navLinks { display: flex; gap: 28px; font-weight: 500; font-size: 16px; }
+.navLinks a { color: var(--ink); text-decoration: none; }
+.navLinks a:hover { color: var(--accent); }
+
+.navActions { display: flex; align-items: center; gap: 8px; }
+.login { padding: 10px 14px; color: var(--ink); font-weight: 700; text-decoration: none; }
+.login:hover { color: var(--accent); }
+
+/* ---------- sections ---------- */
+
+.section { padding: 96px 0; scroll-margin-top: 72px; }
+.tinted { background: var(--tint); }
+.dark { background: var(--ink); color: #fff; }
+
+.sectionHead { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 48px; text-align: center; }
+.eyebrow { color: var(--accent); font-weight: 700; font-size: 15px; }
+.lead { max-width: 560px; color: var(--body); font-size: 18px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 20px; }
+
+/* ---------- hero ---------- */
+
+/* The garage photo behind the hero, washed out to a milky veil so the copy
+   reads over it. Densest on the right, under the text (RTL), thinning toward
+   the screenshot so the room still shows through. */
+.heroBg {
+  background:
+    linear-gradient(to left, rgba(245, 247, 251, 0.95) 0%, rgba(245, 247, 251, 0.88) 45%, rgba(245, 247, 251, 0.72) 100%),
+    url('/marketing/images/hero-garage.webp') center / cover no-repeat,
+    var(--tint);
+}
+
+.hero { display: flex; flex-wrap: wrap; align-items: center; gap: 56px; }
+.heroCopy { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.heroCopy h1 { font-size: 56px; line-height: 1.12; }
+.accent { color: var(--accent); }
+.heroLead { max-width: 520px; color: var(--body); font-size: 20px; }
+
+.badge {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: #34507e;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ctaRow { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.highlights { display: flex; flex-wrap: wrap; gap: 10px 22px; color: var(--body); font-size: 15px; font-weight: 500; }
+.highlights li { display: inline-flex; align-items: center; gap: 8px; }
+.highlights li::before {
+  content: '';
+  width: 14px;
+  height: 8px;
+  margin-top: -4px;
+  border: solid var(--ok);
+  border-width: 0 0 2.5px 2.5px;
+  transform: rotate(-45deg);
+}
+
+.heroVisual { position: relative; flex: 1 1 520px; min-width: 0; padding-bottom: 40px; }
+
+.browser { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 24px 60px rgba(27, 39, 64, 0.16); }
+.browserBar { display: flex; gap: 6px; padding: 10px 14px; background: #eef2f7; border-bottom: 1px solid var(--line); }
+.browserBar span { width: 10px; height: 10px; border-radius: 50%; background: #c9d2df; }
+
+.phone { padding: 4px; border-radius: 24px; background: var(--ink); box-shadow: 0 16px 36px rgba(27, 39, 64, 0.2); }
+.phone img { border-radius: 20px; }
+.heroPhone { position: absolute; bottom: 0; left: -12px; width: 26%; min-width: 110px; }
+
+/* ---------- cards ---------- */
+
+.feature, .step { display: flex; flex-direction: column; gap: 12px; padding: 28px; border-radius: 16px; }
+.feature { background: var(--tint); }
+.feature p, .step p, .reason p { color: var(--body); }
+
+.featureIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: #fff;
+}
+
+.step { padding: 32px; background: #fff; border: 1px solid var(--line); }
+.stepNo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  font-weight: 800;
+  font-size: 20px;
+}
+
+.reason { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- screens ---------- */
+
+/* Tablet and two phones side by side at one height: the columns are in the
+   ratio of the shots' widths at equal height (0.69 : 0.46 : 0.46). */
+.screens { display: grid; grid-template-columns: 1.5fr 1fr 1fr; align-items: start; gap: 28px; }
+.screens figure { display: flex; flex-direction: column; gap: 16px; }
+.screens figcaption { display: flex; flex-direction: column; gap: 4px; }
+.screens figcaption strong { font-size: 19px; }
+.screens figcaption span { color: var(--body); font-size: 15px; }
+
+/* The tablet shot carries its own black bezel, but its corners are opaque
+   black too — rounded here so it reads as a device, not a square. The radius is
+   in the shot's own proportions (940 × 1371), so it holds at any width. */
+.tabletShot { border-radius: 6% / 4.1%; box-shadow: 0 20px 44px rgba(27, 39, 64, 0.22); }
+
+/* ---------- demo ---------- */
+
+.demo { display: flex; flex-wrap: wrap; align-items: center; gap: 48px; }
+.demoCopy { flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.demoCopy h2 { font-size: 44px; line-height: 1.15; }
+.demoCopy p { color: #c9d3e4; font-size: 19px; }
+
+.form { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 32px; border-radius: 18px; background: #fff; color: var(--ink); }
+.form label { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: 15px; }
+.form input { min-height: 48px; padding: 12px 14px; border: 1px solid #cbd4e2; border-radius: 10px; font-weight: 400; text-align: right; }
+
+/* ---------- footer ---------- */
+
+.footer { padding: 40px 0; background: var(--ink-deep); color: #c9d3e4; font-size: 15px; }
+.footer .container { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
+.footer .brand span { color: #fff; font-size: 18px; }
+.footer .brand img { border-radius: 8px; }
+.footerLinks { display: flex; flex-wrap: wrap; gap: 20px; }
+.footerLinks a { color: #c9d3e4; }
+.footerLinks a:hover { color: #fff; }
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 860px) {
+  .navLinks { display: none; }
+  .screens { grid-template-columns: 1fr 1fr; }
+  .screens > :first-child { grid-column: 1 / -1; max-width: 520px; justify-self: center; }
+}
+
+@media (max-width: 640px) {
+  .section { padding: 64px 0; }
+  .phone { padding: 3px; border-radius: 16px; }
+  .phone img { border-radius: 13px; }
+  /* Stacked, the text runs the full width, so the veil does too. */
+  .heroBg {
+    background:
+      linear-gradient(rgba(245, 247, 251, 0.9), rgba(245, 247, 251, 0.9)),
+      url('/marketing/images/hero-garage.webp') center / cover no-repeat,
+      var(--tint);
+  }
+  .heroCopy h1 { font-size: 40px; }
+  .page h2, .demoCopy h2 { font-size: 30px; }
+  .brand span { font-size: 19px; }
+  .login { padding-inline: 8px; }
+}
+
+/* Three actions do not fit beside the logo on a phone; the hero repeats the
+   demo button a scroll away, the language switch and login it does not. */
+@media (max-width: 480px) {
+  .navActions .btnPrimary { display: none; }
+}

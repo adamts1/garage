@@ -18,6 +18,7 @@ import { garageLetterhead, garagePrintName } from './auth';
 import {
   VAT, clampDiscount, partLineTotal, workTotal, worksDiscount, worksVatDiscount, type TicketWork,
 } from './catalog';
+import type { PartRow } from './catalog';
 import type { Car, CarOwner, Customer } from './db';
 import { money } from './money';
 import type { Ticket } from './types';
@@ -189,6 +190,9 @@ const CSS = `
   .sheet.wo .grand-l{font-size:15px}
   .sheet.wo .grand-v{font-size:17px}
   .sheet.wo .note{font-size:14px}
+  /* What the customer asked for is read before the work list, so it is bigger. */
+  .sheet.wo .notes .sub-t{font-size:15px}
+  .sheet.wo .notes .note{font-size:17px;line-height:1.55}
   .sheet.wo .sigrow{font-size:13.5px;margin-top:26px}
   .sheet.wo .foot{font-size:12.5px}
 
@@ -202,6 +206,8 @@ const CSS = `
   .hist tr.visit td{background:#eef1f5;font-weight:700;border-bottom:1px solid #d8dde5}
   .hist tr.did td{color:#333;padding-right:20px}
   .hist tr.did td .parts{display:block;color:#666;font-size:12px;margin-top:2px}
+  .hist tr.part td{color:#555;font-size:12px;padding-top:1px;padding-bottom:1px;border-bottom:0}
+  .hist tr.part td .sku{color:#888;direction:ltr;unicode-bidi:isolate}
   .hist tfoot td{font-weight:800;font-size:14px;border-top:2px solid #1d2d44;border-bottom:0}
 
   button{margin:18px auto 0;display:block;padding:9px 20px;font-size:14px;cursor:pointer}
@@ -364,6 +370,16 @@ export const letterheadHtml = (): string => {
     </div>`;
 };
 
+/* Intake stores the car as "טויוטה קורולה 2019" (carLabel), but the work order
+   has its own year row — so the year is dropped here rather than printed twice.
+   Only a trailing year that matches the ticket's is removed. */
+const carWithoutYear = (car?: string, year?: string): string | undefined => {
+  const y = year?.trim();
+  if (!car || !y || !/^\d+$/.test(y)) return car;
+  const stripped = car.trim().replace(new RegExp(`\\s+${y}$`), '');
+  return stripped || car;
+};
+
 /** What the window or the print dialog is called. */
 export const workOrderTitle = (t: Ticket): string => `כרטיס עבודה ${t.k}`;
 
@@ -395,7 +411,7 @@ export const workOrderHtml = (
       : '',
   ].join('');
   const notesBlock = notes
-    ? `<div class="box"><div class="sub-t">הערות</div>${notes}</div>`
+    ? `<div class="box notes"><div class="sub-t">הערות</div>${notes}</div>`
     : '';
 
   /* A cancelled ticket still prints — it is a kept record — but must never be
@@ -433,7 +449,7 @@ export const workOrderHtml = (
           <div class="sub-t">הרכב</div>
           <table class="kv">
             ${row('מספר רישוי', t.plate)}
-            ${row('רכב / דגם', t.car)}
+            ${row('רכב / דגם', carWithoutYear(t.car, t.year))}
             ${row('שנת ייצור', t.year)}
             ${row('קילומטראז׳', t.km)}
             ${row('קוד רכב', t.vehicleCode)}
@@ -441,6 +457,8 @@ export const workOrderHtml = (
         </section>
       </div>
     </div>
+
+    ${notesBlock}
 
     <div class="box tight grow">
       <table class="lines wo">
@@ -473,8 +491,6 @@ export const workOrderHtml = (
         </div>
       </div>
     </div>
-
-    ${notesBlock}
 
     <div class="sigs">
       <div class="sigrow">
@@ -596,13 +612,13 @@ export const carHistoryHtml = (car: Car, owners: readonly CarOwner[], tickets: r
 
   const visit = (t: Ticket): string => {
     const works = t.works ?? [];
+    /* Each work, and under it every part it used, one to a row — the part's
+       name, its catalogue number when it has one, and how many. */
+    const part = (p: PartRow) =>
+      `<tr class="part"><td></td><td colspan="2">${esc(p.name)}${p.sku ? ` <span class="sku">${esc(p.sku)}</span>` : ''}</td>`
+      + `<td>×${esc(String(p.qty))}</td><td></td></tr>`;
     const did = works.length
-      ? works.map((w) =>
-          `<tr class="did"><td colspan="5">${esc(w.name)}${
-            w.items.length
-              ? `<span class="parts">${esc(w.items.map((p) => (p.qty === 1 ? p.name : `${p.name} ×${p.qty}`)).join(' · '))}</span>`
-              : ''
-          }</td></tr>`).join('')
+      ? works.map((w) => `<tr class="did"><td colspan="5">${esc(w.name)}</td></tr>${w.items.map(part).join('')}`).join('')
       : `<tr class="did"><td colspan="5">${esc(t.title || '-')}</td></tr>`;
     return `<tbody class="v">`
       + `<tr class="visit">`

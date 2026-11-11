@@ -649,6 +649,15 @@ apps and both go dark. So schema first, then auth, then the flip.
       summed live receipts at face value, which was right only while a credited
       invoice was a cancelled one. A live ₪1,000 invoice with ₪300 handed back is
       ₪700 of takings, and what was refunded is its own card beside it.
+- [x] **No document is created twice, and none goes unrecorded.** Every issue,
+      counter sale, collect and credit first writes a row to `billing_attempts`,
+      and only one may be open per target (the ticket, the invoice, or the
+      counter-sale key). Two overlapping calls used to both pass the "already
+      billed / still owed" check and both create a document at iCount; the
+      second is now refused before the provider is called. When iCount gives no
+      clear answer the attempt is kept as `unknown` and the target stays locked
+      until someone checks — see *Billing attempts* below.
+      `20261109090000_billing_attempts.sql`
 - [ ] Soft-delete for invoiced tickets still to confirm.
 - [ ] Mobile issuance (web-first shipped; mobile follows).
 - [ ] `PaymentResult` seam, `TerminalPayment` implementation.
@@ -663,6 +672,28 @@ apps and both go dark. So schema first, then auth, then the flip.
 > original's `is_cancelled` — the offset is the record; we mirror this by moving our
 > row's `status` issued→cancelled with `cancelled_by`.
 > **The token is pasted in plaintext during setup → rotate it after go-live.**
+
+> **Billing attempts — what to do when a bill is locked.** The app says
+> "ניסיון קודם להפיק מסמך … לא הסתיים בבירור" when an attempt on that ticket or
+> invoice is `unknown` (iCount gave no clear answer) or `orphaned` (iCount
+> created the document, storing it failed). Nothing is retried automatically, on
+> purpose: guessing wrong is either a duplicate tax document or a missing one.
+>
+> ```sql
+> -- what is stuck, newest first
+> select id, action, target_id, state, provider_docnum, error, created_at
+>   from billing_attempts where state in ('unknown', 'orphaned') order by created_at desc;
+> ```
+>
+> Then look the document up in iCount (by customer, amount and time).
+> - **iCount has no such document:** free the target —
+>   `update billing_attempts set state = 'failed', error = error || ' / checked in iCount: none' where id = '…';`
+>   The user can then bill again.
+> - **iCount has it:** insert its `invoices` row by hand from the iCount
+>   document (docnum, totals, lines), then
+>   `update billing_attempts set state = 'done', invoice_id = '…' where id = '…';`
+>   Do **not** free the target without the row — billing again would issue a
+>   second document.
 
 ### Phase 4c — Supplier expenses ✅ *(built)*
 The "money out" counterpart to 4a. Unlike an invoice (a legal document the garage *issues*), a supplier expense is a document the supplier issued and the garage merely *records* — so these are the garage's own bookkeeping entries: full CRUD, no provider-owned number, no immutability.

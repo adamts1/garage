@@ -2,7 +2,7 @@ import {
   assignableWorkers, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
-import { Fragment, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { Fragment, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import SwitchCustomer from '../../features/ticket/SwitchCustomer/SwitchCustomer';
@@ -18,7 +18,8 @@ import { useTicketPage } from './useTicketPage';
 
 export interface TicketPageProps {
   ticket: Ticket;
-  setTickets: Dispatch<SetStateAction<Ticket[]>>;
+  /** Writes the ticket and resolves once it is stored. See useTickets.saveTicket. */
+  saveTicket: (next: Ticket) => Promise<void>;
   /** The garage's staff. Only the active ones can be assigned new work. */
   workers: Worker[];
   /** Code → chip, retired workers included: this page shows history. */
@@ -76,10 +77,10 @@ const Val = ({ children }: { children?: string | number | null }) =>
     : <>{children}</>;
 
 export default function TicketPage({
-  ticket, setTickets, workers, workerChips, onBack, onCancelTicket, onDirtyChange,
+  ticket, saveTicket, workers, workerChips, onBack, onCancelTicket, onDirtyChange,
 }: TicketPageProps) {
   const { t } = useTranslation();
-  const page = useTicketPage({ ticket, setTickets, onBack, onCancelTicket, onDirtyChange });
+  const page = useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDirtyChange });
   const { photos, invoice, busy, totals, works, dirty } = page;
 
   /* Everything on this screen reads the DRAFT, not the row. The row is what the
@@ -317,7 +318,6 @@ export default function TicketPage({
               </div>
               {!billLocked && switching && (
                 <SwitchCustomer
-                  customers={page.customers}
                   currentId={draft.customerId ?? null}
                   onPick={page.switchCustomer}
                   onClose={() => setSwitching(false)}

@@ -10,20 +10,24 @@
    The shape of what gets saved lives in newTicket.ts, the two halves of the form
    in CustomerSection / VehicleSection. What is left here is the wiring. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
+  customerHoldingIdNumber,
+  customersWithPhone,
+  getCustomer,
   idNumberConflict,
-  listCustomers,
-  listVehicles,
+  isUsablePhone,
   money,
   phoneConflict,
+  searchCustomers,
   subscribeToTable,
+  vehiclesForPlate,
   worksSummary,
 } from '@garage/shared';
-import type { Customer, TicketWork, Vehicle } from '@garage/shared';
+import type { Customer, CustomerWithVehicles, TicketWork, Vehicle } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import { C, s } from '../../lib/theme';
@@ -61,7 +65,7 @@ export default function TicketCreate({
   const [search, setSearch] = useState('');
   const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
 
-  const { customers, vehicles } = useCustomerDirectory();
+  const { customers, vehicles } = useCustomerDirectory(search, form.customerPhone, form.idNumber);
 
   const set = <K extends keyof TicketForm>(key: K, value: TicketForm[K]) =>
     setForm((prev) => ({
@@ -77,7 +81,9 @@ export default function TicketCreate({
       manufacturer: v.manufacturer ?? '',
       model: v.model ?? '',
       year: v.year ?? '',
-      km: v.km ?? '',
+      /* Blank, not the car's last reading: km is this visit's odometer, and a
+         stale figure looks filled in and gets saved unread (2026-11-11). */
+      km: '',
       vehicleCode: v.vehicle_code ?? '',
     }));
 
@@ -94,13 +100,19 @@ export default function TicketCreate({
     }));
     setSearch('');
 
-    const owned = vehicles.filter((v) => v.customer_id === c.id);
-    if (owned.length === 1) {
-      fillVehicle(owned[0]);
-      setVehicleChoices([]);
-    } else {
-      setVehicleChoices(owned); // 0 -> nothing to pick; >1 -> let them choose
-    }
+    const offer = (owned: Vehicle[]) => {
+      if (owned.length === 1) {
+        fillVehicle(owned[0]);
+        setVehicleChoices([]);
+      } else {
+        setVehicleChoices(owned); // 0 -> nothing to pick; >1 -> let them choose
+      }
+    };
+    /* Their cars came with the search; a customer reached by the phone or ת״ז
+       warning is asked for them. */
+    const known = (c as Partial<CustomerWithVehicles>).vehicles;
+    if (known) offer(known);
+    else getCustomer(c.id).then((full) => offer(full?.vehicles ?? [])).catch(() => {});
   };
 
   const pickVehicle = (v: Vehicle) => {
@@ -115,7 +127,12 @@ export default function TicketCreate({
     pickVehicle(v);
   };
 
-  const fillKnownPlate = () => setForm((prev) => fillFromKnownPlate(prev, vehicles));
+  const fillKnownPlate = () => {
+    if (!form.licensePlate.trim()) return;
+    vehiclesForPlate(form.licensePlate)
+      .then((onFile) => setForm((prev) => fillFromKnownPlate(prev, onFile)))
+      .catch(() => {});
+  };
 
   /* The two numbers, checked against everybody on file. The phone may be
      shared — a couple, a company, a parent paying for a student's car — so a
@@ -265,31 +282,66 @@ export default function TicketCreate({
   );
 }
 
-/* The garage's customers and their cars.
+/* The customers this form can be talking about, asked of the database: the ones
+   the search box finds (with their cars), and whoever already holds the phone
+   or ת״ז being typed — which is what the two warnings are judged against.
 
-   Subscribed, not loaded once. The customer list is no longer just autofill: it
-   is what the phone-taken check is judged against, so a stale copy means the
-   phone reads as free and the duplicate the check exists to prevent gets created
-   anyway. Somebody opening a customer at the counter while this form is open on
-   the phone is the ordinary case, not a corner one. */
-function useCustomerDirectory() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+   It used to load every customer and every car and work over those — capped at
+   1000 rows each by PostgREST, so on a large garage most customers could not
+   be found and a taken phone could read as free. Each question is sent once
+   typing pauses; a reply to an older question is dropped. Re-asked when
+   somebody else adds or edits a customer, as before. */
+const PAUSE_MS = 300;
+const SEARCH_FETCH = 20;
+
+function useSettled(value: string) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), PAUSE_MS);
+    return () => clearTimeout(id);
+  }, [value]);
+  return settled;
+}
+
+function useCustomerDirectory(search: string, phone: string, idNumber: string) {
+  const q = useSettled(search.trim());
+  const digits = useSettled(isUsablePhone(phone) ? phone.replace(/\D/g, '') : '');
+  const id = useSettled(idNumber.trim());
+  const [found, setFound] = useState<CustomerWithVehicles[]>([]);
+  const [holders, setHolders] = useState<Customer[]>([]);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const loadCustomers = () => listCustomers().then(setCustomers).catch(() => {});
-    const loadVehicles = () => listVehicles().then(setVehicles).catch(() => {});
-
-    void loadCustomers();
-    void loadVehicles();
-
-    const offCustomers = subscribeToTable('customers', () => void loadCustomers());
-    const offVehicles = subscribeToTable('vehicles', () => void loadVehicles());
-    return () => {
-      offCustomers();
-      offVehicles();
-    };
+    const off = subscribeToTable('customers', () => setTick((n) => n + 1));
+    const offVehicles = subscribeToTable('vehicles', () => setTick((n) => n + 1));
+    return () => { off(); offVehicles(); };
   }, []);
 
-  return { customers, vehicles };
+  useEffect(() => {
+    let alive = true;
+    if (!q) { setFound([]); return; }
+    searchCustomers({ query: q, pageSize: SEARCH_FETCH })
+      .then((p) => { if (alive) setFound(p.rows); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [q, tick]);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      digits ? customersWithPhone(digits) : Promise.resolve([] as Customer[]),
+      id ? customerHoldingIdNumber(id).then((c) => (c ? [c] : [])) : Promise.resolve([] as Customer[]),
+    ])
+      .then(([byPhone, byId]) => { if (alive) setHolders([...byPhone, ...byId]); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [digits, id, tick]);
+
+  return useMemo(() => {
+    const seen = new Set(found.map((c) => c.id));
+    return {
+      customers: [...found, ...holders.filter((c) => !seen.has(c.id))] as Customer[],
+      vehicles: found.flatMap((c) => c.vehicles ?? []),
+    };
+  }, [found, holders]);
 }

@@ -212,11 +212,12 @@ const main = async () => {
 
   console.log(c.dim(`
 The hash says whether two environments run the same bundle. It cannot say
-whether either matches your working tree — for that:
+whether either matches git — for that, download and compare:
 
-  npx supabase functions download <name> --project-ref <ref>
+  npm run functions:status:staging       # staging vs origin/staging
+  npm run functions:status:prod          # production vs origin/main
 
-and diff it. Deploy with:
+Deploy with:
 
   npm run functions:push <name>          # staging
   npm run functions:push:prod <name>     # production

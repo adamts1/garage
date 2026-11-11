@@ -28,6 +28,7 @@ export * from './money';
 export * from './intake';
 export * from './payment';
 export * from './db';
+export * from './paging';
 export * from './auth';
 export * from './waMessage';
 export * from './printDoc';

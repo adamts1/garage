@@ -120,6 +120,17 @@
   margin-top: 16px;
 }
 
+/* A work and the parts used in it, laid out the way the printed copy lays
+   them out: the work on a grey band, its parts indented on white. */
+.workLine td {
+  background: var(--surface-2);
+  font-weight: 700;
+}
+
+.partLine td:first-child {
+  padding-inline-start: 40px;
+}
+
 .actions {
   display: flex;
   align-items: center;

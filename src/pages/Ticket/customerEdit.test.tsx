@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Customer, Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
    different person changes which record it belongs to and leaves both records
    alone. Once billed, neither: the invoice was printed with this customer. */
 
-const listCustomers = vi.fn();
+/* The customers on file, as the database holds them. The page asks for this
+   ticket's record, for who holds a ת״ז being typed, and (switching) searches. */
+let onFile: Customer[] = [];
+const searchCustomers = vi.fn();
+const getCustomer = vi.fn();
 const updateCustomer = vi.fn();
 const customerHoldingIdNumber = vi.fn();
 const createCustomer = vi.fn();
@@ -29,15 +33,20 @@ vi.mock('@garage/shared', async (importActual) => {
     listWorkDefs: vi.fn(async () => []),
     listItems: vi.fn(async () => []),
     listInvoices: (...a: unknown[]) => listInvoices(...a),
-    listVehicles: vi.fn(async () => []),
     createCustomer: (...a: unknown[]) => createCustomer(...a),
     subscribeToInvoices: vi.fn(() => () => {}),
     subscribeToTable: vi.fn(() => () => {}),
-    listCustomers: (...a: unknown[]) => listCustomers(...a),
+    searchCustomers: (...a: unknown[]) => searchCustomers(...a),
+    getCustomer: (...a: unknown[]) => getCustomer(...a),
     updateCustomer: (...a: unknown[]) => updateCustomer(...a),
     customerHoldingIdNumber: (...a: unknown[]) => customerHoldingIdNumber(...a),
   };
 });
+
+vi.mock('../../lib/supabase', () => ({ isConfigured: true }));
+
+const { fakeCustomerDb } = await import('../../test/fakeCustomerDb');
+const db = fakeCustomerDb(() => onFile);
 
 await import('../../i18n');
 const { default: TicketPage } = await import('./TicketPage');
@@ -68,14 +77,14 @@ const YOSSI = customer({ id: 'cust-yossi', name: 'יוסי לוי', phone: '0527
 
 const renderPage = async (t: Ticket = ticket()) => {
   const store = configureStore({ reducer: { toast, modal } });
-  const setTickets = vi.fn();
+  const saveTicket = vi.fn(async (_: Ticket) => {});
   render(
     <Provider store={store}>
       <MemoryRouter>
         <CatalogProvider>
           <TicketPage
             ticket={t}
-            setTickets={setTickets}
+            saveTicket={saveTicket}
             workers={[]}
             workerChips={{} as never}
             onBack={() => {}}
@@ -86,7 +95,8 @@ const renderPage = async (t: Ticket = ticket()) => {
       </MemoryRouter>
     </Provider>,
   );
-  await act(async () => { await Promise.resolve(); });
+  // The customer record arrives from the database after the first paint.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
   const notes = screen.getByPlaceholderText(/הוסף הערה/) as HTMLTextAreaElement;
   const idField = screen.getByLabelText('ת״ז') as HTMLInputElement;
@@ -98,20 +108,21 @@ const renderPage = async (t: Ticket = ticket()) => {
     await act(async () => { await Promise.resolve(); });
   };
   const written = (): Ticket => {
-    const calls = setTickets.mock.calls;
-    const update = calls[calls.length - 1][0] as (prev: Ticket[]) => Ticket[];
-    return update([t])[0];
+    const calls = saveTicket.mock.calls;
+    return calls[calls.length - 1][0];
   };
 
   const toasts = () => store.getState().toast.items.map((x: { text?: string; key?: string }) => x.text ?? x.key);
 
-  return { notes, idField, type, press, setTickets, written, store, toasts };
+  return { notes, idField, type, press, saveTicket, written, store, toasts };
 };
 
 beforeEach(() => {
-  listCustomers.mockReset().mockResolvedValue([DANA, YOSSI]);
+  onFile = [DANA, YOSSI];
+  searchCustomers.mockReset().mockImplementation(db.searchCustomers);
+  getCustomer.mockReset().mockImplementation(db.getCustomer);
   updateCustomer.mockReset().mockResolvedValue(undefined);
-  customerHoldingIdNumber.mockReset().mockResolvedValue(null);
+  customerHoldingIdNumber.mockReset().mockImplementation(db.customerHoldingIdNumber);
   createCustomer.mockReset();
   listInvoices.mockReset().mockResolvedValue([]);
 });
@@ -141,12 +152,12 @@ describe('correcting the customer on a ticket', () => {
   });
 
   it('refuses an empty name and touches neither table', async () => {
-    const { type, press, setTickets } = await renderPage();
+    const { type, press, saveTicket } = await renderPage();
     await type(field('שם'), '  ');
     await press('שמור');
 
     expect(updateCustomer).not.toHaveBeenCalled();
-    expect(setTickets).not.toHaveBeenCalled();
+    expect(saveTicket).not.toHaveBeenCalled();
   });
 
   it('is frozen once the ticket is billed', async () => {
@@ -166,6 +177,7 @@ describe('moving a ticket to another customer', () => {
     const { type, press, written } = await renderPage();
     await press('העברה ללקוח אחר');
     await type(screen.getByLabelText('חיפוש לפי שם, טלפון או מספר רישוי'), 'יוסי');
+    await screen.findByText('יוסי לוי');   // searched once typing pauses
     await press('יוסי לוי');
     await press('אישור');
 
@@ -177,6 +189,9 @@ describe('moving a ticket to another customer', () => {
     const { type, press } = await renderPage();
     await press('העברה ללקוח אחר');
     await type(screen.getByLabelText('חיפוש לפי שם, טלפון או מספר רישוי'), 'דנה');
+    // The database finds her; the panel leaves her out.
+    await waitFor(() => expect(searchCustomers).toHaveBeenCalledWith(expect.objectContaining({ query: 'דנה' })));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
     expect(screen.getByText('לא נמצא לקוח תואם')).toBeTruthy();
   });

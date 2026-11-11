@@ -1091,6 +1091,39 @@ const delInv = await rest(`invoices?id=eq.${invSeed?.id}`, a.token, { method: 'D
 const stillThereInv = await (await rest(`invoices?id=eq.${invSeed?.id}&select=id`, a.token)).json();
 check('authenticated cannot DELETE an invoice', Array.isArray(stillThereInv) && stillThereInv.length === 1, `delete got ${delInv.status}`);
 
+/* Billing attempts (20261109090000): the lock issue-invoice takes before it
+ * calls the provider. Readable by the garage, so the app can say why a bill is
+ * locked; writable by no client, or one could free a target a person has not
+ * checked yet — or lock another's. */
+const attemptTarget = crypto.randomUUID();
+const attemptSeed = await admin('/rest/v1/billing_attempts', {
+  method: 'POST',
+  headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ garage_id: a.garage.id, action: 'collect', target_id: attemptTarget, state: 'unknown' }),
+});
+const attemptRow = (await attemptSeed.json())[0];
+check('service_role can record a billing attempt', attemptSeed.status === 201 && Boolean(attemptRow?.id), `got ${attemptSeed.status}`);
+
+const aSeesAttempt = await (await rest(`billing_attempts?target_id=eq.${attemptTarget}&select=id`, a.token)).json();
+check('A reads its own billing attempt', Array.isArray(aSeesAttempt) && aSeesAttempt.length === 1, `got ${JSON.stringify(aSeesAttempt)}`);
+const bSeesAttempt = await (await rest(`billing_attempts?target_id=eq.${attemptTarget}&select=id`, b.token)).json();
+check("B cannot read A's billing attempt", Array.isArray(bSeesAttempt) && bSeesAttempt.length === 0, `got ${JSON.stringify(bSeesAttempt)}`);
+
+const forgeAttempt = await rest('billing_attempts', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, action: 'collect', target_id: crypto.randomUUID() }),
+});
+check('authenticated cannot INSERT a billing attempt', forgeAttempt.status >= 400, `got ${forgeAttempt.status}`);
+await rest(`billing_attempts?id=eq.${attemptRow?.id}`, a.token, { method: 'PATCH', body: JSON.stringify({ state: 'failed' }) });
+const attemptAfter = await (await admin(`/rest/v1/billing_attempts?id=eq.${attemptRow?.id}&select=state`)).json();
+check('authenticated cannot free a locked billing attempt', attemptAfter?.[0]?.state === 'unknown', `got ${JSON.stringify(attemptAfter)}`);
+
+const secondOpen = await admin('/rest/v1/billing_attempts', {
+  method: 'POST',
+  body: JSON.stringify({ garage_id: a.garage.id, action: 'collect', target_id: attemptTarget }),
+});
+check('a target holds at most one open billing attempt', secondOpen.status === 409, `got ${secondOpen.status}`);
+
 /* One live bill per ticket.
  *
  * issue-invoice checks for an existing bill before it issues, but the check and

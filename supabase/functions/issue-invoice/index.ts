@@ -21,7 +21,8 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
-import type { BillDocType, InvoiceProvider, InvoiceItem, ProviderCredentials } from '../_shared/provider.ts';
+import { NotIssued } from '../_shared/provider.ts';
+import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, PaymentPart, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
 const ADAPTERS: Record<string, InvoiceProvider> = {
@@ -66,28 +67,114 @@ function chargedUnit(shown: number, vatDiscount: unknown, vatRate: number): numb
   return best;
 }
 
+/** Which work a line was billed under: its position among the ticket's works
+ *  and its name. Stored on every line, so the grouping a document is printed
+ *  with is frozen with it rather than worked out later from a ticket that may
+ *  have changed since. */
+interface LineWork { group: number; work: string; kind: 'work' | 'part' }
+
 /** Build invoice lines from the ticket's OWN works: one line per work's labour,
  *  one per part, each after its discount. Prices are pre-VAT (as stored).
- *  Returns lines + pre-VAT subtotal. */
-function linesFromWorks(works: Work[], vatRate: number): { items: InvoiceItem[]; subtotal: number } {
+ *  Returns lines + pre-VAT subtotal, and for each line the work it came from. */
+function linesFromWorks(works: Work[], vatRate: number): { items: InvoiceItem[]; subtotal: number; owners: LineWork[] } {
   const items: InvoiceItem[] = [];
-  for (const w of works ?? []) {
+  const owners: LineWork[] = [];
+  (works ?? []).forEach((w, group) => {
+    const work = w.name || 'עבודה';
     const labour = chargedUnit(netUnit(w.labor, w.labor_discount), w.labor_vat_discount, vatRate);
     if (labour > 0) {
-      items.push({ description: w.name || 'עבודה', unitprice: labour, quantity: 1 });
+      items.push({ description: work, unitprice: labour, quantity: 1 });
+      owners.push({ group, work, kind: 'work' });
     }
     for (const p of w.work_items ?? []) {
       const unit = chargedUnit(netUnit(p.price, p.discount), p.vat_discount, vatRate);
       if (unit !== 0) {
-        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1 });
+        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1, indent: true });
+        owners.push({ group, work, kind: 'part' });
       }
     }
-  }
+  });
   const subtotal = items.reduce((s, i) => s + i.unitprice * i.quantity, 0);
-  return { items, subtotal };
+  return { items, subtotal, owners };
+}
+
+/** The car, as the ticket had it when the document was issued. */
+interface VehicleSnapshot {
+  plate: string | null;
+  car: string | null;
+  km: string | null;
+  /** When the car came in — the ticket's creation. */
+  opened_at: string | null;
+  /** When the work was finished — the ticket first reaching done or paid. */
+  closed_at: string | null;
+}
+
+const blank = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+
+function vehicleOf(t: { plate?: unknown; car?: unknown; km?: unknown; created_at?: unknown; closed_at?: unknown }): VehicleSnapshot | null {
+  const v: VehicleSnapshot = {
+    plate: blank(t.plate),
+    car: blank(t.car),
+    km: blank(t.km),
+    opened_at: blank(t.created_at),
+    closed_at: blank(t.closed_at),
+  };
+  return v.plate || v.car || v.km ? v : null;
+}
+
+/** A date as the garage reads it — Israel time, day first. */
+const ilDate = (iso: string | null) => (iso
+  ? new Date(iso).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })
+  : null);
+
+/** The car on one line of text, for the provider's remark field. */
+function vehicleNote(v: VehicleSnapshot | null): string | undefined {
+  if (!v) return undefined;
+  const parts = [
+    v.plate && `מספר רכב: ${v.plate}`,
+    v.car,
+    v.km && `ק״מ: ${v.km}`,
+    v.opened_at && `כניסה: ${ilDate(v.opened_at)}`,
+    v.closed_at && `סיום: ${ilDate(v.closed_at)}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/* Mirrors PAY_METHODS in packages/shared/src/payment.ts. Deno does not import
+   the package, so the list is repeated; a code outside it is refused rather
+   than stored, because the column it lands in is read back as a code. */
+const PAY_METHODS = ['cash', 'card', 'bit', 'bank_transfer', 'cheque', 'other'];
+
+/** The `payments` a request carries, checked: absent → null, malformed → a
+ *  message to refuse with. Each part a known method and a positive sum. */
+function readPayments(raw: unknown): PaymentPart[] | null | string {
+  if (raw == null) return null;
+  if (!Array.isArray(raw) || raw.length === 0) return 'payments must be a non-empty list';
+  const parts: PaymentPart[] = [];
+  for (const p of raw) {
+    const method = String(p?.method ?? '');
+    const amount = round2(Number(p?.amount));
+    if (!PAY_METHODS.includes(method)) return `unknown payment method: "${method}"`;
+    if (!Number.isFinite(amount) || amount <= 0) return 'every payment needs a positive amount';
+    const reference = p?.reference == null ? null : String(p.reference).trim() || null;
+    parts.push({ method, amount, reference });
+  }
+  return parts;
+}
+
+/** How a list of payments is stored: one part is an ordinary single-method
+ *  document, written exactly as before; several go into `payments`, and no one
+ *  method names the document. */
+function paymentColumns(parts: PaymentPart[]) {
+  if (parts.length === 1) {
+    return { pay_method: parts[0].method, pay_reference: parts[0].reference ?? null, payments: null };
+  }
+  return { pay_method: null, pay_reference: null, payments: parts };
+}
+
+const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
 /* A line is priced BEFORE VAT and the provider adds the VAT, so the gross a
    customer sees is never chosen directly — it is whatever subtotal + round(
@@ -125,6 +212,12 @@ function issuableCredit(requested: number, vatRate: number, cap: number):
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+
+  /* The billing attempt this request owns, if any (see reserve below). Declared
+     outside the try so the catch at the bottom can close it whatever threw. */
+  const held = { id: null as string | null, calling: false };
+  let settle: (id: string, patch: Record<string, unknown>) => Promise<void> = async () => {};
+
   try {
     const authHeader = req.headers.get('Authorization') ?? '';
     if (!authHeader) return json({ error: 'unauthorized' }, 401);
@@ -138,6 +231,90 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const action = body.action as string;
+
+    /* ---- the lock: see migration 20261109090000_billing_attempts ----
+
+       Every act that creates a document reserves its target first, and the
+       second of two overlapping calls is refused here rather than after the
+       provider has already issued it a legal number. */
+
+    /* An attempt still pending after this long did not end in this world: the
+       function was killed mid-call. Whether the provider acted is unknowable, so
+       it becomes 'unknown' — never 'failed', which would free the target. */
+    const STALE_MS = 3 * 60_000;
+
+    settle = async (id: string, patch: Record<string, unknown>) => {
+      const { error } = await admin.from('billing_attempts')
+        .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) console.error(`billing_attempts ${id} not updated`, patch, error.message);
+    };
+
+    /** Take the target, or say why it cannot be taken. Returns a Response to
+     *  send back when the target is busy or needs a person to look at it. */
+    async function reserve(garageId: string, act: string, targetId: string, amount: number | null): Promise<Response | null> {
+      const { data: me } = await userClient.auth.getUser();
+      const { data, error } = await admin.from('billing_attempts')
+        .insert({ garage_id: garageId, action: act, target_id: targetId, amount, created_by: me?.user?.id ?? null })
+        .select('id').single();
+      if (!error) { held.id = data.id; return null; }
+      if (error.code !== '23505') throw new Error(`could not reserve the billing attempt: ${error.message}`);
+
+      const { data: open } = await admin.from('billing_attempts')
+        .select('id, state, provider_docnum, created_at')
+        .eq('target_id', targetId).in('state', ['pending', 'unknown', 'orphaned'])
+        .maybeSingle();
+      if (open?.state === 'pending' && Date.now() - new Date(open.created_at).getTime() < STALE_MS) {
+        return json({ error: 'billing_in_progress: another request is already issuing a document for this', code: 'billing_in_progress' }, 409);
+      }
+      if (open?.state === 'pending') await settle(open.id, { state: 'unknown', error: 'pending past its time; the outcome at the provider is unknown' });
+      return json({
+        error: 'billing_needs_check: an earlier attempt did not finish cleanly — check the provider before billing this again'
+          + (open?.provider_docnum ? ` (provider docnum ${open.provider_docnum})` : ''),
+        code: 'billing_needs_check',
+        attempt_id: open?.id ?? null,
+      }, 409);
+    }
+
+    /** Ask the provider, and record which of the three outcomes it was. */
+    async function provide(fn: () => Promise<IssuedDoc>): Promise<IssuedDoc | Response> {
+      held.calling = true;
+      try {
+        const doc = await fn();
+        held.calling = false;
+        await settle(held.id!, { provider_docnum: doc.docnum });
+        return doc;
+      } catch (e) {
+        held.calling = false;
+        const message = e instanceof Error ? e.message : String(e);
+        if (e instanceof NotIssued) {
+          await settle(held.id!, { state: 'failed', error: message });
+          held.id = null;
+          return json({ error: message }, 502);
+        }
+        await settle(held.id!, { state: 'unknown', error: message });
+        held.id = null;
+        return json({
+          error: `billing_needs_check: no clear answer from the provider (${message}) — a document may have been created; check the provider before trying again`,
+          code: 'billing_needs_check',
+        }, 502);
+      }
+    }
+
+    /** The document exists at the provider; record whether its row made it in. */
+    async function stored(invoiceId: string | null, failure?: string) {
+      if (!held.id) return;
+      await settle(held.id, invoiceId
+        ? { state: 'done', invoice_id: invoiceId }
+        : { state: 'orphaned', error: failure ?? 'not stored' });
+      held.id = null;
+    }
+
+    /** Gave up before the provider was asked: the target is free again. */
+    async function release(reason: string) {
+      if (!held.id) return;
+      await settle(held.id, { state: 'failed', error: reason });
+      held.id = null;
+    }
 
     // ---- a garage's provider + credentials, service_role only ----
     async function billing(garageId: string): Promise<{ provider: string; adapter: InvoiceProvider; credentials: ProviderCredentials; vatRate: number; defaultDocType: BillDocType }> {
@@ -164,7 +341,7 @@ Deno.serve(async (req) => {
       // Caller's JWT -> RLS guarantees this is their garage's ticket, or nothing.
       const { data: ticket, error: tErr } = await userClient
         .from('tickets')
-        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, works(name, labor, labor_discount, labor_vat_discount, work_items(name, qty, price, discount, vat_discount))')
+        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, plate, car, km, created_at, closed_at, works(name, labor, labor_discount, labor_vat_discount, work_items(name, qty, price, discount, vat_discount))')
         .eq('id', ticketId)
         .maybeSingle();
       if (tErr) return json({ error: tErr.message }, 400);
@@ -181,22 +358,72 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (existing) return json({ invoice: existing, reused: true });
 
+      /* Several methods at one visit, when the caller sends them. Checked here,
+         before anything is reserved; their sum is checked against the bill once
+         the bill is priced, below. */
+      const payments = readPayments(body.payments);
+      if (typeof payments === 'string') return json({ error: payments }, 400);
+
       const { provider, adapter, credentials, vatRate, defaultDocType } = await billing(ticket.garage_id);
+
+      const busy = await reserve(ticket.garage_id, 'issue', ticket.id, null);
+      if (busy) return busy;
+
+      /* Asked again now that the ticket is ours: a call that overlapped this one
+         may have finished, and stored its bill, between the check above and the
+         reservation. */
+      const { data: landed } = await admin
+        .from('invoices').select('*')
+        .eq('ticket_id', ticketId).eq('status', 'issued')
+        .in('doc_type', ['invoice_receipt', 'tax_invoice'])
+        .maybeSingle();
+      if (landed) {
+        await release('already billed by an overlapping call');
+        return json({ invoice: landed, reused: true });
+      }
 
       /* Which document this is, decided by the caller and falling back to the
          garage's default. Anything else is refused rather than coerced: a
          receipt or a credit note is not a thing you can bill a ticket with. */
       const docType = (body.doc_type as BillDocType) ?? defaultDocType;
       if (docType !== 'invoice_receipt' && docType !== 'tax_invoice') {
+        await release('bad doc type');
         return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
-      const { items, subtotal } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
-      if (items.length === 0) return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
+      const { items, subtotal, owners } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
+      const vehicle = vehicleOf(ticket);
+      if (items.length === 0) {
+        await release('no priced works');
+        return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
+      }
       const vat = round2(subtotal * vatRate);
       const total = round2(subtotal + vat);
 
-      const doc = await adapter.issue({
+      /* A tax invoice records no payment, so a list of them is a mistake in the
+         caller. An invoice-receipt says the bill was paid — all of it — so the
+         parts must add up to exactly the bill, or the document would claim a
+         payment that did not happen (or hide one that did). */
+      if (payments && docType !== 'invoice_receipt') {
+        await release('payments on a tax invoice');
+        return json({ error: 'a tax invoice records no payment; collect against it with a receipt' }, 400);
+      }
+      /* The screen rounds VAT and total together, this function rounds the VAT
+         first — the two can land an agora apart on the same works. That much,
+         and no more, the last payment absorbs: it is the part that "paid the
+         rest", and the single-method path has always used this function's
+         total in the same way. Anything larger is a real disagreement. */
+      if (payments) {
+        const diff = round2(total - sumOf(payments));
+        const last = payments[payments.length - 1];
+        if (Math.abs(diff) > 0.02 || round2(last.amount + diff) <= 0) {
+          await release('payments do not add up');
+          return json({ error: `the payments add up to ${sumOf(payments)}, the bill is ${total}`, total }, 400);
+        }
+        last.amount = round2(last.amount + diff);
+      }
+
+      const doc = await provide(() => adapter.issue({
         credentials,
         docType,
         customer: { name: ticket.customer_name || 'לקוח', idNo: ticket.id_number || undefined, address: ticket.address || undefined },
@@ -204,8 +431,11 @@ Deno.serve(async (req) => {
         /* A tax invoice records no payment, so it carries none — not the pay
            method sitting on the ticket, which describes how it WILL be paid. */
         payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
+        payments: payments ?? undefined,
         total,
-      });
+        note: vehicleNote(vehicle),
+      }));
+      if (doc instanceof Response) return doc;
 
       const row = {
         garage_id: ticket.garage_id,
@@ -222,16 +452,25 @@ Deno.serve(async (req) => {
         customer_id_number: ticket.id_number,
         customer_address: ticket.address,
         customer_phone: ticket.phone,
-        lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        lines: items.map((i, n) => ({
+          desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity),
+          ...owners[n],
+        })),
+        vehicle,
         subtotal,
         vat_rate: vatRate,
         vat,
         total,
-        pay_method: docType === 'invoice_receipt' ? ticket.pay_method : null,
-        pay_reference: docType === 'invoice_receipt' ? ticket.reference : null,
+        ...(payments
+          ? paymentColumns(payments)
+          : {
+              pay_method: docType === 'invoice_receipt' ? ticket.pay_method : null,
+              pay_reference: docType === 'invoice_receipt' ? ticket.reference : null,
+            }),
         status: 'issued',
       };
       const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
+      await stored(inserted?.id ?? null, iErr?.message);
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
       return json({ invoice: inserted });
     }
@@ -302,13 +541,31 @@ Deno.serve(async (req) => {
         return json({ error: `a counter sale is an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
+      /* The key is the target: two presses of one dialog arrive with the same
+         one, and only the first gets past this. */
+      const busy = await reserve(garageId, 'issue_standalone', key, null);
+      if (busy) return busy;
+      const { data: landed } = await admin
+        .from('invoices').select('*')
+        .eq('garage_id', garageId).eq('idempotency_key', key)
+        .maybeSingle();
+      if (landed) {
+        await release('already issued under this key by an overlapping call');
+        return json({ invoice: landed, reused: true });
+      }
+
       const subtotal = round2(items.reduce((s, i) => s + i.unitprice * i.quantity, 0));
       const vat = round2(subtotal * vatRate);
       const total = round2(subtotal + vat);
 
       const payMethod = docType === 'invoice_receipt' ? (body.pay_method as string | null) ?? null : null;
+      /* The car, when one was given: the same snapshot a ticket's invoice
+         freezes, minus what a counter sale does not know (model, km, dates).
+         Optional here so a client from before 2026-11-11 still issues; the
+         dialog is what requires it. */
+      const vehicle = vehicleOf({ plate: body.vehicle_plate });
 
-      const doc = await adapter.issue({
+      const doc = await provide(() => adapter.issue({
         credentials,
         docType,
         customer: {
@@ -319,7 +576,9 @@ Deno.serve(async (req) => {
         items,
         payMethod,
         total,
-      });
+        note: vehicleNote(vehicle),
+      }));
+      if (doc instanceof Response) return doc;
 
       const row = {
         garage_id: garageId,
@@ -337,6 +596,7 @@ Deno.serve(async (req) => {
         customer_address: (body.customer_address as string) || null,
         customer_phone: (body.customer_phone as string) || null,
         lines: items.map((i) => ({ desc: i.description, qty: i.quantity, unit_price: i.unitprice, line_total: round2(i.unitprice * i.quantity) })),
+        vehicle,
         subtotal,
         vat_rate: vatRate,
         vat,
@@ -347,6 +607,7 @@ Deno.serve(async (req) => {
         idempotency_key: key,
       };
       const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
+      await stored(inserted?.id ?? null, iErr?.message);
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
       return json({ invoice: inserted });
     }
@@ -373,22 +634,45 @@ Deno.serve(async (req) => {
       }
       if (inv.status === 'cancelled') return json({ error: 'invoice is cancelled' }, 409);
 
-      /* What is still owed, asked of the database: two advisors taking payment
-         at once must not between them collect more than the bill. */
+      /* Every payment taken at this visit, on one receipt. Their sum is the
+         amount; an `amount` sent beside them must agree, or one of the two is
+         wrong and nobody can say which. */
+      const payments = readPayments(body.payments);
+      if (typeof payments === 'string') return json({ error: payments }, 400);
+      if (payments && body.amount != null && round2(Number(body.amount)) !== sumOf(payments)) {
+        return json({ error: `amount ${body.amount} does not match the payments (${sumOf(payments)})` }, 400);
+      }
+      const asked = payments ? sumOf(payments) : body.amount == null ? null : round2(Number(body.amount));
+
+      const { provider, adapter, credentials } = await billing(inv.garage_id);
+
+      /* Reserved before what is owed is read, not after. The read alone could not
+         stop two advisors taking payment at once — both read the same balance,
+         and both receipts were created before either was stored. With the
+         invoice reserved, the second is refused here and the balance below is
+         the one that will still be true when the receipt lands. */
+      const busy = await reserve(inv.garage_id, 'collect', inv.id, asked);
+      if (busy) return busy;
+
+      /* What is still owed, asked of the database. */
       const [{ data: paidSoFar, error: pErr }, { data: creditedSoFar, error: cErr }] = await Promise.all([
         userClient.rpc('invoice_paid_total', { invoice: inv.id }),
         userClient.rpc('invoice_credited_total', { invoice: inv.id }),
       ]);
-      if (pErr) return json({ error: pErr.message }, 400);
-      if (cErr) return json({ error: cErr.message }, 400);
+      if (pErr) { await release(pErr.message); return json({ error: pErr.message }, 400); }
+      if (cErr) { await release(cErr.message); return json({ error: cErr.message }, 400); }
 
       const owed = round2(Number(inv.total) - Number(paidSoFar ?? 0) - Number(creditedSoFar ?? 0));
-      if (owed <= 0) return json({ error: 'this invoice is already settled' }, 409);
+      if (owed <= 0) { await release('already settled'); return json({ error: 'this invoice is already settled' }, 409); }
 
       // Absent, the whole of what is left — paying in full is the common case.
-      const requested = body.amount == null ? owed : round2(Number(body.amount));
-      if (!Number.isFinite(requested) || requested <= 0) return json({ error: 'amount must be a positive number' }, 400);
+      const requested = asked ?? owed;
+      if (!Number.isFinite(requested) || requested <= 0) {
+        await release('bad amount');
+        return json({ error: 'amount must be a positive number' }, 400);
+      }
       if (requested > owed) {
+        await release('more than owed');
         return json({ error: `amount exceeds what is still owed on this invoice (${owed})`, owed }, 400);
       }
 
@@ -396,15 +680,16 @@ Deno.serve(async (req) => {
          VAT of its own — it records a sum of money that arrived, and any sum of
          money can arrive. The VAT was settled by the invoice. */
       const payMethod = (body.pay_method as string) ?? inv.pay_method ?? null;
-      const { provider, adapter, credentials } = await billing(inv.garage_id);
 
-      const doc = await adapter.collect({
+      const doc = await provide(() => adapter.collect({
         credentials,
         customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
         payMethod,
+        payments: payments ?? undefined,
         amount: requested,
         basedOnDocnum: inv.provider_docnum,
-      });
+      }));
+      if (doc instanceof Response) return doc;
 
       const { data: receipt, error: nErr } = await admin.from('invoices').insert({
         garage_id: inv.garage_id,
@@ -430,10 +715,12 @@ Deno.serve(async (req) => {
         vat_rate: Number(inv.vat_rate),
         vat: 0,
         total: requested,
-        pay_method: payMethod,
-        pay_reference: (body.reference as string) ?? null,
+        ...(payments
+          ? paymentColumns(payments)
+          : { pay_method: payMethod, pay_reference: (body.reference as string) ?? null }),
         status: 'issued',
       }).select().single();
+      await stored(receipt?.id ?? null, nErr?.message);
       if (nErr) return json({ error: `receipt issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
 
       return json({ receipt, collected: requested, owed: round2(owed - requested) });
@@ -479,25 +766,38 @@ Deno.serve(async (req) => {
         return json({ error: 'only a bill can be credited, not a ' + inv.doc_type }, 400);
       }
 
+      const { adapter, credentials } = await billing(inv.garage_id);
+
+      /* Reserved first, for the reason collect is: two advisors crediting the
+         same invoice at once both read the same remainder, and both credit
+         notes existed at the provider before either was stored. */
+      const busy = await reserve(inv.garage_id, 'credit', inv.id, body.amount == null ? null : round2(Number(body.amount)));
+      if (busy) return busy;
+
       /* What is still creditable, asked of the database rather than computed
-         from what the client is holding: two advisors crediting the same
-         invoice at once must not between them hand back more than was paid. */
+         from what the client is holding. */
       const { data: creditedSoFar, error: cErr } = await userClient.rpc('invoice_credited_total', { invoice: inv.id });
-      if (cErr) return json({ error: cErr.message }, 400);
+      if (cErr) { await release(cErr.message); return json({ error: cErr.message }, 400); }
       const remaining = round2(Number(inv.total) - Number(creditedSoFar ?? 0));
-      if (remaining <= 0) return json({ error: 'this invoice has already been credited in full' }, 409);
+      if (remaining <= 0) {
+        await release('already credited in full');
+        return json({ error: 'this invoice has already been credited in full' }, 409);
+      }
 
       /* The amount is what the CUSTOMER gets back — VAT included, the figure on
          the document they are holding. Absent (or 'cancel'), it is everything
          still outstanding. */
       const requested = action === 'cancel' || body.amount == null ? remaining : round2(Number(body.amount));
-      if (!Number.isFinite(requested) || requested <= 0) return json({ error: 'amount must be a positive number' }, 400);
+      if (!Number.isFinite(requested) || requested <= 0) {
+        await release('bad amount');
+        return json({ error: 'amount must be a positive number' }, 400);
+      }
       if (requested > remaining) {
+        await release('more than creditable');
         return json({ error: `amount exceeds what is left to credit on this invoice (${remaining})`, remaining }, 400);
       }
 
       const full = requested >= remaining;
-      const { adapter, credentials } = await billing(inv.garage_id);
       const vatRate = Number(inv.vat_rate);
 
       /* A full credit of an untouched invoice copies its own lines, so the two
@@ -509,22 +809,26 @@ Deno.serve(async (req) => {
       const priced = untouched
         ? { subtotal: Number(inv.subtotal), vat: Number(inv.vat), total: Number(inv.total) }
         : issuableCredit(requested, vatRate, remaining);
-      if (!priced) return json({ error: 'no credit can be issued for that amount' }, 400);
+      if (!priced) {
+        await release('no issuable amount');
+        return json({ error: 'no credit can be issued for that amount' }, 400);
+      }
       const { subtotal, vat, total } = priced;
 
       const items: InvoiceItem[] = untouched
-        ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number }>).map((l) => ({
-            description: l.desc, unitprice: l.unit_price, quantity: l.qty,
+        ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
+            description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
         : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
 
-      const doc = await adapter.cancel({
+      const doc = await provide(() => adapter.cancel({
         credentials,
         customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
         items,
         reason,
         basedOnDocnum: inv.provider_docnum,
-      });
+      }));
+      if (doc instanceof Response) return doc;
 
       // Store the credit note as its own immutable row, naming what it credits...
       const { data: note, error: nErr } = await admin.from('invoices').insert({
@@ -550,24 +854,39 @@ Deno.serve(async (req) => {
         total,
         status: 'issued',
       }).select().single();
-      if (nErr) return json({ error: `credit note issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
+      if (nErr) {
+        await stored(null, nErr.message);
+        return json({ error: `credit note issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
+      }
 
       /* A partial credit ends here: the original is still a live invoice for
          what the customer keeps owing us, or kept paying. Only a credit that
          takes the last of it voids the document — and that is the one update
          the immutability trigger permits. */
-      if (!full) return json({ credit_note: note, credited: total, remaining: round2(remaining - total) });
+      if (!full) {
+        await stored(note.id);
+        return json({ credit_note: note, credited: total, remaining: round2(remaining - total) });
+      }
 
       const { data: cancelled, error: uErr } = await admin.from('invoices')
         .update({ status: 'cancelled', cancelled_by: note.id })
         .eq('id', inv.id).select().single();
-      if (uErr) return json({ error: `credit note stored but original not marked cancelled: ${uErr.message}` }, 500);
+      if (uErr) {
+        await stored(null, `credit note ${note.id} stored, original not marked cancelled: ${uErr.message}`);
+        return json({ error: `credit note stored but original not marked cancelled: ${uErr.message}` }, 500);
+      }
+      await stored(note.id);
 
       return json({ credit_note: note, cancelled, credited: total, remaining: 0 });
     }
 
     return json({ error: `unknown action: ${action}` }, 400);
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    const message = e instanceof Error ? e.message : String(e);
+    /* Whatever threw, an attempt this request still holds is closed here: as
+       'failed' if the provider was never reached, 'unknown' if it was mid-call —
+       never left pending to look like work in progress. */
+    if (held.id) await settle(held.id, held.calling ? { state: 'unknown', error: message } : { state: 'failed', error: message });
+    return json({ error: message }, 500);
   }
 });

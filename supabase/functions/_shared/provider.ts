@@ -8,6 +8,18 @@
 // this boundary. The handler passes normalized inputs and stores a normalized
 // result, so the invoices table and the whole app stay provider-agnostic.
 
+/** Thrown when the provider certainly created nothing: it answered, and the
+ *  answer was no (or we never got as far as asking). Anything else an adapter
+ *  throws — a timeout, a dropped connection, a reply that is not the provider's
+ *  — means a document MAY exist, and the caller must not guess which. The
+ *  handler keeps the target locked in that case (see billing_attempts). */
+export class NotIssued extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotIssued';
+  }
+}
+
 /** Provider credentials, exactly as stored in garage_billing_secrets.credentials.
  *  Shape is provider-defined (iCount: { cid, token }). */
 export type ProviderCredentials = Record<string, unknown>;
@@ -16,11 +28,25 @@ export interface InvoiceItem {
   description: string;
   unitprice: number; // pre-VAT
   quantity: number;
+  /** A part, printed under the work it was used in. Providers list lines flat,
+   *  so each adapter marks it the way its documents can show — the stored line
+   *  keeps the plain name. */
+  indent?: boolean;
 }
 
 /** The two kinds of bill. A מס-קבלה is billed and settled at once; a חשבונית מס
  *  is a bill that will be paid later, and is settled by its own receipt. */
 export type BillDocType = 'invoice_receipt' | 'tax_invoice';
+
+/** One payment among several on a single document — cash and a card at the
+ *  same visit, on one receipt. `method` is a code (cash | card | bit |
+ *  bank_transfer | cheque | other); see packages/shared/src/payment.ts. */
+export interface PaymentPart {
+  method: string;
+  /** VAT-inclusive. */
+  amount: number;
+  reference?: string | null;
+}
 
 export interface IssueInput {
   credentials: ProviderCredentials;
@@ -30,7 +56,14 @@ export interface IssueInput {
   /** Null on a tax invoice: nothing has been paid, so there is nothing to
    *  describe. Providers that demand a balancing payment must not be given one. */
   payMethod: string | null;
+  /** Set when the document was paid by more than one method; then it replaces
+   *  `payMethod`. Must add up to `total`. Never set on a tax invoice. */
+  payments?: PaymentPart[];
   total: number; // VAT-inclusive, for providers that need a balancing payment
+  /** Free text printed on the document — the car, its mileage, when it came in
+   *  and when the work was done. Optional: a provider that cannot print it
+   *  issues the document without it rather than not at all. */
+  note?: string;
 }
 
 /** Money arriving against a tax invoice already issued. */
@@ -38,6 +71,9 @@ export interface CollectInput {
   credentials: ProviderCredentials;
   customer: { name: string; idNo?: string };
   payMethod: string | null;
+  /** Set when the money arrived by more than one method; then it replaces
+   *  `payMethod`. Must add up to `amount`. */
+  payments?: PaymentPart[];
   /** VAT-inclusive — a receipt records a payment, it does not price anything. */
   amount: number;
   /** The tax invoice being settled. */

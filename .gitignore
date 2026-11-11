@@ -18,3 +18,7 @@ mobile/.env.localdb
 
 # Personal documents
 תעודת רישום 275601.pdf
+
+# Customer data exported from a garage's previous system — personal data, never committed
+scripts/ricbi/**/*.json
+scripts/ricbi/**/*.csv

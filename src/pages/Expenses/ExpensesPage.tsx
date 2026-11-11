@@ -1,46 +1,31 @@
-import { money } from '@garage/shared';
+import { linesSummary, money } from '@garage/shared';
 import type { SupplierExpense } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
-import { CrudForm } from '../../components/CrudForm';
 import { EmptyState } from '../../components/EmptyState';
-import { CheckboxField, SelectField, TextField } from '../../components/Field';
+import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
-import { RowActions, Table, type Column } from '../../components/Table';
+import { PagedTable, RowMenu, type Column } from '../../components/Table';
 import { IconBox, IconCard, IconDoc } from '../../icons';
+import ExpenseDrawer from './ExpenseDrawer';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
-import { blankExpense, previewTotals, useExpenses, type ExpenseDraft } from './useExpenses';
+import { NO_FILTERS, today, useExpenses, type ExpenseStatusFilter } from './useExpenses';
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('he-IL');
 
 export default function ExpensesPage() {
   const { t } = useTranslation();
-  const { rows, suppliers, busy, totals, create, retrySync, togglePaid, remove } = useExpenses();
+  const ex = useExpenses();
+  const { suppliers, totals, filters, setFilters } = ex;
 
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<ExpenseDraft>(blankExpense);
-
-  const field = (key: keyof ExpenseDraft) => ({
-    value: String(draft[key]),
-    onChange: (e: { target: { value: string } }) =>
-      setDraft((prev) => ({ ...prev, [key]: e.target.value })),
-  });
-
-  const preview = previewTotals(draft.subtotal, draft.vatRate);
-  const canSave = Boolean(draft.supplierId) && Number(draft.subtotal) > 0;
-
-  const submit = async () => {
-    if (await create(draft)) {
-      // The date is kept: entering a stack of one day's invoices is the normal
-      // way this screen is used.
-      setDraft({ ...blankExpense(), date: draft.date });
-      setAdding(false);
-    }
-  };
+  /* Kept between drawers: entering a stack of one day's invoices is the normal
+     way this screen is used. */
+  const [lastDate, setLastDate] = useState(today);
 
   const syncPill = (e: SupplierExpense) => {
     if (e.syncStatus === 'synced') {
@@ -55,14 +40,14 @@ export default function ExpensesPage() {
         <Pill
           tone="danger"
           title={e.syncError ?? t('expenses.sync.retryHint')}
-          onClick={() => void retrySync(e.id)}
+          onClick={() => void ex.retrySync(e.id)}
         >
           {t('expenses.sync.errorRetry')}
         </Pill>
       );
     }
     return (
-      <Pill tone="warn" title={t('expenses.sync.pendingHint')} onClick={() => void retrySync(e.id)}>
+      <Pill tone="warn" title={t('expenses.sync.pendingHint')} onClick={() => void ex.retrySync(e.id)}>
         {t('expenses.sync.pending')}
       </Pill>
     );
@@ -74,7 +59,6 @@ export default function ExpensesPage() {
       header: 'expenses.fields.date',
       width: 110,
       sortValue: (e) => e.date,
-      cellClassName: styles.muted,
       render: (e) => fmt(e.date),
     },
     {
@@ -86,62 +70,56 @@ export default function ExpensesPage() {
     {
       key: 'description',
       header: 'expenses.fields.description',
-      render: (e) => e.description || '-',
+      /* The typed description, else the items — an expense entered as lines
+         often has no description of its own. */
+      render: (e) => <span className={styles.desc}>{e.description || linesSummary(e.lines) || '-'}</span>,
     },
     {
       key: 'reference',
-      header: 'expenses.fields.reference',
+      header: 'expenses.drawer.reference',
       cellClassName: styles.muted,
       render: (e) => e.reference || '-',
-    },
-    {
-      key: 'subtotal',
-      header: 'expenses.fields.subtotal',
-      sortValue: (e) => e.subtotal,
-      render: (e) => money(e.subtotal),
-    },
-    {
-      key: 'vat',
-      header: 'expenses.fields.vat',
-      cellClassName: styles.muted,
-      render: (e) => money(e.vat),
     },
     {
       key: 'total',
       header: 'expenses.fields.total',
       sortValue: (e) => e.total,
-      render: (e) => <strong>{money(e.total)}</strong>,
-    },
-    {
-      key: 'paid',
-      header: 'expenses.fields.paid',
-      sortValue: (e) => (e.paid ? 0 : 1),
+      /* VAT inside, said in the tooltip — the column a bill is checked by is
+         the one on the bottom of the supplier's paper. */
       render: (e) => (
-        <Pill
-          tone={e.paid ? 'ok' : 'neutral'}
-          title={t('expenses.togglePaid')}
-          onClick={() => void togglePaid(e)}
-        >
-          {t(e.paid ? 'expenses.paid' : 'expenses.unpaid')}
-        </Pill>
+        <strong title={`${t('expenses.fields.subtotal')} ${money(e.subtotal)} · ${t('expenses.fields.vat')} ${money(e.vat)}`}>
+          {money(e.total)}
+        </strong>
       ),
     },
     {
-      key: 'sync',
-      header: 'expenses.fields.sync',
-      sortValue: (e) => e.syncStatus,
-      render: syncPill,
+      key: 'status',
+      header: 'expenses.fields.status',
+      sortValue: (e) => (e.paid ? 1 : 0),
+      render: (e) => (
+        <div className={styles.pills}>
+          <Pill
+            tone={e.paid ? 'ok' : 'warn'}
+            title={t('expenses.togglePaid')}
+            onClick={() => void ex.togglePaid(e)}
+          >
+            {t(e.paid ? 'expenses.paid' : 'expenses.awaitingPayment')}
+          </Pill>
+          {syncPill(e)}
+        </div>
+      ),
     },
     {
       key: 'actions',
-      width: 150,
+      header: 'common.actions',
+      width: 90,
       render: (e) => (
-        <RowActions>
-          <Button size="sm" onClick={() => printExpense(e)}>{t('expenses.print')}</Button>
-          <Button variant="ghostDanger" size="sm" onClick={() => void remove(e)}>
-            {t('common.delete')}
-          </Button>
-        </RowActions>
+        <RowMenu items={[
+          { label: 'expenses.print', onSelect: () => printExpense(e) },
+          { label: e.paid ? 'expenses.markUnpaid' : 'expenses.markPaid', onSelect: () => void ex.togglePaid(e) },
+          { label: 'expenses.retrySync', onSelect: () => void ex.retrySync(e.id), hidden: e.syncStatus === 'synced' },
+          { label: 'common.delete', onSelect: () => void ex.remove(e), danger: true },
+        ]} />
       ),
     },
   ];
@@ -150,14 +128,10 @@ export default function ExpensesPage() {
     <>
       <PageHeader
         title="expenses.title"
-        count={rows.length}
+        subtitle="expenses.subtitle"
         actions={
-          <Button
-            variant="primary"
-            onClick={() => setAdding((v) => !v)}
-            disabled={suppliers.length === 0}
-          >
-            {adding ? t('common.cancel') : t('expenses.add')}
+          <Button variant="primary" onClick={() => setAdding(true)} disabled={suppliers.length === 0}>
+            ＋ {t('expenses.drawer.title')}
           </Button>
         }
       />
@@ -175,66 +149,64 @@ export default function ExpensesPage() {
         <KpiCard label="expenses.kpi.unsynced" value={String(totals.unsynced)} tone="danger" icon={<IconDoc />} />
       </KpiRow>
 
-      {adding && (
-        <CrudForm
-          onSubmit={() => void submit()}
-          actions={
-            <>
-              <span className={styles.preview}>
-                {t('expenses.preview', {
-                  vat: money(preview.vat),
-                  total: money(preview.total),
-                })}
-              </span>
-              <Button variant="primary" type="submit" disabled={busy || !canSave}>
-                {busy ? t('expenses.saving') : t('expenses.saveAndSync')}
-              </Button>
-            </>
-          }
-        >
-          <SelectField label="expenses.fields.supplier" required autoFocus {...field('supplierId')}>
-            <option value="">{t('expenses.pickSupplier')}</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </SelectField>
-          <TextField label="expenses.fields.date" type="date" {...field('date')} />
-          <TextField label="expenses.fields.description" {...field('description')} />
-          <TextField label="expenses.fields.category" {...field('category')} />
-          <TextField label="expenses.fields.reference" {...field('reference')} />
-          <TextField
-            label="expenses.fields.subtotal"
-            required
-            inputMode="decimal"
-            {...field('subtotal')}
-          />
-          <SelectField label="expenses.fields.vatRate" {...field('vatRate')}>
-            <option value="0.18">{t('expenses.vat18')}</option>
-            <option value="0">{t('expenses.vatNone')}</option>
-          </SelectField>
-          {/* When the supplier is owed. Blank is on receipt, which is the common
-              case — so it is left blank rather than pre-filled with today, which
-              would be an answer nobody gave. This is what ages the bill in the
-              obligo and aging reports. */}
-          <TextField label="expenses.fields.dueDate" hint="expenses.dueDateHint" type="date" {...field('dueDate')} />
-          <CheckboxField
-            label="expenses.fields.paid"
-            checked={draft.paid}
-            onChange={(e) => setDraft((prev) => ({ ...prev, paid: e.target.checked }))}
-          />
-          {/* Only once it has been paid, and only because a cheque is the one
-              payment that lands on a day of its own choosing. Cash and transfers
-              leave the account when they are made; a post-dated cheque is a
-              commitment with a date on it, and that date is the whole subject of
-              the obligo report. */}
-          {draft.paid && (
-            <>
-              <TextField label="expenses.fields.chequeNumber" {...field('chequeNumber')} />
-              <TextField label="expenses.fields.chequeDate" hint="expenses.chequeDateHint" type="date" {...field('chequeDate')} />
-            </>
+      <FilterBar>
+        <Filter label="expenses.fields.supplier">
+          {(id) => (
+            <select id={id} value={filters.supplierId}
+              onChange={(e) => setFilters((f) => ({ ...f, supplierId: e.target.value }))}>
+              <option value="">{t('expenses.filters.all')}</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           )}
-        </CrudForm>
-      )}
+        </Filter>
+        <Filter label="expenses.filters.month">
+          {(id) => (
+            <input id={id} type="month" value={filters.month}
+              onChange={(e) => setFilters((f) => ({ ...f, month: e.target.value }))} />
+          )}
+        </Filter>
+        <Filter label="expenses.filters.status">
+          {(id) => (
+            <select id={id} value={filters.status}
+              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as ExpenseStatusFilter }))}>
+              <option value="all">{t('expenses.filters.all')}</option>
+              <option value="unpaid">{t('expenses.awaitingPayment')}</option>
+              <option value="paid">{t('expenses.paid')}</option>
+              <option value="unsynced">{t('expenses.sync.pending')}</option>
+            </select>
+          )}
+        </Filter>
+        <Filter label="common.search">
+          {(id) => (
+            <input id={id} type="search" value={filters.query}
+              placeholder={t('expenses.filters.searchPlaceholder')}
+              onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))} />
+          )}
+        </Filter>
+        <ClearFilters show={ex.filtered} onClick={() => setFilters(NO_FILTERS)} />
+      </FilterBar>
 
-      <Table columns={columns} rows={rows} rowKey={(e) => e.id} emptyKey="expenses.empty" />
+      <PagedTable
+        columns={columns}
+        rows={ex.shown}
+        rowKey={(e) => e.id}
+        emptyKey={ex.filtered ? 'expenses.noMatch' : 'expenses.empty'}
+      />
+
+      {adding && (
+        <ExpenseDrawer
+          suppliers={suppliers}
+          usedCategories={ex.usedCategories}
+          busy={ex.busy}
+          initialDate={lastDate}
+          onSave={async (draft) => {
+            const ok = await ex.create(draft);
+            if (ok) setLastDate(draft.date);
+            return ok;
+          }}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </>
   );
 }

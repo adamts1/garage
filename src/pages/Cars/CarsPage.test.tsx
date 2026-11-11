@@ -1,21 +1,28 @@
 // @vitest-environment jsdom
 import type { Ticket } from '@garage/shared';
 import { configureStore } from '@reduxjs/toolkit';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/supabase', () => ({ isConfigured: true }));
+/* The search is the database's (search_cars); the fake answers it with the
+   same rules over these two cars. */
+const searchCars = vi.fn();
 vi.mock('@garage/shared', async (importActual) => ({
   ...(await importActual<typeof import('@garage/shared')>()),
-  listCars: vi.fn(async () => [
-    { id: 'car-1', plate: '12-345-67', manufacturer: 'קיה', model: 'נירו', year: '2022', km: null, vehicle_code: null,
-      owners: [{ id: 'c-a', name: 'דנה', phone: null }, { id: 'c-b', name: 'יוסי', phone: null }] },
-    { id: 'car-2', plate: '98-765-43', manufacturer: 'מאזדה', model: '3', year: null, km: null, vehicle_code: null,
-      owners: [{ id: 'c-c', name: 'רונית', phone: null }] },
-  ]),
+  searchCars: (...a: unknown[]) => searchCars(...a),
+  subscribeToTable: vi.fn(() => () => {}),
 }));
+
+const { fakeCarDb } = await import('../../test/fakeCustomerDb');
+searchCars.mockImplementation(fakeCarDb(() => [
+  { id: 'car-1', plate: '12-345-67', manufacturer: 'קיה', model: 'נירו', year: '2022', km: null, vehicle_code: null,
+    owners: [{ id: 'c-a', name: 'דנה', phone: null }, { id: 'c-b', name: 'יוסי', phone: null }] },
+  { id: 'car-2', plate: '98-765-43', manufacturer: 'מאזדה', model: '3', year: null, km: null, vehicle_code: null,
+    owners: [{ id: 'c-c', name: 'רונית', phone: null }] },
+]).searchCars);
 
 await import('../../i18n');
 const { default: CarsPage } = await import('./CarsPage');
@@ -34,7 +41,7 @@ const renderPage = async () => {
       <MemoryRouter><CarsPage tickets={tickets} /></MemoryRouter>
     </Provider>,
   );
-  await act(async () => { await Promise.resolve(); });
+  await screen.findByText('12-345-67');
 };
 
 describe('the vehicles screen', () => {
@@ -50,11 +57,12 @@ describe('the vehicles screen', () => {
     await renderPage();
     const box = screen.getByLabelText('חיפוש לפי מספר רישוי, יצרן, דגם או לקוח');
     await act(async () => { fireEvent.change(box, { target: { value: '9876543' } }); });
-    expect(screen.queryByText('12-345-67')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('12-345-67')).toBeNull());
     expect(screen.getByText('98-765-43')).toBeTruthy();
+    expect(searchCars).toHaveBeenLastCalledWith(expect.objectContaining({ query: '9876543' }));
 
     await act(async () => { fireEvent.change(box, { target: { value: 'יוסי' } }); });
+    await waitFor(() => expect(screen.queryByText('98-765-43')).toBeNull());
     expect(screen.getByText('12-345-67')).toBeTruthy();
-    expect(screen.queryByText('98-765-43')).toBeNull();
   });
 });

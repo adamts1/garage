@@ -11,6 +11,8 @@
 
 import { laborCharged, partUnitCharged, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
+import { fetchAll } from './paging';
+import { paymentsTotal, type PayMethod, type PaymentPart } from './payment';
 
 /* Four documents, two of which are bills.
  *
@@ -34,6 +36,24 @@ export interface InvoiceLine {
   qty: number;
   unit_price: number;
   line_total: number;
+  /** Which of the ticket's works the line was billed under — its position, and
+   *  its name — and whether it is that work's labour or one of its parts.
+   *  Frozen at issue since 20261110090000; absent on older documents and on
+   *  counter sales, which have no works. */
+  group?: number;
+  work?: string;
+  kind?: 'work' | 'part';
+}
+
+/** The car a document was issued for, as the ticket had it then. */
+export interface InvoiceVehicle {
+  plate: string | null;
+  car: string | null;
+  km: string | null;
+  /** ISO — when the car came in. */
+  openedAt: string | null;
+  /** ISO — when the work was finished. */
+  closedAt: string | null;
 }
 
 /** One issued document, exactly as stored — a frozen snapshot, never recomputed. */
@@ -60,6 +80,13 @@ export interface Invoice {
   total: number;
   payMethod: string | null;
   payReference: string | null;
+  /** Every payment the document records, when it records more than one — cash
+   *  and a card at the same visit, on one receipt. Null on a document with a
+   *  single method (that is `payMethod`) and on everything issued before the
+   *  column existed. When set, `payMethod` is null: no one method names it. */
+  payments: PaymentPart[] | null;
+  /** Frozen at issue on a ticket's bill since 20261110090000; null otherwise. */
+  vehicle: InvoiceVehicle | null;
   status: InvoiceStatus;
   /** the credit note that cancelled this one, if any */
   cancelledBy: string | null;
@@ -72,6 +99,10 @@ export interface Invoice {
   paysInvoiceId: string | null;
   createdAt: string;
 }
+
+const paymentToBody = (p: PaymentPart) => ({
+  method: p.method, amount: p.amount, reference: p.reference ?? null,
+});
 
 const rowToInvoice = (r: any): Invoice => ({
   id: r.id,
@@ -94,6 +125,22 @@ const rowToInvoice = (r: any): Invoice => ({
   total: Number(r.total),
   payMethod: r.pay_method ?? null,
   payReference: r.pay_reference ?? null,
+  payments: Array.isArray(r.payments) && r.payments.length > 0
+    ? (r.payments as Array<{ method: PayMethod; amount: number; reference?: string | null }>).map((p) => ({
+        method: p.method,
+        amount: Number(p.amount),
+        ...(p.reference ? { reference: p.reference } : {}),
+      }))
+    : null,
+  vehicle: r.vehicle && typeof r.vehicle === 'object'
+    ? {
+        plate: r.vehicle.plate ?? null,
+        car: r.vehicle.car ?? null,
+        km: r.vehicle.km ?? null,
+        openedAt: r.vehicle.opened_at ?? null,
+        closedAt: r.vehicle.closed_at ?? null,
+      }
+    : null,
   status: r.status,
   cancelledBy: r.cancelled_by ?? null,
   creditsInvoiceId: r.credits_invoice_id ?? null,
@@ -103,12 +150,13 @@ const rowToInvoice = (r: any): Invoice => ({
 
 /** The garage's invoices, newest first. RLS scopes this to the caller's garage. */
 export const listInvoices = async (): Promise<Invoice[]> => {
-  const { data, error } = await getClient()
+  const rows = await fetchAll((from, to) => getClient()
     .from('invoices')
     .select('*')
-    .order('issued_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map(rowToInvoice);
+    .order('issued_at', { ascending: false })
+    .order('id')
+    .range(from, to));
+  return rows.map(rowToInvoice);
 };
 
 /** Whether a ticket carries a live bill — a חשבונית מס or מס-קבלה still
@@ -151,16 +199,23 @@ export const invoicingActive = async (): Promise<boolean> => {
 /* Issue a חשבונית מס-קבלה for a ticket. Irreversible — the only undo is a
    credit note. The Edge Function is idempotent per ticket, so a double click
    returns the invoice that already exists rather than issuing two. */
+/** `payments` is how an invoice-receipt was paid, when it was paid by more
+ *  than one method; without it the server reads the single method off the
+ *  ticket. They must add up to the bill — the server refuses otherwise. */
 export const issueInvoice = async (
   ticketKey: string,
   docType: BillDocType = 'invoice_receipt',
+  payments?: readonly PaymentPart[],
 ): Promise<Invoice> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
   if (tErr) throw tErr;
 
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
-    body: { action: 'issue', ticket_id: t.id, doc_type: docType },
+    body: {
+      action: 'issue', ticket_id: t.id, doc_type: docType,
+      ...(payments && payments.length > 0 ? { payments: payments.map(paymentToBody) } : {}),
+    },
   });
   if (error) throw await invokeError(error);
   return rowToInvoice(data.invoice);
@@ -192,6 +247,9 @@ export interface StandaloneInvoiceInput {
   customerIdNumber?: string | null;
   customerAddress?: string | null;
   customerPhone?: string | null;
+  /** The car it was for — frozen on the document as its `vehicle`, like a
+   *  ticket's, and printed in the provider's remark line. */
+  vehiclePlate?: string | null;
   lines: readonly StandaloneLine[];
   docType?: BillDocType;
   /** Only meaningful on an invoice-receipt: a tax invoice records no payment. */
@@ -215,6 +273,7 @@ export const issueStandaloneInvoice = async (input: StandaloneInvoiceInput): Pro
       customer_id_number: input.customerIdNumber ?? null,
       customer_address: input.customerAddress ?? null,
       customer_phone: input.customerPhone ?? null,
+      vehicle_plate: input.vehiclePlate ?? null,
       pay_method: input.payMethod ?? null,
       pay_reference: input.payReference ?? null,
       lines: input.lines.map((l) => ({ desc: l.desc, qty: l.qty, unit_price: l.unit_price })),
@@ -224,14 +283,19 @@ export const issueStandaloneInvoice = async (input: StandaloneInvoiceInput): Pro
   return rowToInvoice(data.invoice);
 };
 
+/** One receipt against a tax invoice, for every payment taken at this visit.
+ *  Their sum is what is collected; it may be less than what is owed. */
 export const collectInvoice = async (
   invoiceId: string,
-  amount?: number,
-  payMethod?: string,
-  reference?: string,
+  payments: readonly PaymentPart[],
 ): Promise<{ receipt: Invoice; owed: number }> => {
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
-    body: { action: 'collect', invoice_id: invoiceId, amount, pay_method: payMethod, reference },
+    body: {
+      action: 'collect',
+      invoice_id: invoiceId,
+      amount: paymentsTotal(payments),
+      payments: payments.map(paymentToBody),
+    },
   });
   if (error) throw await invokeError(error);
   return { receipt: rowToInvoice(data.receipt), owed: Number(data.owed ?? 0) };
@@ -439,6 +503,24 @@ export interface InvoiceGroup {
   parts: InvoiceLine[];
 }
 
+/** Groups lines that say which work they belong to, in the order issued. Null
+ *  unless every line says so — a document is grouped whole or not at all. */
+const groupFrozenLines = (lines: readonly InvoiceLine[]): InvoiceGroup[] | null => {
+  if (!lines.length || !lines.every((l) => typeof l.group === 'number' && l.work && l.kind)) return null;
+  const groups: InvoiceGroup[] = [];
+  let at: number | null = null;
+  for (const l of lines) {
+    if (l.group !== at) {
+      groups.push({ name: l.work!, labour: null, parts: [] });
+      at = l.group!;
+    }
+    const g = groups[groups.length - 1];
+    if (l.kind === 'work') g.labour = l;
+    else g.parts.push(l);
+  }
+  return groups;
+};
+
 /** Money compares to the agora; these have been through a float and a database. */
 const sameMoney = (a: number, b: number) => Math.abs(Number(a) - Number(b)) < 0.005;
 
@@ -446,6 +528,11 @@ export const groupInvoiceLines = (
   inv: Pick<Invoice, 'lines'>,
   works: readonly TicketWork[] | undefined,
 ): InvoiceGroup[] | null => {
+  /* A document issued since its lines carried their work needs no ticket and
+     no check: the grouping is part of what was issued. */
+  const frozen = groupFrozenLines(inv.lines);
+  if (frozen) return frozen;
+
   if (!works?.length || !inv.lines.length) return null;
 
   const groups: InvoiceGroup[] = [];

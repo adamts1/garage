@@ -7,36 +7,50 @@
 // InvoiceProvider shape — nothing here needs to change.
 
 import type {
-  InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
-  ProviderCredentials, RecordExpenseInput, RecordedExpense,
+  InvoiceItem, InvoiceProvider, IssueInput, CollectInput, CancelInput, ExportBookkeepingInput, IssuedDoc,
+  PaymentPart, ProviderCredentials, RecordExpenseInput, RecordedExpense,
 } from './provider.ts';
+import { NotIssued } from './provider.ts';
 
-const BASE = 'https://api.icount.co.il/api/v3.php';
+/* Overridable for one reason: the local end-to-end test of issue-invoice points
+   it at a stand-in server, to make the provider answer slowly, refuse, or not
+   answer at all. Never set it on a hosted project. */
+const BASE = Deno.env.get('ICOUNT_BASE_URL') ?? 'https://api.icount.co.il/api/v3.php';
+
+/* Long enough for iCount on a bad day, short enough that the function answers
+   well inside its own wall-clock limit — killed by the platform mid-call, it
+   could not record that the outcome is unknown. */
+const TIMEOUT_MS = 30_000;
 
 interface IcountCreds { cid: string; token: string }
 
 function readCreds(c: ProviderCredentials): IcountCreds {
   const cid = c.cid as string | undefined;
   const token = c.token as string | undefined;
-  if (!cid || !token) throw new Error('iCount credentials must include cid and token');
+  if (!cid || !token) throw new NotIssued('iCount credentials must include cid and token');
   return { cid, token };
 }
 
 async function call(c: IcountCreds, path: string, body: Record<string, unknown>) {
+  /* A timeout, a dropped connection or a reply that is not JSON throw as plain
+     errors: the request may have been acted on. Only iCount's own "status:
+     false" is a definite no, and only that throws NotIssued. */
   const res = await fetch(`${BASE}/${path}`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${c.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ cid: c.cid, ...body }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const data = await res.json();
-  if (!data?.status) {
+  if (data && typeof data === 'object' && 'status' in data && !data.status) {
     // error_details is often an empty array even on failure; fall back to the
     // description/reason so the message is never blank (e.g. "Token expired").
     const detail = (Array.isArray(data?.error_details) && data.error_details.length)
       ? data.error_details.join('; ')
       : (data?.error_description ?? data?.reason ?? 'iCount request failed');
-    throw new Error(`iCount ${path}: ${detail}`);
+    throw new NotIssued(`iCount ${path}: ${detail}`);
   }
+  if (!data?.status) throw new Error(`iCount ${path}: unrecognised reply`);
   return data;
 }
 
@@ -75,6 +89,32 @@ function paymentBlock(method: string | null, total: number): Record<string, unkn
   return { cash: { sum: total } };
 }
 
+/* Several payments on one document: each part is mapped as above and parts
+   landing on the same key are added together. Cheques stay one entry per
+   cheque, because a cheque is a piece of paper and iCount lists them. The
+   block still balances the document, since the parts add up to it — the
+   function checks that before anything reaches here. */
+function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
+  const sums: Record<'cash' | 'cc' | 'banktransfer', number> = { cash: 0, cc: 0, banktransfer: 0 };
+  const cheques: Array<{ sum: number }> = [];
+  for (const p of parts) {
+    const one = paymentBlock(p.method, p.amount);
+    if ('cheques' in one) cheques.push({ sum: p.amount });
+    else for (const key of Object.keys(sums) as Array<keyof typeof sums>) {
+      if (key in one) sums[key] = Math.round((sums[key] + p.amount) * 100) / 100;
+    }
+  }
+  const block: Record<string, unknown> = {};
+  for (const [key, sum] of Object.entries(sums)) if (sum > 0) block[key] = { sum };
+  if (cheques.length > 0) block.cheques = cheques;
+  return block;
+}
+
+/** The payment block for a document: every part when there are several, else
+ *  the single method. */
+const payBlock = (payments: PaymentPart[] | undefined, method: string | null, total: number) =>
+  payments && payments.length > 0 ? paymentsBlock(payments) : paymentBlock(method, total);
+
 /** doc/create returns only docnum + doc_url; doc/info has doc_id + allocation. */
 async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
   const data = await call(c, 'doc/info', { doctype, docnum });
@@ -86,26 +126,58 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
   };
 }
 
+/* Lines as iCount gets them. Its documents are a flat list with no styling of
+   ours, so a part is set under the work above it by its text alone: indented
+   with no-break spaces, then the "◦" the printed copy uses — the line order
+   (work, then its parts) does the rest. No-break spaces because a renderer
+   collapses ordinary ones; the mark because it may trim even those, and then
+   the part is still told apart from the work. */
+const PART_INDENT = '\u00A0'.repeat(6) + '◦ ';
+const icountItems = (items: InvoiceItem[]) => items.map(({ indent, ...item }) => (
+  indent ? { ...item, description: `${PART_INDENT}${item.description}` } : item
+));
+
+/* The document's free-text remark — where the car, its mileage and its dates
+   go, since iCount has no fields of its own for them.
+
+   UNVERIFIED: `hwc` is the remark field of iCount's older create_doc API, and
+   v3 kept most of those names, but this has not been seen printed on a v3
+   document yet (the trial account had expired). So it may be ignored; and if
+   iCount refuses the request because of it, the document is issued again
+   without it. A refusal is iCount's definite "no" — nothing was created — so
+   the second attempt cannot make a duplicate. A remark is never worth a
+   document that was not issued. */
+const NOTE_FIELD = 'hwc';
+
 export const icountAdapter: InvoiceProvider = {
   async issue(input: IssueInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
     const doctype = DOCTYPE[input.docType];
-    const data = await call(c, 'doc/create', {
+    const create = (note?: string) => call(c, 'doc/create', {
+      ...(note ? { [NOTE_FIELD]: note } : {}),
       doctype,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
       client_address: input.customer.address || undefined,
       lang: 'he',
       currency: 'ILS',
-      items: input.items,
+      items: icountItems(input.items),
       /* A payment block only on the document that IS a payment. An invrec is
          rejected without one; a plain invoice describes money not yet received,
          and claiming it was paid is the one thing that would make the document
          a lie. */
-      ...(input.docType === 'invoice_receipt' ? paymentBlock(input.payMethod, input.total) : {}),
+      ...(input.docType === 'invoice_receipt' ? payBlock(input.payments, input.payMethod, input.total) : {}),
       email_to_client: false,
       send_email: false,
     });
+    let data;
+    try {
+      data = await create(input.note);
+    } catch (e) {
+      if (!(input.note && e instanceof NotIssued)) throw e;
+      console.warn(`iCount refused the document with a remark; issuing without it: ${e.message}`);
+      data = await create();
+    }
     const docnum = String(data.docnum);
     const info = await docInfo(c, doctype, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
@@ -137,7 +209,7 @@ export const icountAdapter: InvoiceProvider = {
         unitprice: input.amount,
         quantity: 1,
       }],
-      ...paymentBlock(input.payMethod, input.amount),
+      ...payBlock(input.payments, input.payMethod, input.amount),
       based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
       email_to_client: false,
       send_email: false,
@@ -155,7 +227,7 @@ export const icountAdapter: InvoiceProvider = {
       client_idno: input.customer.idNo || undefined,
       lang: 'he',
       currency: 'ILS',
-      items: input.items,
+      items: icountItems(input.items),
       refundreason: input.reason,
       based_on: [{ doctype: DOCTYPE.invoice_receipt, docnum: input.basedOnDocnum }],
     });
