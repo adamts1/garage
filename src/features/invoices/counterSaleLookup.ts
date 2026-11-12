@@ -14,7 +14,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { isConfigured } from '../../lib/supabase';
 import { useDebouncedValue } from '../../lib/useDebouncedValue';
 
-export type LookupField = 'name' | 'phone' | 'plate';
+/** 'any' is the search box above the fields: a name, a phone or a plate,
+ *  whichever it turns out to be. */
+export type LookupField = 'name' | 'phone' | 'plate' | 'any';
 
 export interface LookupOption {
   key: string;
@@ -44,6 +46,15 @@ export function lookupOptions(
   query: string,
 ): LookupOption[] {
   const q = query.trim();
+  if (field === 'any') {
+    /* A plate first: a car is the most specific thing that can match. Then
+       phone, then name, each customer-and-car once. */
+    const seen = new Set<string>();
+    return (['plate', 'phone', 'name'] as const)
+      .flatMap((f) => lookupOptions(found, f, q))
+      .filter((o) => (seen.has(o.key) ? false : (seen.add(o.key), true)))
+      .slice(0, LOOKUP_LIMIT);
+  }
   let out: LookupOption[] = [];
   if (field === 'name') {
     if (q.length < MIN_NAME) return [];
@@ -79,7 +90,8 @@ export function useCounterSaleLookup(field: LookupField | null, query: string): 
     let alive = true;
     /* The phone is sent as digits: the database matches a phone by its
        digits, and "050-123" would otherwise look for the hyphen. */
-    const asked = settled.startsWith('phone') ? phoneDigits(q) : q;
+    const numeric = /^[\d\s\-+()]+$/.test(q);
+    const asked = settled.startsWith('phone') || (settled.startsWith('any') && numeric) ? phoneDigits(q) : q;
     searchCustomers({ query: asked, pageSize: 20 })
       .then((p) => { if (alive) setAnswer({ key: settled, rows: p.rows }); })
       .catch(() => {});

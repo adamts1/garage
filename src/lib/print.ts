@@ -131,9 +131,13 @@ const invoiceGroup = (g: InvoiceGroup, index: number): string => {
  *  it. */
 export const printInvoice = (
   inv: Invoice,
-  opts: { ticket?: Ticket } = {},
+  /** `draft`: a preview of a document not yet issued (the counter sale). It
+   *  has no number and must not be mistaken on paper for the real one, so it
+   *  says so in the bar, the footer and the window title. */
+  opts: { ticket?: Ticket; draft?: boolean } = {},
 ): boolean => {
   const label = DOC_LABEL[inv.docType];
+  const draft = opts.draft === true;
   const t = opts.ticket;
   const groups = groupInvoiceLines(inv, t?.works);
   const cancelled = inv.status === 'cancelled';
@@ -159,12 +163,12 @@ export const printInvoice = (
     ${letterheadHtml()}
 
     <div class="docbar">
-      <span class="docbar-k">${esc(label)} ${esc(inv.docnum)}</span>
-      <span>${esc(printedOn())}</span>
+      <span class="docbar-k">${esc(label)} ${draft ? '· תצוגה מקדימה' : esc(inv.docnum)}</span>
+      <span>${draft ? 'טרם הופק' : esc(printedOn())}</span>
     </div>
 
-    <div class="copybar${cancelled ? ' void' : ''}">
-      עותק להדפסה${cancelled ? ' · המסמך בוטל' : ''}
+    <div class="copybar${cancelled || draft ? ' void' : ''}">
+      ${draft ? 'תצוגה מקדימה · לא מסמך רשמי · טרם הופק' : `עותק להדפסה${cancelled ? ' · המסמך בוטל' : ''}`}
     </div>
 
     <div class="box">
@@ -213,7 +217,7 @@ export const printInvoice = (
               : payMethodHe(inv.payMethod))}
             ${row('אסמכתא', inv.payReference)}
             ${row('כרטיס עבודה', inv.ticketKey)}
-            ${row('סטטוס', cancelled ? 'בוטל' : 'תקף')}
+            ${row('סטטוס', draft ? 'טיוטה — טרם הופק' : cancelled ? 'בוטל' : 'תקף')}
           </table>
         </section>
       </div>
@@ -246,10 +250,13 @@ export const printInvoice = (
     </div>
 
     <div class="foot">
-      עותק להדפסה של ${esc(label)} ${esc(inv.docnum)}. המסמך הרשמי הוא קובץ ה-PDF שהופק במערכת החשבוניות.
+      ${draft
+        ? `תצוגה מקדימה של ${esc(label)} שטרם הופקה. המספר, התאריך ושיעור המע״מ ייקבעו במערכת החשבוניות בעת ההפקה.`
+        : `עותק להדפסה של ${esc(label)} ${esc(inv.docnum)}. המסמך הרשמי הוא קובץ ה-PDF שהופק במערכת החשבוניות.`}
     </div>`;
 
-  return openDoc(`${label} ${inv.docnum}`, renderPrintDoc({ title: `${label} ${inv.docnum}`, body, fit: true }));
+  const title = draft ? `${label} · תצוגה מקדימה` : `${label} ${inv.docnum}`;
+  return openDoc(title, renderPrintDoc({ title, body, fit: true }));
 };
 
 /** Every caller does the same thing when the browser blocks the popup. */

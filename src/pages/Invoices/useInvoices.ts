@@ -1,8 +1,7 @@
 import {
-  creditInvoice, creditableRemainder, isGarageAdmin, issueStandaloneInvoice, listInvoices, money,
+  creditInvoice, creditableRemainder, isGarageAdmin, listInvoices, money,
   subscribeToInvoices, type Invoice,
 } from '@garage/shared';
-import type { CounterSale } from '../../features/invoices';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useModalResult } from '../../store';
 import { headline, netTotal } from './invoiceTotals';
@@ -13,7 +12,7 @@ export type DocTypeFilter = 'all' | Invoice['docType'];
 export function useInvoices() {
   const dispatch = useAppDispatch();
   const openModal = useModalResult<{ amount: number; reason: string } | null>();
-  const openCounterSale = useModalResult<CounterSale>();
+  const openCounterSale = useModalResult<Invoice>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [crediting, setCrediting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,21 +102,12 @@ export function useInvoices() {
      what covers the click that gets through anyway. */
   const [issuing, setIssuing] = useState(false);
   const counterSale = useCallback(async () => {
-    const sale = await openCounterSale('counterSale', {});
-    if (!sale) return;
+    /* The dialog issues the document and settles with it once it exists —
+       see CounterSaleModal — so a failure leaves the form open to retry. */
+    const inv = await openCounterSale('counterSale', {});
+    if (!inv) return;
     setIssuing(true);
     try {
-      const inv = await issueStandaloneInvoice({
-        idempotencyKey: sale.idempotencyKey,
-        customerName: sale.customerName,
-        customerIdNumber: sale.customerIdNumber || null,
-        customerPhone: sale.customerPhone || null,
-        customerAddress: sale.customerAddress || null,
-        vehiclePlate: sale.plate,
-        docType: sale.docType,
-        payMethod: sale.payMethod,
-        lines: sale.lines,
-      });
       /* Re-read rather than wait to be told. The same line is in `credit`
          above, and for the same reason: subscribeToInvoices listens to a table
          that was never in the realtime publication, so nothing was ever
