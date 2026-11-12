@@ -43,4 +43,12 @@ describe('lookupOptions', () => {
     expect(lookupOptions(all, 'phone', '05')).toEqual([]);
     expect(lookupOptions(all, 'plate', '12')).toEqual([]);
   });
+
+  it('the search box finds by plate, phone or name, each customer-and-car once', () => {
+    // The plate 12-345-67 first, then the rest of the phone 050-1234567's cars.
+    expect(lookupOptions(all, 'any', '1234567').map((r) => r.vehicle?.id)).toEqual(['v1', 'v2']);
+    expect(lookupOptions(all, 'any', 'יוסי').map((r) => r.customer.id)).toEqual(['c2']);
+    const byPhone = lookupOptions(all, 'any', '0501234567');
+    expect(new Set(byPhone.map((r) => r.key)).size).toBe(byPhone.length);
+  });
 });

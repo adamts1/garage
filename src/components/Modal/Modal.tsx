@@ -7,6 +7,8 @@ export interface ModalProps {
   /** i18n key for the heading. */
   title: string;
   titleValues?: Record<string, string | number>;
+  /** i18n key for a line under the heading. */
+  subtitle?: string;
   children: ReactNode;
   /** Buttons. Rendered in a footer bar; the last one is pushed to the end. */
   actions?: ReactNode;
@@ -16,7 +18,8 @@ export interface ModalProps {
   isTop?: boolean;
   /** Deeper than the first — draws a lighter scrim so the modal below shows. */
   stacked?: boolean;
-  size?: 'sm' | 'md';
+  /** 'lg' is for a form with a side column (the counter sale, 2026-11-12). */
+  size?: 'sm' | 'md' | 'lg';
   /** 'drawer' is a full-height panel on the reading side of the screen, for a
    *  form long enough to want the height (2026-11-11, the expense form). The
    *  behaviour is the dialog's: same Escape, focus and scroll lock. */
@@ -28,6 +31,7 @@ export interface ModalProps {
 export default function Modal({
   title,
   titleValues,
+  subtitle,
   children,
   actions,
   onClose,
@@ -52,14 +56,17 @@ export default function Modal({
     >
       <div
         ref={panelRef}
-        className={[styles.panel, size === 'sm' ? styles.sm : null, drawer ? styles.drawer : null].filter(Boolean).join(' ')}
+        className={[styles.panel, size === 'sm' ? styles.sm : size === 'lg' ? styles.lg : null, drawer ? styles.drawer : null].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal="true"
         aria-label={t(title, titleValues)}
         tabIndex={-1}
       >
         <div className={styles.head}>
-          <h3>{t(title, titleValues)}</h3>
+          <div className={styles.titles}>
+            <h3>{t(title, titleValues)}</h3>
+            {subtitle && <p className={styles.subtitle}>{t(subtitle)}</p>}
+          </div>
           <button
             type="button"
             className={styles.close}

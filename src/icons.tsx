@@ -173,3 +173,18 @@ export const IconEyeOff = ({ size = base.width }: { size?: number }) => (
     <path d="m3 3 18 18" />
   </svg>
 );
+
+export const IconSearch = ({ size = base.width }: { size?: number }) => (
+  <svg {...base} width={size} height={size}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+);
+
+export const IconInfo = ({ size = base.width }: { size?: number }) => (
+  <svg {...base} width={size} height={size}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5" />
+    <path d="M12 8h.01" />
+  </svg>
+);

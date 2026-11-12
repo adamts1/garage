@@ -1,42 +1,134 @@
-.lede {
-  margin: 0 0 4px;
-  color: var(--ink);
-  font-size: 15px;
-}
+/* The counter sale, laid out as the 2026-11-12 mockup: the form in cards on
+   the reading side, the document's summary in a column beside it. */
 
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 14px;
-  margin-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.block:first-of-type {
-  padding-top: 0;
-  margin-top: 8px;
-  border-top: 0;
-}
-
-.blockHead {
+.docType {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.docType label {
+  font-weight: 800;
+  font-size: 15.5px;
+}
+.docType select {
+  width: 300px !important;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.blockTitle {
+.cardTitle {
   margin: 0;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: 0.2px;
-  color: var(--muted-d);
+  color: var(--text);
+  white-space: nowrap;
 }
 
-.grid {
+.cardHead .cardTitle {
+  margin-inline-end: auto;
+}
+
+.grid3 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px 14px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+/* Fields at the mockup's size: tall, rounded, filling their column. */
+.card :global(.input),
+.docType select {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+}
+.card :global(.input):focus,
+.docType select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.card :global(.input)[readonly] {
+  background: var(--surface-2);
+}
+
+/* Number fields without the browser's spin arrows. */
+.cell::-webkit-outer-spin-button,
+.cell::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.cell[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* the blue outlined buttons of the mockup */
+.accentBtn {
+  border: 1px solid var(--primary) !important;
+  color: var(--primary) !important;
+  background: var(--surface) !important;
+  font-weight: 700;
+}
+.accentBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface)) !important;
+}
+
+/* ---- the search box ---- */
+
+.search {
+  flex: 0 1 420px;
+}
+.card .search :global(.input) {
+  padding-inline-start: 38px;
+}
+.searchIcon {
+  position: absolute;
+  inset-inline-start: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--muted-d);
+  pointer-events: none;
 }
 
 /* ---- the lines ----
@@ -44,88 +136,202 @@
    A grid rather than a table: the columns have to hold their widths while rows
    are added and removed, and the last two are a figure and a button that must
    not be squeezed by a long description. */
-.lines {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+
+.table {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .line {
   display: grid;
-  grid-template-columns: 1fr 76px 104px 92px 36px;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 110px 150px 130px 52px;
+  align-items: stretch;
+  border-top: 1px solid var(--border);
+}
+.line > * {
+  border-inline-start: 1px solid var(--border);
+}
+.line > :first-child {
+  border-inline-start: 0;
+}
+
+.lineHead {
+  border-top: 0;
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.lineHead > span {
+  padding: 9px 12px;
+}
+
+.cell {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15.5px;
+  color: var(--text);
+}
+.cell:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.line input[dir='ltr'] {
+  text-align: right;
 }
 
 .lineTotal {
-  text-align: left;
-  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  font-size: 15.5px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.line > button {
+  border-radius: 0;
+  justify-content: center;
+}
+
+.tableFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .addRow {
-  margin-top: 2px;
-  padding: 8px 12px;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--muted-d);
+  margin-inline-start: auto;
+  margin-inline-end: auto;
+  padding: 4px 10px;
+  border: 0;
+  background: none;
+  color: var(--primary);
   font: inherit;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
 .addRow:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+  text-decoration: underline;
 }
 
-/* ---- totals ---- */
-.totals {
-  margin-top: 16px;
-  margin-inline-start: auto;
-  width: 300px;
+.muted {
+  color: var(--muted-d);
+  font-size: 13.5px;
+}
+
+/* ---- the summary column ---- */
+
+.side {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 15px;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
 }
-.totals > div {
+
+.sumRow {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  font-size: 16px;
 }
-.totals b { white-space: nowrap; }
+.sumRow b {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
 
-/* The rate the provider will actually use lives on the server, so these two
-   are marked as what they are rather than presented as the document's figures. */
-.est { color: var(--ink); }
-.grand {
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 2px solid var(--border);
+.sumGrand {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.sumGrand span {
   font-size: 17px;
   font-weight: 800;
 }
+.sumGrand b {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
 
-.warning {
-  margin: 14px 0 0;
+.previewBtn {
+  width: 100%;
+  justify-content: center;
+  padding-block: 12px;
+}
+
+.note {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
   color: var(--ink);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
+}
+.note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+.note p {
+  margin: 0;
+}
+.note p + p {
+  margin-top: 4px;
+}
+
+/* Cancel and issue side by side at the end of the footer. */
+.footActions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .side {
+    position: static;
+  }
 }
 
 @media (max-width: 620px) {
-  .line {
-    grid-template-columns: 1fr 60px 88px 36px;
+  .grid3, .grid2 {
+    grid-template-columns: 1fr;
   }
-  .lineTotal { display: none; }
+  .line {
+    grid-template-columns: minmax(0, 1fr) 64px 92px 44px;
+  }
+  .line > :nth-child(4) { display: none; }
+  .cardHead {
+    flex-wrap: wrap;
+  }
 }
 
 /* ---------- finding a known customer ---------- */
 
 .lookup {
   position: relative;
+  width: 100%;
 }
 
 .suggestions {
@@ -185,4 +391,46 @@
 .suggestMeta {
   font-size: 13.5px;
   color: var(--muted-d);
+}
+
+/* ---- while the document is being issued ---- */
+
+.form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.form:disabled {
+  opacity: 0.75;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  vertical-align: -3px;
+  animation: cs-spin 0.7s linear infinite;
+}
+
+.issuingNote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+@keyframes cs-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2s; }
 }
