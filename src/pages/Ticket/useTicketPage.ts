@@ -1,5 +1,5 @@
 import {
-  addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -102,7 +102,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   const [idNumber, setIdNumber] = useState('');
 
   const works = draft.works ?? [];
-  const totals = ticketTotals(works);
+  const totals = ticketTotals(works, draft.finalPrice);
 
   /* Switching which ticket the page shows drops the draft outright: a half-typed
      note must not follow the reader to the next car. */
@@ -244,8 +244,49 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
 
   const setWorks = useCallback(
     (next: TicketWork[]) =>
-      patch({ works: next, amount: storedAmount(next), subtasks: next.map((w) => w.name) }),
-    [patch],
+      setDraft((d) => ({
+        ...d, works: next, amount: storedAmount(next, d.finalPrice), subtasks: next.map((w) => w.name),
+      })),
+    [],
+  );
+
+  /** A final price for the whole ticket, VAT included, or null to drop it.
+   *  Above what the lines come to it is refused here — see raiseLabourTo. */
+  const setFinalPrice = useCallback(
+    (price: number | null) =>
+      setDraft((d) => {
+        const p = price && price > 0 ? Math.round(price * 100) / 100 : null;
+        return { ...d, finalPrice: p, amount: storedAmount(d.works ?? [], p) };
+      }),
+    [],
+  );
+
+  /** The way a final price ABOVE the lines is taken: the difference goes on
+   *  one work's labour — the work was more than was written down — and the
+   *  final price is then set, so the total is exactly what was asked.
+   *
+   *  The labour is what is shown on the line, before its own discount and
+   *  VAT, so the difference is worked back through both; a few agorot of
+   *  rounding are then stepped up until the lines reach the price, and the
+   *  final price takes off whatever that overshoots. */
+  const raiseLabourTo = useCallback(
+    (uid: string, price: number) =>
+      setDraft((d) => {
+        const list = d.works ?? [];
+        const excess = finalPriceExcess(list, price);
+        const w = list.find((x) => x.uid === uid);
+        if (!w || excess <= 0) return d;
+        const keep = 1 - Math.min(Math.max(w.laborDiscount ?? 0, 0), 99.99) / 100;
+        const perShown = w.laborVatDiscount ? excess : netFromGross(excess, VAT_RATE);
+        let labor = Math.round((w.labor + perShown / keep) * 100) / 100;
+        const withLabor = (l: number) => list.map((x) => (x.uid === uid ? { ...x, labor: l } : x));
+        for (let i = 0; i < 20 && finalPriceExcess(withLabor(labor), price) > 0; i++) {
+          labor = Math.round((labor + 0.01) * 100) / 100;
+        }
+        const next = withLabor(labor);
+        return { ...d, works: next, finalPrice: price, amount: storedAmount(next, price) };
+      }),
+    [],
   );
 
   /** Hand the ticket to somebody, or take it off everybody. A worker code, or
@@ -400,6 +441,10 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      saved the ticket itself and has already told the customer's money apart from
      the question of whether to bill it. */
   const issueNow = useCallback(async (docType: BillDocType, payments?: PaymentPart[]) => {
+    /* The server refuses it too; said here first, in words. */
+    if (finalPriceExcess(draft.works ?? [], draft.finalPrice) > 0) {
+      throw new Error(t('ticket.finalPrice.blocksInvoice'));
+    }
     /* Both ways of issuing come through here, so the overlay is claimed here
        too rather than at each caller. The wait is a provider round-trip over a
        network — the longest thing this page does, and the one a disabled button
@@ -412,7 +457,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       docType: inv.docType, docnum: inv.docnum, total: money(inv.total),
     }));
     return inv;
-  }, [dispatch, run, ticket.k]);
+  }, [dispatch, draft.finalPrice, draft.works, run, t, ticket.k]);
 
   /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
    *  the copy names the amount and says the document cannot be deleted. */
@@ -788,5 +833,8 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     owed,
     patch, setWorks, assign, save, discard, issue, collect, credit, cancel, close, leave,
     setBoardHidden,
+    /* מחיר סופי לכרטיס — admins only, enforced in the database. */
+    canSetFinalPrice: isGarageAdmin(),
+    setFinalPrice, raiseLabourTo,
   };
 }

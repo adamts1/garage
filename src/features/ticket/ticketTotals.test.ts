@@ -22,7 +22,19 @@ const ticket = (over: Partial<Ticket>): Ticket => ({ k: 'GAR-1', st: 'todo', ...
 
 describe('ticketTotals', () => {
   it('is all zeroes for a ticket with no works', () => {
-    expect(ticketTotals([])).toEqual({ labour: 0, items: 0, vat: 0, total: 0, discount: 0, vatDiscount: 0 });
+    expect(ticketTotals([])).toEqual({ labour: 0, items: 0, vat: 0, total: 0, discount: 0, vatDiscount: 0, ticketDiscount: 0 });
+  });
+
+  it('a final price below the lines is the total, and the difference a ticket discount', () => {
+    const t = ticketTotals([work(1000)], 1000);
+    expect(Math.round(t.total * 100) / 100).toBe(1000);
+    expect(t.labour).toBe(1000);
+    expect(t.ticketDiscount).toBeCloseTo(1000 - 847.46, 2);
+    expect(storedAmount([work(1000)], 1000)).toBe(1000);
+  });
+
+  it('a final price above the lines is not applied', () => {
+    expect(ticketTotals([work(100)], 500)).toEqual(ticketTotals([work(100)]));
   });
 
   it('sums labour across works', () => {

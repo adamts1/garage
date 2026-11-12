@@ -6,7 +6,8 @@ import { Fragment, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import SwitchCustomer from '../../features/ticket/SwitchCustomer/SwitchCustomer';
-import { isClosed, isSettled } from '../../features/ticket/ticketTotals';
+import { FinalPrice } from '../../features/ticket/FinalPrice/FinalPrice';
+import { isClosed, isSettled, ticketTotals } from '../../features/ticket/ticketTotals';
 import { WorksStep } from '../../features/works';
 import {
   IconCar, IconCard, IconChat, IconCheck, IconClock, IconCustomers,
@@ -438,16 +439,23 @@ export default function TicketPage({
               {/* Subtracted, unlike the discount: the lines above show the
                   price before it, and VAT goes on what is left. */}
               {totals.vatDiscount > 0 && (
-                <>
-                  <div>
-                    <span>{t('ticket.vatDiscount')}</span>
-                    <b>-{money(totals.vatDiscount)}</b>
-                  </div>
-                  <div className="sum-sub">
-                    <span>{t('ticket.beforeVat')}</span>
-                    <b>{money(totals.labour + totals.items - totals.vatDiscount)}</b>
-                  </div>
-                </>
+                <div>
+                  <span>{t('ticket.vatDiscount')}</span>
+                  <b>-{money(totals.vatDiscount)}</b>
+                </div>
+              )}
+              {/* A final price for the whole ticket, below the lines. */}
+              {totals.ticketDiscount > 0 && (
+                <div>
+                  <span>{t('ticket.finalPrice.discount')}</span>
+                  <b>-{money(totals.ticketDiscount)}</b>
+                </div>
+              )}
+              {(totals.vatDiscount > 0 || totals.ticketDiscount > 0) && (
+                <div className="sum-sub">
+                  <span>{t('ticket.beforeVat')}</span>
+                  <b>{money(totals.labour + totals.items - totals.vatDiscount - totals.ticketDiscount)}</b>
+                </div>
               )}
               <div>
                 <span>{t('ticket.vat', { percent: Math.round(VAT * 100) })}</span>
@@ -458,6 +466,17 @@ export default function TicketPage({
                 <b>{money(totals.total)}</b>
               </div>
             </div>
+            {page.canSetFinalPrice && (
+              <FinalPrice
+                works={works}
+                finalPrice={draft.finalPrice}
+                linesTotal={ticketTotals(works).total}
+                total={totals.total}
+                locked={billLocked}
+                onSet={page.setFinalPrice}
+                onRaise={page.raiseLabourTo}
+              />
+            )}
           </section>
 
           <section className="card">
