@@ -19,7 +19,7 @@
  * rather than one typed from memory. A free line is there for everything else.
  */
 
-import { money, PAY_METHODS, VAT, type PartDef, type StandaloneLine } from '@garage/shared';
+import { addressLabel, money, PAY_METHODS, VAT, type PartDef, type StandaloneLine } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
@@ -31,6 +31,7 @@ import { payMethodLabel } from '../../lib/payMethodLabel';
 import { settleModal } from '../../store/useModalResult';
 import { usePickPart } from '../works/usePickers';
 import styles from './CounterSaleModal.module.css';
+import { useCounterSaleLookup, type LookupField, type LookupOption } from './counterSaleLookup';
 
 /** What the dialog hands back. Null when it was dismissed. */
 export interface CounterSale {
@@ -77,6 +78,59 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const [docType, setDocType] = useState<CounterSale['docType']>('invoice_receipt');
   const [payMethod, setPayMethod] = useState<string>('cash');
   const [rows, setRows] = useState<Row[]>([blank('r0')]);
+
+  /* The field being typed in, whose suggestions are showing. Set by typing,
+     not by focus, so tabbing through a filled form opens nothing. */
+  const [looking, setLooking] = useState<LookupField | null>(null);
+  const lookupQuery = looking === 'name' ? customerName : looking === 'phone' ? customerPhone : plate;
+  const options = useCounterSaleLookup(looking, lookupQuery);
+
+  /* Fills what is on file and leaves what is not: a customer with no ת״ז on
+     record must not wipe one typed a moment ago. The plate comes only with a
+     car — a customer without one keeps whatever plate is in the box. */
+  const fillFrom = ({ customer: c, vehicle: v }: LookupOption) => {
+    setCustomerName(c.name);
+    if (c.phone) setCustomerPhone(c.phone);
+    if (c.id_number) setCustomerIdNumber(c.id_number);
+    const address = addressLabel({ address: c.address ?? undefined, city: c.city ?? undefined });
+    if (address) setCustomerAddress(address);
+    if (v) setPlate(v.plate);
+    setLooking(null);
+  };
+
+  const lookup = (field: LookupField, value: string, set: (v: string) => void, extra: object = {}) => ({
+    value,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => { set(e.target.value); setLooking(field); },
+    /* Delayed, or the blur lands before the click on a suggestion. */
+    onBlur: () => setTimeout(() => setLooking((f) => (f === field ? null : f)), 150),
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Escape' && looking) { e.stopPropagation(); setLooking(null); } },
+    autoComplete: 'off',
+    ...extra,
+  });
+
+  const suggestions = (field: LookupField) =>
+    looking === field && options.length > 0 ? (
+      <ul className={styles.suggestions} role="listbox">
+        {options.map((o) => (
+          <li key={o.key}>
+            <button type="button" role="option" aria-selected={false}
+              onMouseDown={(e) => e.preventDefault()} onClick={() => fillFrom(o)}>
+              <span className={styles.suggestName}>
+                {o.customer.name}
+                {o.vehicle ? <bdi className={styles.suggestPlate}>{o.vehicle.plate}</bdi> : null}
+              </span>
+              <span className={styles.suggestMeta}>
+                {[
+                  o.customer.phone,
+                  o.vehicle ? [o.vehicle.manufacturer, o.vehicle.model].filter(Boolean).join(' ') : '',
+                  o.customer.city,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    ) : null;
 
   const nextUid = () => {
     const uid = `r${seq}`;
@@ -155,24 +209,29 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
         <h4 className={styles.blockTitle}>{t('counterSale.customer')}</h4>
         <div className={styles.grid}>
           <Field label={t('counterSale.fields.name')}>
-            <input
-              className="input"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder={t('counterSale.fields.namePlaceholder')}
-            />
+            <div className={styles.lookup}>
+              <input className="input"
+                {...lookup('name', customerName, setCustomerName,
+                  { placeholder: t('counterSale.fields.namePlaceholder') })} />
+              {suggestions('name')}
+            </div>
           </Field>
           <Field label={t('counterSale.fields.plate')}>
-            <input className="input" dir="ltr" required
-              value={plate} onChange={(e) => setPlate(e.target.value)} />
+            <div className={styles.lookup}>
+              <input className="input" dir="ltr" required {...lookup('plate', plate, setPlate)} />
+              {suggestions('plate')}
+            </div>
           </Field>
           <Field label={t('counterSale.fields.idNumber')}>
             <input className="input" dir="ltr" inputMode="numeric"
               value={customerIdNumber} onChange={(e) => setCustomerIdNumber(e.target.value)} />
           </Field>
           <Field label={t('counterSale.fields.phone')}>
-            <input className="input" dir="ltr" inputMode="tel"
-              value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+            <div className={styles.lookup}>
+              <input className="input" dir="ltr" inputMode="tel"
+                {...lookup('phone', customerPhone, setCustomerPhone)} />
+              {suggestions('phone')}
+            </div>
           </Field>
           <Field label={t('counterSale.fields.address')}>
             <input className="input" value={customerAddress}

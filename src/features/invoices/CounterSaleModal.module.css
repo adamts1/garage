@@ -121,3 +121,68 @@
   }
   .lineTotal { display: none; }
 }
+
+/* ---------- finding a known customer ---------- */
+
+.lookup {
+  position: relative;
+}
+
+.suggestions {
+  position: absolute;
+  z-index: 20;
+  inset-inline: 0;
+  top: 100%;
+  min-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.suggestions button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  text-align: right;
+  font: inherit;
+  cursor: pointer;
+}
+
+.suggestions button:hover,
+.suggestions button:focus-visible {
+  background: var(--surface-2);
+}
+
+.suggestName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.suggestPlate {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  direction: ltr;
+}
+
+.suggestMeta {
+  font-size: 13.5px;
+  color: var(--muted-d);
+}
