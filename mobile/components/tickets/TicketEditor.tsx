@@ -129,7 +129,8 @@ export default function TicketEditor({
   const setWorks = (works: TicketWork[]) => setDraft((d) => (d ? { ...d, works } : d));
 
   const works = draft.works ?? [];
-  const sum = worksSummary(works);
+  /* The final price is set on the web only; the phone counts it, and says so. */
+  const sum = worksSummary(works, draft.finalPrice);
   const closed = draft.st === 'done' || draft.st === 'paid';
   /* Frozen by the database: any write to it is refused. The phone shows it,
      prints it, and offers nothing else — touches on the tab content are
@@ -224,7 +225,10 @@ export default function TicketEditor({
       await Print.printAsync({
         html: workOrderHtml(
           draft,
-          { labour: sum.labor, items: sum.parts, vat: sum.vat, total: works.length ? sum.total : draft.amount },
+          {
+            labour: sum.labor, items: sum.parts, vat: sum.vat, ticketDiscount: sum.ticketDiscount,
+            total: works.length ? sum.total : draft.amount,
+          },
           { photoCount: photos.photos.length },
         ),
       });
@@ -320,7 +324,7 @@ export default function TicketEditor({
                 <Text style={[s.dim, { fontSize: 13 }]}>{t('ticket.worksLocked')}</Text>
               )}
               <View pointerEvents={billed ? 'none' : 'auto'} style={{ gap: 12, opacity: billed ? 0.75 : 1 }}>
-                <WorksSection works={works} onChange={setWorks} />
+                <WorksSection works={works} onChange={setWorks} finalPrice={draft.finalPrice} />
               </View>
             </>
           )}

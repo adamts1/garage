@@ -98,6 +98,37 @@ function linesFromWorks(works: Work[], vatRate: number): { items: InvoiceItem[];
   return { items, subtotal, owners };
 }
 
+/** מחיר סופי לכרטיס: the lines re-priced to add up to exactly `net`, each cut
+ *  by the same proportion. What agora rounding leaves over goes on the largest
+ *  line of quantity 1; with none, one unit of the largest line is split off to
+ *  carry it, and `split` names the line it came from.
+ *  Must match `spreadToNet` in packages/shared/src/catalog.ts. */
+function spreadToNet(lines: InvoiceItem[], net: number): { lines: InvoiceItem[]; split: number | null } {
+  const before = lines.reduce((s, l) => s + l.unitprice * l.quantity, 0);
+  if (!(before > 0) || net >= before) return { lines: [...lines], split: null };
+  const ratio = net / before;
+  const out = lines.map((l) => ({ ...l, unitprice: round2(l.unitprice * ratio) }));
+  const left = round2(net - out.reduce((s, l) => s + l.unitprice * l.quantity, 0));
+  if (left === 0) return { lines: out, split: null };
+
+  let best = -1;
+  out.forEach((l, i) => {
+    if (l.quantity === 1 && round2(l.unitprice + left) > 0
+        && (best < 0 || l.unitprice > out[best].unitprice)) best = i;
+  });
+  if (best >= 0) {
+    out[best] = { ...out[best], unitprice: round2(out[best].unitprice + left) };
+    return { lines: out, split: null };
+  }
+
+  let big = 0;
+  out.forEach((l, i) => { if (l.unitprice * l.quantity > out[big].unitprice * out[big].quantity) big = i; });
+  const from = out[big];
+  const unit = { ...from, quantity: 1, unitprice: round2(from.unitprice + left) };
+  out.splice(big, 1, { ...from, quantity: from.quantity - 1 }, unit);
+  return { lines: out, split: big };
+}
+
 /** The car, as the ticket had it when the document was issued. */
 interface VehicleSnapshot {
   plate: string | null;
@@ -341,7 +372,7 @@ Deno.serve(async (req) => {
       // Caller's JWT -> RLS guarantees this is their garage's ticket, or nothing.
       const { data: ticket, error: tErr } = await userClient
         .from('tickets')
-        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, plate, car, km, created_at, closed_at, works(name, labor, labor_discount, labor_vat_discount, work_items(name, qty, price, discount, vat_discount))')
+        .select('id, garage_id, key, customer_name, id_number, address, phone, pay_method, reference, plate, car, km, created_at, closed_at, final_price, works(name, labor, labor_discount, labor_vat_discount, work_items(name, qty, price, discount, vat_discount))')
         .eq('id', ticketId)
         .maybeSingle();
       if (tErr) return json({ error: tErr.message }, 400);
@@ -391,11 +422,35 @@ Deno.serve(async (req) => {
         return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
-      const { items, subtotal, owners } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
+      let { items, subtotal, owners } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
       const vehicle = vehicleOf(ticket);
       if (items.length === 0) {
         await release('no priced works');
         return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
+      }
+
+      /* מחיר סופי לכרטיס. Below the lines, the difference is spread over them
+         so the document itemises the work and comes to exactly this price.
+         Above them it is refused, not quietly ignored: the customer was told a
+         figure, and billing a different one is for a person to decide. */
+      const finalPrice = ticket.final_price == null ? null : Number(ticket.final_price);
+      if (finalPrice != null && finalPrice > 0) {
+        const linesNet = round2(subtotal);
+        if (finalPrice > round2(linesNet + round2(linesNet * vatRate))) {
+          await release('final price above the works');
+          return json({ error: 'the ticket\'s final price is above what its works come to; change or remove it first' }, 400);
+        }
+        /* The pre-VAT price that comes back to it — or, where VAT's agora
+           rounding cannot reach it, the one an agora below: never more than
+           the customer was told. Must match `finalNet` in catalog.ts. */
+        let target = chargedUnit(finalPrice, true, vatRate);
+        while (target > 0 && round2(target + round2(target * vatRate)) > finalPrice) target = round2(target - 0.01);
+        if (target < linesNet) {
+          const spread = spreadToNet(items, target);
+          items = spread.lines;
+          if (spread.split != null) owners = [...owners.slice(0, spread.split + 1), owners[spread.split], ...owners.slice(spread.split + 1)];
+          subtotal = round2(items.reduce((s, i) => s + i.unitprice * i.quantity, 0));
+        }
       }
       const vat = round2(subtotal * vatRate);
       const total = round2(subtotal + vat);

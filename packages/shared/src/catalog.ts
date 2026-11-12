@@ -190,20 +190,112 @@ export const worksDiscount = (works: readonly TicketWork[]) =>
     0,
   );
 
+/* A final price for the whole ticket (מחיר סופי לכרטיס).
+
+   An admin types what the customer pays for the visit, VAT included. The lines
+   keep their prices; the difference is a discount on the ticket as a whole,
+   said in the summary and spread over the lines only on the invoice (see
+   spreadToNet). Only ever a discount: a price above what the lines come to is
+   not applied, and the screen offers to put the difference on a work's labour
+   instead — a line with no reason on it is not something to bill a customer.
+
+   Null or zero means none was set. */
+
+/** The pre-VAT amount the ticket is charged under its final price, or null
+ *  when the final price does not apply — none set, or not below the lines. */
+export const finalPriceNet = (
+  works: readonly TicketWork[],
+  finalPrice: number | null | undefined,
+  vatRate: number = VAT,
+): number | null => {
+  if (!finalPrice || !(finalPrice > 0)) return null;
+  const target = finalNet(finalPrice, vatRate);
+  return target < round2(worksCharged(works)) ? target : null;
+};
+
+/** The pre-VAT amount whose total with VAT is the final price — or, where the
+ *  agora rounding of VAT makes that total unreachable (about one price in six),
+ *  the one an agora below it: never more than the customer was told.
+ *  issue-invoice repeats this (finalNet there). */
+export const finalNet = (finalPrice: number, vatRate: number = VAT): number => {
+  let net = netFromGross(finalPrice, vatRate);
+  while (net > 0 && round2(net + round2(net * vatRate)) > finalPrice) net = round2(net - 0.01);
+  return net;
+};
+
+/** How far a final price is ABOVE what the lines come to with VAT, or 0. The
+ *  screen refuses such a price and offers to put this on a labour instead. */
+export const finalPriceExcess = (
+  works: readonly TicketWork[],
+  finalPrice: number | null | undefined,
+  vatRate: number = VAT,
+): number => {
+  if (!finalPrice || !(finalPrice > 0)) return 0;
+  const net = round2(worksCharged(works));
+  const total = round2(net + round2(net * vatRate));
+  return finalPrice > total ? round2(finalPrice - total) : 0;
+};
+
+export interface SpreadLine { unitprice: number; quantity: number }
+
+/** The lines re-priced so they add up to exactly `net`, each cut by the same
+ *  proportion. Unit prices are to the agora, so what that leaves over goes on
+ *  one line of quantity 1 — the largest — and when every line has a larger
+ *  quantity, one unit of the largest is split off to carry it. `split` says
+ *  which line was split (its index in the input), so the caller can copy what
+ *  else it keeps per line. Lines are returned in their order, a split-off unit
+ *  right after the line it came from.
+ *
+ *  issue-invoice repeats this (spreadToNet there) and the two must not drift. */
+export function spreadToNet<L extends SpreadLine>(
+  lines: readonly L[],
+  net: number,
+): { lines: L[]; split: number | null } {
+  const before = lines.reduce((s, l) => s + l.unitprice * l.quantity, 0);
+  if (!(before > 0) || net >= before) return { lines: [...lines], split: null };
+  const ratio = net / before;
+  const out = lines.map((l) => ({ ...l, unitprice: round2(l.unitprice * ratio) }));
+  const left = round2(net - out.reduce((s, l) => s + l.unitprice * l.quantity, 0));
+  if (left === 0) return { lines: out, split: null };
+
+  let best = -1;
+  out.forEach((l, i) => {
+    if (l.quantity === 1 && round2(l.unitprice + left) > 0
+        && (best < 0 || l.unitprice > out[best].unitprice)) best = i;
+  });
+  if (best >= 0) {
+    out[best] = { ...out[best], unitprice: round2(out[best].unitprice + left) };
+    return { lines: out, split: null };
+  }
+
+  /* No line of one: take a unit off the largest line and let it carry the
+     rest, under the same description. */
+  let big = 0;
+  out.forEach((l, i) => { if (l.unitprice * l.quantity > out[big].unitprice * out[big].quantity) big = i; });
+  const from = out[big];
+  const unit = { ...from, quantity: 1, unitprice: round2(from.unitprice + left) };
+  out.splice(big, 1, { ...from, quantity: from.quantity - 1 }, unit);
+  return { lines: out, split: big };
+}
+
 /** `parts` and `labor` are the lines as shown, after percent discounts;
- *  `discount` says how much those took off. `vatDiscount` comes off them to give
- *  `net`, what VAT is added to.
+ *  `discount` says how much those took off. `vatDiscount` comes off them, and
+ *  then `ticketDiscount` — what a final price for the whole ticket takes off —
+ *  to give `net`, what VAT is added to.
  *
  *  VAT is to the agora. It was to the whole shekel, which put the phone a few
  *  agorot off the web and the invoice, and a VAT-discounted ₪500 at ₪499.73. */
-export const worksSummary = (works: TicketWork[]) => {
+export const worksSummary = (works: TicketWork[], finalPrice?: number | null) => {
   const parts = works.reduce((s, w) => s + partsTotal(w), 0);
   const labor = works.reduce((s, w) => s + laborNet(w), 0);
-  const net = round2(worksCharged(works));
+  const charged = round2(worksCharged(works));
+  const fixed = finalPriceNet(works, finalPrice);
+  const net = fixed ?? charged;
   const vat = round2(net * VAT);
   return {
     parts, labor, net, vat, total: round2(net + vat),
     discount: worksDiscount(works), vatDiscount: worksVatDiscount(works),
+    ticketDiscount: fixed == null ? 0 : round2(charged - fixed),
   };
 };
 

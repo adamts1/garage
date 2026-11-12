@@ -127,6 +127,11 @@ export interface Ticket {
    *  view, which is where it is put back from. Undefined on a row read before
    *  the column existed — ticketToRow then leaves the column alone. */
   boardHidden?: boolean;
+  /** What the customer pays for the whole visit, VAT included, when an admin
+   *  set one (מחיר סופי לכרטיס). Below what the lines come to, the difference is
+   *  a discount on the ticket; see finalPriceNet in catalog.ts. Null = none.
+   *  Undefined = the database has not got the column yet. */
+  finalPrice?: number | null;
 
   /** When it was cancelled and why (tickets.cancelled_at / cancel_reason).
    *  Stamped by the database when the status becomes 'cancelled'; never sent

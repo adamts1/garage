@@ -534,6 +534,7 @@ const rowToTicket = (r: any): Ticket => ({
   doc: r.doc ?? undefined,
   reference: r.reference ?? undefined,
   boardHidden: r.board_hidden ?? undefined,
+  finalPrice: r.final_price === undefined ? undefined : r.final_price == null ? null : Number(r.final_price),
   cancelledAt: r.cancelled_at ?? null,
   cancelReason: r.cancel_reason ?? null,
   legacy: r.legacy_source ? { source: r.legacy_source, number: r.legacy_number ?? '' } : null,
@@ -613,6 +614,9 @@ const ticketToRow = (t: Ticket) => ({
   /* Only when known: sent unconditionally, it would turn every save into an
      error against a database the migration has not reached yet. */
   ...(t.boardHidden !== undefined && { board_hidden: t.boardHidden }),
+  /* The same, and also: only an admin may change it (tickets_final_price_guard),
+     so a member's save carries back exactly what it read. */
+  ...(t.finalPrice !== undefined && { final_price: t.finalPrice }),
 });
 
 /* Postgres' "undefined column": the app has reached a database the migration
