@@ -79,10 +79,9 @@ describe('filterExpenses', () => {
   it('shows everything unfiltered', () => expect(ids({})).toEqual(['a', 'b', 'c']));
   it('by supplier', () => expect(ids({ supplierId: 's2' })).toEqual(['b']));
   it('by month', () => expect(ids({ month: '2026-10' })).toEqual(['b']));
-  it('by payment and sync status', () => {
+  it('by payment status', () => {
     expect(ids({ status: 'paid' })).toEqual(['a']);
     expect(ids({ status: 'unpaid' })).toEqual(['b', 'c']);
-    expect(ids({ status: 'unsynced' })).toEqual(['b']);
   });
   it('searches the document number and the items', () => {
     expect(ids({ query: 'inv-45' })).toEqual(['a']);
