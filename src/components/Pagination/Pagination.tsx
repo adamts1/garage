@@ -68,14 +68,17 @@ export default function Pagination({
       <div className={styles.spacer} />
 
       <div className={styles.pager}>
-        {/* RTL: › is the way back. */}
+        {/* RTL: back is to the right, so its chevron points right. Drawn, not
+            typed: ‹ and › are bidi-mirrored characters, and in a Hebrew line
+            the browser flips them — which is how both arrows came out
+            pointing the wrong way. */}
         <button
           type="button"
           disabled={page === 1}
           onClick={() => onPage(page - 1)}
           aria-label={t('pagination.previous')}
         >
-          ›
+          <Chevron to="right" />
         </button>
 
         {pageWindow(pages, page).map((entry, i) =>
@@ -100,7 +103,7 @@ export default function Pagination({
           onClick={() => onPage(page + 1)}
           aria-label={t('pagination.next')}
         >
-          ‹
+          <Chevron to="left" />
         </button>
       </div>
 
@@ -110,3 +113,10 @@ export default function Pagination({
     </div>
   );
 }
+
+const Chevron = ({ to }: { to: 'left' | 'right' }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={to === 'right' ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'} />
+  </svg>
+);

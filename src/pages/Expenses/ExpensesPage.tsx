@@ -9,7 +9,7 @@ import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
 import { PagedTable, RowMenu, type Column } from '../../components/Table';
-import { IconBox, IconCard, IconDoc } from '../../icons';
+import { IconBox, IconCard } from '../../icons';
 import ExpenseDrawer from './ExpenseDrawer';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
@@ -26,32 +26,6 @@ export default function ExpensesPage() {
   /* Kept between drawers: entering a stack of one day's invoices is the normal
      way this screen is used. */
   const [lastDate, setLastDate] = useState(today);
-
-  const syncPill = (e: SupplierExpense) => {
-    if (e.syncStatus === 'synced') {
-      return (
-        <Pill tone="ok" title={`iCount #${e.providerExpenseId ?? ''}`}>
-          {t('expenses.sync.synced')}
-        </Pill>
-      );
-    }
-    if (e.syncStatus === 'error') {
-      return (
-        <Pill
-          tone="danger"
-          title={e.syncError ?? t('expenses.sync.retryHint')}
-          onClick={() => void ex.retrySync(e.id)}
-        >
-          {t('expenses.sync.errorRetry')}
-        </Pill>
-      );
-    }
-    return (
-      <Pill tone="warn" title={t('expenses.sync.pendingHint')} onClick={() => void ex.retrySync(e.id)}>
-        {t('expenses.sync.pending')}
-      </Pill>
-    );
-  };
 
   const columns: Column<SupplierExpense>[] = [
     {
@@ -105,7 +79,6 @@ export default function ExpensesPage() {
           >
             {t(e.paid ? 'expenses.paid' : 'expenses.awaitingPayment')}
           </Pill>
-          {syncPill(e)}
         </div>
       ),
     },
@@ -117,7 +90,6 @@ export default function ExpensesPage() {
         <RowMenu items={[
           { label: 'expenses.print', onSelect: () => printExpense(e) },
           { label: e.paid ? 'expenses.markUnpaid' : 'expenses.markPaid', onSelect: () => void ex.togglePaid(e) },
-          { label: 'expenses.retrySync', onSelect: () => void ex.retrySync(e.id), hidden: e.syncStatus === 'synced' },
           { label: 'common.delete', onSelect: () => void ex.remove(e), danger: true },
         ]} />
       ),
@@ -146,7 +118,6 @@ export default function ExpensesPage() {
       <KpiRow>
         <KpiCard label="expenses.kpi.total" value={money(totals.total)} tone="navy" icon={<IconCard />} />
         <KpiCard label="expenses.kpi.unpaid" value={money(totals.unpaid)} tone="warn" icon={<IconCard />} />
-        <KpiCard label="expenses.kpi.unsynced" value={String(totals.unsynced)} tone="danger" icon={<IconDoc />} />
       </KpiRow>
 
       <FilterBar>
@@ -172,7 +143,6 @@ export default function ExpensesPage() {
               <option value="all">{t('expenses.filters.all')}</option>
               <option value="unpaid">{t('expenses.awaitingPayment')}</option>
               <option value="paid">{t('expenses.paid')}</option>
-              <option value="unsynced">{t('expenses.sync.pending')}</option>
             </select>
           )}
         </Filter>
