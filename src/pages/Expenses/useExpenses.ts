@@ -1,6 +1,6 @@
 import {
   createExpense, deleteExpense, listExpenses, listSuppliers, setExpensePaid,
-  linesSubtotal, subscribeToExpenses, syncExpense,
+  linesSubtotal, subscribeToExpenses,
   type ExpenseLine, type Supplier, type SupplierExpense,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -77,7 +77,7 @@ export function previewTotals(subtotal: string, vatRate: string) {
   return { subtotal: sub, vat, total: round2(sub + vat) };
 }
 
-export type ExpenseStatusFilter = 'all' | 'paid' | 'unpaid' | 'unsynced';
+export type ExpenseStatusFilter = 'all' | 'paid' | 'unpaid';
 
 export interface ExpenseFilters {
   supplierId: string;   // '' = every supplier
@@ -98,7 +98,6 @@ export function filterExpenses(rows: readonly SupplierExpense[], f: ExpenseFilte
     if (f.month && !e.date.startsWith(f.month)) return false;
     if (f.status === 'paid' && !e.paid) return false;
     if (f.status === 'unpaid' && e.paid) return false;
-    if (f.status === 'unsynced' && e.syncStatus === 'synced') return false;
     if (!q) return true;
     return [e.supplierName, e.reference, e.description, e.category, ...e.lines.map((l) => l.desc)]
       .some((v) => v?.toLowerCase().includes(q));
@@ -136,7 +135,7 @@ export function useExpenses() {
       if (!draft.supplierId || incomplete || !(subtotal > 0)) return false;
       setBusy(true);
       try {
-        const created = await run('busy.savingExpense', () => createExpense({
+        await run('busy.savingExpense', () => createExpense({
           supplierId: draft.supplierId,
           date: draft.date,
           description: draft.description,
@@ -153,18 +152,10 @@ export function useExpenses() {
           chequeDate: draft.chequeDate || null,
         }));
 
-        /* The record exists either way — the sync is a second, separate thing
-           that can fail on its own. Reporting them as one action was how "saved
-           but not synced" came to read as "not saved". */
-        try {
-          const synced = await run('busy.syncingExpense', () => syncExpense(created.id));
-          if (synced.syncStatus === 'synced') dispatch(showSuccess('expenses.savedAndSynced'));
-          else dispatch(showErrorKey('expenses.savedNotSynced', { reason: synced.syncError ?? '' }));
-        } catch (e) {
-          dispatch(showErrorKey('expenses.savedNotSynced', {
-            reason: e instanceof Error ? e.message : String(e),
-          }));
-        }
+        /* Saved here only. Pushing expenses to iCount was switched off on
+           2026-11-12 (the garage's choice); record-expense and the sync columns
+           are left in place so it can come back without a migration. */
+        dispatch(showSuccess('expenses.saved'));
 
         load();
         return true;
@@ -173,23 +164,6 @@ export function useExpenses() {
         return false;
       } finally {
         setBusy(false);
-      }
-    },
-    [dispatch, load, run],
-  );
-
-  const retrySync = useCallback(
-    async (id: string) => {
-      try {
-        const synced = await run('busy.syncingExpense', () => syncExpense(id));
-        dispatch(
-          synced.syncStatus === 'synced'
-            ? showSuccess('expenses.synced')
-            : showErrorKey('expenses.syncFailed', { reason: synced.syncError ?? '' }),
-        );
-        load();
-      } catch (e) {
-        dispatch(showError(e));
       }
     },
     [dispatch, load, run],
@@ -233,7 +207,6 @@ export function useExpenses() {
     () => ({
       total: rows.reduce((s, e) => s + e.total, 0),
       unpaid: rows.filter((e) => !e.paid).reduce((s, e) => s + e.total, 0),
-      unsynced: rows.filter((e) => e.syncStatus !== 'synced').length,
     }),
     [rows],
   );
@@ -244,6 +217,6 @@ export function useExpenses() {
     rows, shown, suppliers, usedCategories, busy, totals,
     filters, setFilters,
     filtered: (Object.keys(NO_FILTERS) as (keyof ExpenseFilters)[]).some((k) => filters[k] !== NO_FILTERS[k]),
-    create, retrySync, togglePaid, remove,
+    create, togglePaid, remove,
   };
 }
