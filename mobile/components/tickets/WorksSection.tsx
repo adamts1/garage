@@ -26,9 +26,12 @@ import { WorkPicker } from './WorkPicker';
 export function WorksSection({
   works,
   onChange,
+  finalPrice,
 }: {
   works: TicketWork[];
   onChange: (works: TicketWork[]) => void;
+  /** The ticket's final price, set on the web; counted in the totals here. */
+  finalPrice?: number | null;
 }) {
   const { t } = useTranslation();
 
@@ -40,7 +43,7 @@ export function WorksSection({
   /* Free text: 'work' for a new work, or the uid of the work a part goes on. */
   const [freeFor, setFreeFor] = useState<'work' | string | null>(null);
 
-  const sum = worksSummary(works);
+  const sum = worksSummary(works, finalPrice);
 
   /* What a customer is charged is an admin's call. A member still adds works,
      removes them, edits their parts and writes the note — everything except
@@ -149,6 +152,11 @@ export function WorksSection({
               it, and the net above is already after it. */}
           {sum.vatDiscount > 0 ? (
             <TotalRow label={t('works.totals.vatDiscount')} value={`-${money(sum.vatDiscount)}`} />
+          ) : null}
+          {/* A final price for the whole ticket, below the lines — set on the
+              web; already out of the net above, like the VAT discount. */}
+          {sum.ticketDiscount > 0 ? (
+            <TotalRow label={t('works.totals.ticketDiscount')} value={`-${money(sum.ticketDiscount)}`} />
           ) : null}
           <TotalRow
             label={t('works.totals.vat', { percent: Math.round(VAT * 100) })}

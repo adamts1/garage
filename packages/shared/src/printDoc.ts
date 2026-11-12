@@ -283,6 +283,8 @@ export interface TicketTotals {
   items: number;
   vat: number;
   total: number;
+  /** A final price's discount on the whole ticket, before VAT. */
+  ticketDiscount?: number;
 }
 
 /* One work and everything that makes up its price, as its own block.
@@ -395,6 +397,8 @@ export const workOrderHtml = (
   const discount = worksDiscount(works);
   /* Subtracted, unlike the discount: the lines show the price before it. */
   const vatDiscount = worksVatDiscount(works);
+  /* Subtracted too: a final price for the whole ticket, below the lines. */
+  const ticketDiscount = totals.ticketDiscount ?? 0;
 
   const lines = works.length
     ? works.map(workBlock).join('')
@@ -482,7 +486,9 @@ export const workOrderHtml = (
           ${row('סכום ביניים', money(totals.labour + totals.items))}
           ${discount > 0 ? row('מזה הנחה', `-${money(discount)}`) : ''}
           ${vatDiscount > 0 ? row('מע״מ הכלול במחירים', `-${money(vatDiscount)}`) : ''}
-          ${vatDiscount > 0 ? row('סה״כ לפני מע״מ', money(totals.labour + totals.items - vatDiscount)) : ''}
+          ${ticketDiscount > 0 ? row('הנחה על הכרטיס', `-${money(ticketDiscount)}`) : ''}
+          ${vatDiscount > 0 || ticketDiscount > 0
+            ? row('סה״כ לפני מע״מ', money(totals.labour + totals.items - vatDiscount - ticketDiscount)) : ''}
           ${row(`מע״מ ${Math.round(VAT * 100)}%`, money(totals.vat))}
         </table>` : ''}
         <div class="grand">

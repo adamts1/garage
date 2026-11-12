@@ -1,5 +1,6 @@
 import {
-  VAT, laborNet, partsTotal, worksCharged, worksDiscount, worksVatDiscount, type Ticket, type TicketWork,
+  VAT, finalPriceNet, laborNet, partsTotal, worksCharged, worksDiscount, worksVatDiscount,
+  type Ticket, type TicketWork,
 } from '@garage/shared';
 
 export interface TicketTotals {
@@ -16,17 +17,23 @@ export interface TicketTotals {
   /** What the VAT discounts (הנחת מע״מ) take off labour + items. NOT already
    *  out of them: those are the lines as shown, and VAT goes on what is left. */
   vatDiscount: number;
+  /** What a final price for the whole ticket takes off, before VAT. Like
+   *  vatDiscount, NOT already out of labour + items. 0 when none applies. */
+  ticketDiscount: number;
 }
 
 /** What the summary panel, the printed ticket and the issue dialog all show. */
-export function ticketTotals(works: readonly TicketWork[]): TicketTotals {
+export function ticketTotals(works: readonly TicketWork[], finalPrice?: number | null): TicketTotals {
   const labour = works.reduce((s, w) => s + laborNet(w), 0);
   const items = works.reduce((s, w) => s + partsTotal(w), 0);
-  const charged = worksCharged(works);
+  const lines = worksCharged(works);
+  const fixed = finalPriceNet(works, finalPrice);
+  const charged = fixed ?? lines;
   const vat = charged * VAT;
   return {
     labour, items, vat, total: charged + vat,
     discount: worksDiscount(works), vatDiscount: worksVatDiscount(works),
+    ticketDiscount: fixed == null ? 0 : Math.round((lines - fixed) * 100) / 100,
   };
 }
 
@@ -39,8 +46,8 @@ export function ticketTotals(works: readonly TicketWork[]): TicketTotals {
  * than corrected here — `amount` feeds the board, the archive and the customer
  * report, and changing it is a decision about money, not a tidy-up.
  */
-export function storedAmount(works: readonly TicketWork[]): number {
-  return Math.round(worksCharged(works) * (1 + VAT));
+export function storedAmount(works: readonly TicketWork[], finalPrice?: number | null): number {
+  return Math.round((finalPriceNet(works, finalPrice) ?? worksCharged(works)) * (1 + VAT));
 }
 
 /** Work is finished — enough to notify the customer. */

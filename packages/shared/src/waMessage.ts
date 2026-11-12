@@ -106,7 +106,7 @@ const workLines = (w: TicketWork): string[] => [
 
 /** Only what the message says; anything else on a ticket is the sender's business. */
 export type WaTicket = Pick<Ticket, 'customer' | 'car' | 'plate' | 'title' | 'paid'> &
-  Partial<Pick<Ticket, 'payMethod' | 'works'>>;
+  Partial<Pick<Ticket, 'payMethod' | 'works' | 'finalPrice'>>;
 
 export interface WaMessageInput {
   ticket: WaTicket;
@@ -123,8 +123,13 @@ export interface WaMessageInput {
    longer add up to the pre-VAT total by themselves: say what they come to and
    what the VAT discount took off, then the total VAT goes on. */
 const vatDiscountLines = (sum: ReturnType<typeof worksSummary>): string[] =>
-  sum.vatDiscount > 0
-    ? [`סה״כ: ${money(sum.labor + sum.parts)}`, `מע״מ הכלול במחירים: -${money(sum.vatDiscount)}`]
+  sum.vatDiscount > 0 || sum.ticketDiscount > 0
+    ? [
+        `סה״כ: ${money(sum.labor + sum.parts)}`,
+        ...(sum.vatDiscount > 0 ? [`מע״מ הכלול במחירים: -${money(sum.vatDiscount)}`] : []),
+        /* A final price for the whole ticket, below the lines. */
+        ...(sum.ticketDiscount > 0 ? [`הנחה על הכרטיס: -${money(sum.ticketDiscount)}`] : []),
+      ]
     : [];
 
 export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput): string {
@@ -144,7 +149,7 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
        whose own lines do not add up to its own total is the one thing a
        customer checks. Suppressed when there are no works to price - the total
        is then the ticket's own amount, and nothing here explains it. */
-    const sum = worksSummary(works);
+    const sum = worksSummary(works, ticket.finalPrice);
     const vat = total - sum.net;
 
     return [
@@ -164,7 +169,7 @@ export function waMessage({ ticket, closed, total, photos = [] }: WaMessageInput
     ].join('\n');
   }
 
-  const sum = worksSummary(works);
+  const sum = worksSummary(works, ticket.finalPrice);
   return [
     greeting,
     `לרכב ${car} נדרש אישורך לביצוע העבודות הבאות:`,
