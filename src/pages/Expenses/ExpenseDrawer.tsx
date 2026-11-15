@@ -19,7 +19,7 @@ import { IconBox, IconTrash } from '../../icons';
 import { useAppSelector } from '../../store';
 import styles from './ExpenseDrawer.module.css';
 import {
-  blankExpense, blankLine, draftSubtotal, previewTotals, readyLines,
+  blankExpense, blankLine, draftSubtotal, lineQty, previewTotals, readyLines,
   type DraftLine, type ExpenseDraft,
 } from './useExpenses';
 
@@ -145,7 +145,6 @@ export default function ExpenseDrawer({
           {draft.lines.map((l) => (
             <div className={styles.line} key={l.uid}>
               <input
-                
                 value={l.desc}
                 placeholder={t('expenses.lines.descPlaceholder')}
                 aria-label={t('expenses.lines.desc')}
@@ -154,6 +153,7 @@ export default function ExpenseDrawer({
               <input
                 inputMode="decimal"
                 aria-label={t('expenses.lines.qty')}
+                placeholder="1"
                 value={l.qty}
                 onChange={(e) => patchLine(l.uid, { qty: e.target.value })}
               />
@@ -165,7 +165,7 @@ export default function ExpenseDrawer({
                 onChange={(e) => patchLine(l.uid, { unitPrice: e.target.value })}
               />
               <span className={styles.lineTotal}>
-                {money((Number(l.qty) || 0) * (Number(l.unitPrice) || 0))}
+                {money(lineQty(l.qty) * (Number(l.unitPrice) || 0))}
               </span>
               <Button
                 variant="ghostDanger" size="sm"
@@ -194,6 +194,12 @@ export default function ExpenseDrawer({
                 ages the bill in the obligo and aging reports. */}
             <TextField label="expenses.fields.dueDate" hint="expenses.dueDateHint" type="date" {...set('dueDate')} />
           </div>
+          {/* The cheque number is always offered (2026-11-15): it used to
+              appear only once "paid" was ticked, and nobody found it there. */}
+          <div className={styles.pair}>
+            <TextField label="expenses.fields.chequeNumber" inputMode="numeric" dir="ltr" {...set('chequeNumber')} />
+            <div />
+          </div>
           <CheckboxField
             label="expenses.drawer.paid"
             checked={draft.paid}
@@ -203,8 +209,8 @@ export default function ExpenseDrawer({
               choosing — that date is the whole subject of the obligo report. */}
           {draft.paid && (
             <div className={styles.pair}>
-              <TextField label="expenses.fields.chequeNumber" {...set('chequeNumber')} />
               <TextField label="expenses.fields.chequeDate" hint="expenses.chequeDateHint" type="date" {...set('chequeDate')} />
+              <div />
             </div>
           )}
         </section>

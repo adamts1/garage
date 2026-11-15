@@ -250,6 +250,8 @@ export interface StandaloneInvoiceInput {
   /** The car it was for — frozen on the document as its `vehicle`, like a
    *  ticket's, and printed in the provider's remark line. */
   vehiclePlate?: string | null;
+  /** The car's name ("טויוטה קורולה 2019"), frozen beside the plate. */
+  vehicleCar?: string | null;
   lines: readonly StandaloneLine[];
   docType?: BillDocType;
   /** Only meaningful on an invoice-receipt: a tax invoice records no payment. */
@@ -274,6 +276,7 @@ export const issueStandaloneInvoice = async (input: StandaloneInvoiceInput): Pro
       customer_address: input.customerAddress ?? null,
       customer_phone: input.customerPhone ?? null,
       vehicle_plate: input.vehiclePlate ?? null,
+      vehicle_car: input.vehicleCar ?? null,
       pay_method: input.payMethod ?? null,
       pay_reference: input.payReference ?? null,
       lines: input.lines.map((l) => ({ desc: l.desc, qty: l.qty, unit_price: l.unit_price })),

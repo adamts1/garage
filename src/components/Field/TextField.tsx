@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { decimalDefaults } from '../Table/RowControls';
 import Field, { fieldStyles as styles, type FieldProps } from './Field';
 
 type Shared = Omit<FieldProps, 'children'>;
@@ -17,7 +18,7 @@ export function TextField({
 }: TextFieldProps) {
   return (
     <Field {...{ label, labelValues, hint, error, required, disabled, dense, className }}>
-      {(f) => <input {...f.controlProps} {...input} className={controlClass(error)} />}
+      {(f) => <input {...f.controlProps} {...decimalDefaults(input.type)} {...input} className={controlClass(error)} />}
     </Field>
   );
 }

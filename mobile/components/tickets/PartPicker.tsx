@@ -104,7 +104,7 @@ export function PartPicker({
   const submitCreate = async () => {
     if (!name.trim() || !cleanSku || clash || saving) return;
 
-    const part = { sku: cleanSku, name: name.trim(), price: Number(price) || 0 };
+    const part = { sku: cleanSku, name: name.trim(), price: Number(price.replace(',', '.')) || 0 };
 
     if (!keep) {
       onPick([...pickedParts(), { ...part, qty: 1 }]);
@@ -164,7 +164,7 @@ export function PartPicker({
                     style={s.input}
                     value={price}
                     onChangeText={setPrice}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     placeholder="0"
                     placeholderTextColor={C.dim}
                   />

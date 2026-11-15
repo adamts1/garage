@@ -130,7 +130,7 @@ export function WorkPicker({
     const draft = {
       code: cleanCode,
       name: name.trim(),
-      labor: Number(price) || 0,
+      labor: Number(price.replace(',', '.')) || 0,
       hours: 0,
       items: [] as WorkDef['items'], // parts are added on the ticket, where the work now lives
     };
@@ -212,7 +212,7 @@ export function WorkPicker({
                     style={s.input}
                     value={price}
                     onChangeText={setPrice}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
                     placeholder="0"
                     placeholderTextColor={C.dim}
                   />

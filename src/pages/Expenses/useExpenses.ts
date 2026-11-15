@@ -32,7 +32,13 @@ export interface DraftLine {
 }
 
 let lineSeq = 0;
-export const blankLine = (): DraftLine => ({ uid: `l${lineSeq++}`, desc: '', qty: '1', unitPrice: '' });
+/* The quantity starts blank (2026-11-15, the garage's ask) and blank means 1:
+   the box shows a grey "1" so most lines need nothing typed, while a typed
+   quantity is never sitting next to a pre-filled one nobody chose. */
+export const blankLine = (): DraftLine => ({ uid: `l${lineSeq++}`, desc: '', qty: '', unitPrice: '' });
+
+/** A typed quantity as a figure. Blank is 1 — see blankLine. */
+export const lineQty = (qty: string): number => (qty.trim() === '' ? 1 : Number(qty) || 0);
 
 /** The typed lines as figures, and whether any of them is half-filled.
  *
@@ -45,7 +51,7 @@ export function readyLines(lines: readonly DraftLine[]): { lines: ExpenseLine[];
   let incomplete = false;
   for (const l of lines) {
     const desc = l.desc.trim();
-    const qty = Number(l.qty) || 0;
+    const qty = lineQty(l.qty);
     const unitPrice = Number(l.unitPrice) || 0;
     if (!desc && !l.unitPrice.trim()) continue;
     if (!desc || qty <= 0 || unitPrice < 0) { incomplete = true; continue; }
@@ -90,7 +96,7 @@ export const NO_FILTERS: ExpenseFilters = { supplierId: '', month: '', status: '
 
 /** The rows the filter bar asks for. Pure, so it can be tested on its own.
  *  The search reads the supplier, the supplier's document number, the
- *  description and the items — what someone holding the paper would type. */
+ *  cheque number, the description and the items — what someone holding the paper would type. */
 export function filterExpenses(rows: readonly SupplierExpense[], f: ExpenseFilters): SupplierExpense[] {
   const q = f.query.trim().toLowerCase();
   return rows.filter((e) => {
@@ -99,7 +105,7 @@ export function filterExpenses(rows: readonly SupplierExpense[], f: ExpenseFilte
     if (f.status === 'paid' && !e.paid) return false;
     if (f.status === 'unpaid' && e.paid) return false;
     if (!q) return true;
-    return [e.supplierName, e.reference, e.description, e.category, ...e.lines.map((l) => l.desc)]
+    return [e.supplierName, e.reference, e.chequeNumber, e.description, e.category, ...e.lines.map((l) => l.desc)]
       .some((v) => v?.toLowerCase().includes(q));
   });
 }
