@@ -153,7 +153,6 @@ export default function ExpenseDrawer({
               <input
                 inputMode="decimal"
                 aria-label={t('expenses.lines.qty')}
-                placeholder="1"
                 value={l.qty}
                 onChange={(e) => patchLine(l.uid, { qty: e.target.value })}
               />

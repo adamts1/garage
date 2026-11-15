@@ -32,13 +32,13 @@ export interface DraftLine {
 }
 
 let lineSeq = 0;
-/* The quantity starts blank (2026-11-15, the garage's ask) and blank means 1:
-   the box shows a grey "1" so most lines need nothing typed, while a typed
-   quantity is never sitting next to a pre-filled one nobody chose. */
+/* The quantity starts blank (2026-11-15, the garage's ask): nothing is
+   pre-filled that nobody typed. A priced line with no quantity is incomplete
+   and holds the save, like a quantity of 0. */
 export const blankLine = (): DraftLine => ({ uid: `l${lineSeq++}`, desc: '', qty: '', unitPrice: '' });
 
-/** A typed quantity as a figure. Blank is 1 — see blankLine. */
-export const lineQty = (qty: string): number => (qty.trim() === '' ? 1 : Number(qty) || 0);
+/** A typed quantity as a figure. Blank is 0 — see blankLine. */
+export const lineQty = (qty: string): number => Number(qty) || 0;
 
 /** The typed lines as figures, and whether any of them is half-filled.
  *

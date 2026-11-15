@@ -55,10 +55,8 @@ describe('the items on an expense', () => {
     expect(readyLines([line('', '1', '80')]).incomplete).toBe(true);
   });
 
-  it('reads a blank quantity as one', () => {
-    expect(readyLines([line('מגבים', '', '40')])).toEqual({
-      lines: [{ desc: 'מגבים', qty: 1, unit_price: 40 }], incomplete: false,
-    });
+  it('holds a priced line whose quantity was left blank', () => {
+    expect(readyLines([line('מגבים', '', '40')]).incomplete).toBe(true);
   });
 
   it('starts a line with the quantity blank', () => {
