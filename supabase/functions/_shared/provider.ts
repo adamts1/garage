@@ -139,6 +139,9 @@ export interface ExportBookkeepingInput {
   expenses: boolean;
   clients: boolean;
   suppliers: boolean;
+  /** Sent as export_cards. This, not clients/suppliers, is what puts
+   *  heshin.dat and heshin.prm in the archive (and only for some formats). */
+  cards: boolean;
   /** Where to call back. Carries the export's secret in its path — it is the
    *  only thing that ties a callback to the export that asked for it, since the
    *  order itself comes back with no identifier. */

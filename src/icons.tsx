@@ -188,3 +188,36 @@ export const IconInfo = ({ size = base.width }: { size?: number }) => (
     <path d="M12 8h.01" />
   </svg>
 );
+
+/* bookkeeping export */
+export const IconExport = () => (
+  <svg {...base}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+    <path d="M11 13h10" />
+    <path d="m18 10 3 3-3 3" />
+  </svg>
+);
+
+export const IconLayers = () => (
+  <svg {...base}>
+    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 13 9 5 9-5" />
+    <path d="m3 17.5 9 5 9-5" />
+  </svg>
+);
+
+export const IconMail = () => (
+  <svg {...base}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3.5 6.5 8.5 6 8.5-6" />
+  </svg>
+);
+
+export const IconDownload = () => (
+  <svg {...base}>
+    <path d="M12 4v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M4 19h16" />
+  </svg>
+);

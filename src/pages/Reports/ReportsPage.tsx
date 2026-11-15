@@ -39,15 +39,21 @@ export default function ReportsPage({ tickets }: { tickets: Ticket[] }) {
   return (
     <>
       <PageHeader
-        title="reports.title"
+        /* The bookkeeping export is not a report about the garage's customers,
+           so it does not borrow that title. */
+        title={tab === 'bookkeeping' ? 'reports.tabs.bookkeeping' : 'reports.title'}
         subtitle={`reports.subtitles.${tab}`}
         actions={
           /* Print stays on the shell: it prints what is on screen, and what is
              on screen is whichever report is open. Export does not — each report
-             exports its own columns, so its button lives with its table. */
-          <Button onClick={() => window.print()}>
-            <IconPrint /> {t('reports.print')}
-          </Button>
+             exports its own columns, so its button lives with its table.
+             Not on the bookkeeping export: it is a screen of actions, not a
+             report, and there is nothing on it worth a sheet of paper. */
+          tab === 'bookkeeping' ? undefined : (
+            <Button onClick={() => window.print()}>
+              <IconPrint /> {t('reports.print')}
+            </Button>
+          )
         }
       />
 

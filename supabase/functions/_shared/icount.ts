@@ -311,6 +311,7 @@ export const icountAdapter: InvoiceProvider = {
       export_expenses: input.expenses,
       export_clients: input.clients,
       export_suppliers: input.suppliers,
+      export_cards: input.cards,
       webhook_url: input.webhookUrl,
       webhook_method: 'JSON',
     });
