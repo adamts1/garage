@@ -615,10 +615,11 @@ Deno.serve(async (req) => {
 
       const payMethod = docType === 'invoice_receipt' ? (body.pay_method as string | null) ?? null : null;
       /* The car, when one was given: the same snapshot a ticket's invoice
-         freezes, minus what a counter sale does not know (model, km, dates).
-         Optional here so a client from before 2026-11-11 still issues; the
-         dialog is what requires it. */
-      const vehicle = vehicleOf({ plate: body.vehicle_plate });
+         freezes, minus what a counter sale does not know (km, dates). The
+         plate is optional here so a client from before 2026-11-11 still
+         issues; the dialog is what requires it. The car's name came on
+         2026-11-15 and is optional everywhere. */
+      const vehicle = vehicleOf({ plate: body.vehicle_plate, car: body.vehicle_car });
 
       const doc = await provide(() => adapter.issue({
         credentials,

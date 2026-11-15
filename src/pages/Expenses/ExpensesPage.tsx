@@ -55,6 +55,12 @@ export default function ExpensesPage() {
       render: (e) => e.reference || '-',
     },
     {
+      key: 'cheque',
+      header: 'expenses.fields.chequeNumber',
+      cellClassName: styles.muted,
+      render: (e) => (e.chequeNumber ? <bdi>{e.chequeNumber}</bdi> : '-'),
+    },
+    {
       key: 'total',
       header: 'expenses.fields.total',
       sortValue: (e) => e.total,
