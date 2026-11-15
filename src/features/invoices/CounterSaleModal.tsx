@@ -27,6 +27,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
+import { decimalDefaults } from '../../components/Table/RowControls';
 import Modal from '../../components/Modal/Modal';
 import type { ModalComponentProps } from '../../components/Modal/types';
 import { IconBox, IconDoc, IconInfo, IconSearch, IconTrash } from '../../icons';
@@ -177,6 +178,17 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
 
   const patch = (uid: string, over: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.uid === uid ? { ...r, ...over } : r)));
+
+  /* A line picked from the catalogue was priced by it under the mode it was
+     picked in; flipping כולל מע״מ re-prices those lines to match, or a
+     pre-VAT catalogue price would be read as VAT-inclusive (and back). A
+     line typed by hand is left as typed: they chose what its price means. */
+  const toggleInclVat = (on: boolean) => {
+    setInclVat(on);
+    setRows((rs) => rs.map((r) => (r.sku
+      ? { ...r, unit_price: round2(on ? r.unit_price * (1 + VAT) : r.unit_price / (1 + VAT)) }
+      : r)));
+  };
 
   const addFromCatalogue = async () => {
     const parts: PartDef[] | null = await pickPart({ taken: rows.map((r) => r.sku ?? '').filter(Boolean) });
@@ -401,13 +413,13 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                     onChange={(e) => patch(r.uid, { desc: e.target.value, sku: null })}
                   />
                   <input
-                    className={styles.cell} type="number" min={0} step="any" inputMode="decimal" dir="ltr"
+                    className={styles.cell} type="number" min={0} {...decimalDefaults('number')} dir="ltr"
                     aria-label={t('counterSale.fields.qty')}
                     value={r.qty}
                     onChange={(e) => patch(r.uid, { qty: e.target.value })}
                   />
                   <input
-                    className={styles.cell} type="number" min={0} step="any" inputMode="decimal" dir="ltr"
+                    className={styles.cell} type="number" min={0} {...decimalDefaults('number')} dir="ltr"
                     aria-label={t('counterSale.fields.unitPrice')}
                     value={r.unit_price}
                     onChange={(e) => patch(r.uid, { unit_price: Number(e.target.value) || 0 })}
@@ -431,7 +443,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                 ＋ {t('counterSale.addLine')}
               </button>
               <label className={styles.inclVat}>
-                <input type="checkbox" checked={inclVat} onChange={(e) => setInclVat(e.target.checked)} />
+                <input type="checkbox" checked={inclVat} onChange={(e) => toggleInclVat(e.target.checked)} />
                 {t('counterSale.pricesInclVat')}
               </label>
             </div>

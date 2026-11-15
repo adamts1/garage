@@ -130,7 +130,7 @@ export function WorkPicker({
     const draft = {
       code: cleanCode,
       name: name.trim(),
-      labor: Number(price.replace(',', '.')) || 0,
+      labor: Number(price.includes('.') ? price.replace(/,/g, '') : price.replace(/,/g, '.')) || 0,
       hours: 0,
       items: [] as WorkDef['items'], // parts are added on the ticket, where the work now lives
     };
