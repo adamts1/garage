@@ -115,14 +115,14 @@
       "obligo": "אובליגו",
       "aging": "גיול חובות",
       "customers": "לקוחות",
-      "bookkeeping": "יצוא להנהלת חשבונות"
+      "bookkeeping": "ייצוא להנהלת חשבונות"
     },
     "subtitles": {
       "income": "מה חויב, לפי סוג מסמך ותקופה",
       "obligo": "מה המוסך מחויב לשלם, ומתי",
       "aging": "כמה זמן החוב קיים - לשני הכיוונים",
       "customers": "סיכום פעילות כספית לפי לקוחות בטווח הנבחר",
-      "bookkeeping": "קובץ תנועות לחשבשבת, לפי טווח תאריכים"
+      "bookkeeping": "הפקת קבצים ושליחה לרואה החשבון"
     },
     "income": {
       "breakdown": "פירוט לפי סוג מסמך",
@@ -1068,22 +1068,50 @@
     "syncingExpense": "מסנכרן מול הנהלת החשבונות…",
     "orderingExport": "מזמין קובץ להנהלת חשבונות…",
     "fetchingExport": "מוריד את הקובץ…",
+    "zippingExport": "מכין קובץ zip…",
+    "sendingExport": "שולח לרואה החשבון…",
+    "savingAccountantEmail": "שומר את מייל רואה החשבון…",
+    "savingSoftware": "שומר את מערכת הנהלת החשבונות…",
     "savingWorker": "שומר את פרטי העובד…",
     "cancellingTicket": "מבטל את הכרטיס…"
   },
   "bookkeeping": {
-    "include": "מה לכלול",
-    "includes": {
-      "docs": "מסמכים",
-      "expenses": "הוצאות",
-      "clients": "לקוחות",
-      "suppliers": "ספקים"
+    "include": "אילו קבצים",
+    "software": {
+      "rivhit": "ריווחית",
+      "hashavshevet": "חשבשבת"
     },
-    "explainer": "הקובץ נבנה אצל ספק הנהלת החשבונות ולוקח כמה דקות. אפשר לעזוב את המסך - הוא יופיע ברשימה כשיהיה מוכן.",
-    "order": "הזמן קובץ",
-    "ordered": "היצוא הוזמן. הקובץ יופיע ברשימה בעוד כמה דקות.",
-    "download": "הורד movein.dat",
+    "target": "מייצאים למערכת הנהלת החשבונות:",
+    "chooseSoftware": "בחרו מערכת…",
+    "notSet": "לא הוגדרה",
+    "noSoftware": "אי אפשר להזמין קבצים עד שמנהל המוסך יבחר את מערכת הנהלת החשבונות.",
+    "noSoftwareAdmin": "אי אפשר להזמין קבצים לפני שבוחרים מערכת - הקבצים בנויים אחרת לכל אחת.",
+    "confirmSoftware": "לשנות את מערכת הנהלת החשבונות ל{{software}}? כל הקבצים שיוזמנו מעכשיו ייבנו בפורמט של {{software}}. קבצים שכבר הוזמנו לא ישתנו.",
+    "softwareSaved": "מערכת הנהלת החשבונות נשמרה",
+    "accountantEmail": "מייל רואה החשבון:",
+    "saveEmail": "שמור",
+    "accountantEmailSaved": "מייל רואה החשבון נשמר",
+    "noAccountantEmail": "מנהל המוסך צריך להגדיר את מייל רואה החשבון למעלה",
+    "send": "שלח לרו״ח",
+    "resend": "שלח שוב לרו״ח",
+    "confirmSend": "לשלוח את קבצי {{software}} לתקופה {{range}} אל {{to}}? עותק יישלח אליך.",
+    "confirmResend": "הקבצים האלה כבר נשלחו ב־{{when}}. לשלוח אותם שוב אל {{to}}?",
+    "sent": "הקבצים נשלחו לרואה החשבון",
+    "sentTo": "נשלח ל־{{to}} ב־{{when}}",
+    "sending": "בשליחה…",
+    "sendFailed": "השליחה נכשלה: {{error}}",
+    "softwareLoadFailed": "לא הצלחנו לקרוא את מערכת הנהלת החשבונות של המוסך: {{error}}",
+    "files": {
+      "movein_dat": "תנועות",
+      "heshin_dat": "לקוחות וספקים",
+      "heshin_prm": "הגדרות כרטיסים"
+    },
+    "explainer": "הקבצים יופיעו ברשימה כשהם מוכנים - זה לוקח כמה דקות, ואפשר לעזוב את המסך",
+    "order": "צור קובץ ייצוא",
+    "orderFor": "הזמן קבצים ל{{software}}",
+    "ordered": "היצוא הוזמן. הקבצים יופיעו ברשימה בעוד כמה דקות.",
     "downloading": "הקובץ יורד",
+    "downloadZip": "הורד ZIP",
     "preparing": "בהכנה…",
     "retry": "נסה להוריד שוב",
     "none": "עדיין לא הוזמנו קבצים",
@@ -1094,11 +1122,48 @@
     },
     "fields": {
       "range": "טווח",
+      "files": "קבצים",
       "status": "מצב",
       "size": "גודל",
       "requested": "הוזמן",
-      "file": "קובץ"
-    }
+      "file": "הורדה",
+      "period": "תקופה",
+      "software": "מערכת הנהלת חשבונות",
+      "created": "נוצר בתאריך",
+      "actions": "פעולות",
+      "softwareShort": "מערכת"
+    },
+    "newTitle": "יצירת ייצוא חדש",
+    "historyTitle": "היסטוריית ייצוא",
+    "historySubtitle": "כל הקבצים והשליחות במקום אחד",
+    "recipient": "נשלח אל:",
+    "editEmail": "שינוי",
+    "setEmail": "הגדרה",
+    "accountantEmailTitle": "מייל רואה החשבון",
+    "accountantEmailLabel": "לכתובת הזו יישלחו קבצי הנהלת החשבונות של המוסך",
+    "adminOnly": "רק מנהל המוסך יכול לשנות",
+    "sentShort": "נשלח לרו״ח",
+    "sendFailedShort": "השליחה נכשלה - פרטים בתפריט ⋯",
+    "downloadFile": {
+      "movein_dat": "הורד רק את movein.dat",
+      "heshin_dat": "הורד רק את heshin.dat",
+      "heshin_prm": "הורד רק את heshin.prm"
+    },
+    "details": {
+      "open": "פרטים",
+      "title": "פרטי הייצוא",
+      "body": "{{text}}",
+      "files": "קבצים: {{files}}",
+      "neverSent": "עוד לא נשלח לרואה החשבון.",
+      "error": "שגיאה: {{error}}",
+      "email": {
+        "sent": "נשלח ל־{{to}} ב־{{when}}.",
+        "sending": "בשליחה ל־{{to}} (התחיל ב־{{when}}).",
+        "error": "שליחה ל־{{to}} ב־{{when}} נכשלה: {{error}}"
+      }
+    },
+    "fileCountOne": "קובץ אחד",
+    "fileCount": "{{count}} קבצים"
   },
   "collect": {
     "outstanding": "נותרו {{owed}} לתשלום",

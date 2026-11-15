@@ -1327,6 +1327,117 @@ const forgeReady = await rest(`bookkeeping_exports?id=eq.${exportId}`, a.token, 
 });
 check('a client cannot mark an export ready', forgeReady.status >= 400, `got ${forgeReady.status}`);
 
+// Parts — one per order to the provider — hold the callback tokens and the
+// provider's download links now. Both are secrets, so the table is server only:
+// no grant to `authenticated` at all, not even for the garage's own rows.
+const partRes = await admin('/rest/v1/bookkeeping_export_parts', {
+  method: 'POST', headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({
+    export_id: exportId,
+    garage_id: a.garage.id,
+    kind: 'all',
+    format: 'rivhit',
+    files: ['movein.dat'],
+    callback_token: `ptok${stamp}`,
+  }),
+});
+const partId = (await partRes.json())[0]?.id;
+check('an export part can be created server-side', partRes.status === 201 && Boolean(partId), `got ${partRes.status}`);
+
+const partPeek = await rest('bookkeeping_export_parts?select=id', a.token);
+check('A cannot read export parts, even their own', partPeek.status >= 400, `got ${partPeek.status}`);
+
+const filesPeek = await rest(`bookkeeping_exports?id=eq.${exportId}&select=files,file_sizes`, a.token);
+check('A can read which files their export holds', filesPeek.status === 200, `got ${filesPeek.status}`);
+
+// Marking a part ready is what flips an export to ready. Server only.
+const forgePart = await rest('rpc/bookkeeping_part_ready', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ p_part: partId, p_sizes: { 'movein.dat': 1 } }),
+});
+check('a client cannot mark an export part ready', forgePart.status >= 400, `got ${forgePart.status}`);
+
+// Which software the bookkeeper uses decides which files are ordered, so who can
+// change it matters. Only an admin of THIS garage, only through the function,
+// only for their own garage.
+await admin('/rest/v1/garage_billing', {
+  method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' },
+  body: JSON.stringify({ garage_id: a.garage.id }),
+});
+const readSoftware = async (token) =>
+  (await (await rest('garage_billing?select=bookkeeping_software', token)).json())[0]?.bookkeeping_software;
+
+const memberSets = await rpc('set_bookkeeping_software', memberToken, { p_software: 'rivhit' });
+check('a member cannot set the bookkeeping software', memberSets.status >= 400, `got ${memberSets.status}`);
+
+const adminSets = await rpc('set_bookkeeping_software', a.token, { p_software: 'rivhit' });
+check('an admin can set the bookkeeping software', adminSets.status === 200, `got ${adminSets.status}`);
+check('the member sees what the admin set', (await readSoftware(memberToken)) === 'rivhit');
+
+const badSoftware = await rpc('set_bookkeeping_software', a.token, { p_software: 'excel' });
+check('an unknown bookkeeping software is refused', badSoftware.status >= 400, `got ${badSoftware.status}`);
+
+// B is an admin too — of their own garage, which has no billing row. Their call
+// must fail there and leave A's setting alone.
+const bSets = await rpc('set_bookkeeping_software', b.token, { p_software: 'hashavshevet' });
+check("B's admin call does not reach A's garage", bSets.status >= 400 && (await readSoftware(a.token)) === 'rivhit',
+  `got ${bSets.status}`);
+
+// Not through the table directly: garage_billing has no client write grant.
+await rest(`garage_billing?garage_id=eq.${a.garage.id}`, a.token, {
+  method: 'PATCH', body: JSON.stringify({ bookkeeping_software: 'hashavshevet' }),
+});
+check('the table itself cannot be written by a client', (await readSoftware(a.token)) === 'rivhit');
+
+// The accountant's email decides where a garage's books are sent. Admin of
+// THIS garage only, through the function only.
+const readEmail = async (token) =>
+  (await (await rest('garage_billing?select=accountant_email', token)).json())[0]?.accountant_email;
+
+const memberEmail1 = await rpc('set_accountant_email', memberToken, { p_email: 'evil@example.com' });
+check("a member cannot set the accountant's email", memberEmail1.status >= 400, `got ${memberEmail1.status}`);
+
+const adminEmail = await rpc('set_accountant_email', a.token, { p_email: '  Books@Example.co.il ' });
+check("an admin can set the accountant's email", adminEmail.status === 200, `got ${adminEmail.status}`);
+check('the email is stored trimmed and lower-cased', (await readEmail(a.token)) === 'books@example.co.il');
+
+const badEmail = await rpc('set_accountant_email', a.token, { p_email: 'not an email' });
+check('something that is not an email is refused', badEmail.status >= 400, `got ${badEmail.status}`);
+
+const bEmail = await rpc('set_accountant_email', b.token, { p_email: 'b@example.com' });
+check("B's call does not change A's accountant email",
+  bEmail.status >= 400 && (await readEmail(a.token)) === 'books@example.co.il', `got ${bEmail.status}`);
+
+// The send history: the garage reads its own, nobody writes it but the server.
+const sendRow = await admin('/rest/v1/bookkeeping_export_emails', {
+  method: 'POST', headers: { Prefer: 'return=representation' },
+  body: JSON.stringify({ export_id: exportId, garage_id: a.garage.id, to_email: 'books@example.co.il', status: 'sent' }),
+});
+check('a send can be recorded server-side', sendRow.status === 201, `got ${sendRow.status}`);
+
+const aSends = await (await rest(`bookkeeping_export_emails?export_id=eq.${exportId}&select=id,status`, a.token)).json();
+check('A can read their own send history', Array.isArray(aSends) && aSends.length === 1, JSON.stringify(aSends));
+
+const bSends = await (await rest('bookkeeping_export_emails?select=id', b.token)).json();
+check("B cannot see A's send history", Array.isArray(bSends) && bSends.length === 0, JSON.stringify(bSends));
+
+const fakeSent = await rest('bookkeeping_export_emails', a.token, {
+  method: 'POST',
+  body: JSON.stringify({ export_id: exportId, garage_id: a.garage.id, to_email: 'x@example.com', status: 'sent' }),
+});
+check('a client cannot record a send it did not make', fakeSent.status >= 400, `got ${fakeSent.status}`);
+
+// Two sends in flight for one export: the second is refused. This is what turns
+// a double press into one email.
+const inFlight = (n) => admin('/rest/v1/bookkeeping_export_emails', {
+  method: 'POST',
+  body: JSON.stringify({ export_id: exportId, garage_id: a.garage.id, to_email: `n${n}@example.com` }),
+});
+const first = await inFlight(1);
+const second = await inFlight(2);
+check('only one send per export can be in flight', first.status === 201 && second.status === 409,
+  `got ${first.status} then ${second.status}`);
+
 if (failures) {
   console.error(`\x1b[31m${failures} check(s) failed.\x1b[0m\n`);
   process.exit(1);

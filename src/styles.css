@@ -1546,3 +1546,93 @@ button.inv-pill { cursor: pointer; border: 0; font: inherit; }
   background: var(--surface);
   padding-bottom: 12px;
 }
+
+/* ============================ bookkeeping export ============================
+   Two cards: a new export, and the history. Classes are prefixed bkx- so none
+   of this leaks into the other reports. */
+.bkx { display: flex; flex-direction: column; gap: 16px; }
+.bkx-card { padding: 20px 22px; border-radius: 16px; box-shadow: var(--shadow); }
+
+.bkx-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.bkx-card-head h3 { margin: 0; font-size: 20px; font-weight: 800; }
+.bkx-card-head .bkx-sub { margin: 2px 0 0; }
+.bkx-card-icon {
+  display: inline-grid; place-items: center; flex: none;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--primary-soft); color: var(--primary);
+}
+.bkx-card-icon svg { width: 22px; height: 22px; }
+
+.bkx-sub { color: var(--muted-d); font-size: 13.5px; }
+
+/* the four fields on one row; two per row on narrow screens */
+.bkx-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .bkx-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bkx-field { display: flex; flex-direction: column; gap: 6px; }
+.bkx-field > span { font-size: 14px; font-weight: 600; color: var(--muted-d); }
+.bkx-field select,
+.bkx-field input {
+  height: 46px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 16px;
+}
+.bkx-field select:first-of-type { font-weight: 700; }
+.bkx-field select:disabled { background: var(--surface-2); color: var(--text); opacity: 1; }
+.bkx-field .bkx-missing { border-color: var(--danger); background: var(--danger-soft); }
+
+.bkx-warning {
+  margin: 12px 0 0; padding: 10px 14px; border-radius: 10px;
+  background: var(--danger-soft); color: var(--danger); font-weight: 600;
+}
+
+/* the three files as tiles */
+.bkx-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+@media (max-width: 900px) { .bkx-tiles { grid-template-columns: 1fr; } }
+.bkx-tile {
+  display: flex; align-items: center; gap: 14px; cursor: pointer;
+  padding: 14px 16px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface);
+  transition: background 0.15s, border-color 0.15s;
+}
+.bkx-tile.on { background: #edf3fb; border-color: #a9c1e0; }
+.bkx-tile input { width: 22px; height: 22px; accent-color: #1f6feb; flex: none; }
+.bkx-tile-text { display: flex; flex-direction: column; gap: 2px; }
+.bkx-tile-text strong { font-size: 17px; }
+.bkx-tile-text span { color: var(--muted-d); font-size: 14px; text-align: right; }
+
+.bkx-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft);
+}
+.bkx-hint { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-d); font-size: 14px; }
+.bkx-hint svg { width: 18px; height: 18px; }
+
+/* history */
+.bkx-recipient {
+  margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px;
+}
+.bkx-recipient svg { width: 17px; height: 17px; color: var(--muted-d); }
+.bkx-link {
+  border: 0; background: none; padding: 0 4px; cursor: pointer;
+  color: var(--primary); font: inherit; font-weight: 700; text-decoration: underline;
+}
+.bkx-period { display: flex; flex-direction: column; gap: 3px; }
+.bkx-period-main { font-weight: 700; font-size: 16px; white-space: nowrap; }
+.bkx-sent { color: var(--ok); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.bkx-send-error { color: var(--danger); font-size: 13px; font-weight: 600; }
+.bkx-error-text { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bkx-files { display: flex; align-items: center; gap: 8px; }
+.bkx-files svg { color: var(--muted-d); flex: none; }
+.bkx-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.bkx-actions button { white-space: nowrap; }
+/* the send button keeps one width whether it says "send" or "send again", so
+   the buttons line up from row to row */
+.bkx-actions > button:first-child { min-width: 168px; justify-content: center; }
+/* dates and counts stay on one line; on a laptop-width screen the zip button
+   drops its label so the row keeps its "⋯" in view */
+.bkx-files, .bkx td [dir="ltr"] { white-space: nowrap; }
+@media (max-width: 1320px) {
+  .bkx-narrow-hide { display: none; }
+  .bkx-actions > button:first-child { min-width: 150px; }
+}

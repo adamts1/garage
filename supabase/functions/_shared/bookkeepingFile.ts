@@ -1,4 +1,4 @@
-// Fetching a finished bookkeeping export, and getting movein.dat out of it.
+// Fetching a finished bookkeeping export, and getting the requested files out of it.
 //
 // Shared because two functions need it: the callback, which tries as soon as the
 // provider says the file is coming, and the retry, which tries again later when
@@ -68,24 +68,79 @@ export async function fetchExport(link: string, delaysMs: readonly number[]): Pr
   return { bytes: null, attempts };
 }
 
-/** The provider ships movein.dat inside a zip named for the moment it was built.
- *  The bookkeeper wants the .dat, so the archive is opened here rather than
- *  handed on: one file in, one file out, and nothing downstream has to know the
- *  transport was ever compressed. */
-export function extractMovein(archive: Uint8Array): Uint8Array {
+/** The files a person can ask for. Anything else in the provider's archive —
+ *  movein.doc, movein.prm — is ignored on purpose. */
+export const FILE_NAMES = ['movein.dat', 'heshin.dat', 'heshin.prm'] as const;
+export type FileName = typeof FILE_NAMES[number];
+
+/** Takes exactly the named files out of the provider's archive.
+ *
+ *  Strict on purpose. Every named file must be there, under that exact name, and
+ *  not be empty — otherwise this throws and nothing is stored. The first version
+ *  fell back to "whatever is first in the zip" when movein.dat was missing,
+ *  which with a different export type would have handed the bookkeeper a
+ *  movein.doc renamed to movein.dat. A wrong file that looks right is the one
+ *  failure this must never produce. */
+export function extractFiles(archive: Uint8Array, names: readonly string[]): Record<string, Uint8Array> {
   const files = unzipSync(archive);
-  const names = Object.keys(files);
-  const name = names.find((n) => n.toLowerCase().endsWith('movein.dat')) ?? names[0];
-  if (!name) throw new Error('the exported archive is empty');
-  const bytes = files[name];
-  if (!bytes || bytes.byteLength === 0) throw new Error('the exported file is empty');
-  return bytes;
+  const entries = Object.keys(files);
+  const out: Record<string, Uint8Array> = {};
+  for (const name of names) {
+    const entry = entries.find((e) => e.split('/').pop()!.toLowerCase() === name);
+    if (!entry) {
+      throw new Error(`${name} is missing from the provider's archive (it contained: ${entries.join(', ') || 'nothing'})`);
+    }
+    if (!files[entry] || files[entry].byteLength === 0) {
+      throw new Error(`${name} arrived empty`);
+    }
+    out[name] = files[entry];
+  }
+  return out;
 }
 
-/** Where a garage's export lives. Foldered by garage, which is what the bucket's
- *  read policy matches on; the row id makes it unique and ties the object back
- *  to the row that owns it. */
-export const exportPath = (garageId: string, exportId: string) =>
-  `${garageId}/${exportId}/movein.dat`;
+/** Where a garage's export file lives. Foldered by garage, which is what the
+ *  bucket's read policy matches on; the export id makes it unique. The default
+ *  is the path every export used before there was a choice of files, so old
+ *  rows and new ones resolve the same way. */
+export const exportPath = (garageId: string, exportId: string, name: string = 'movein.dat') =>
+  `${garageId}/${exportId}/${name}`;
 
 export const BUCKET = 'bookkeeping-exports';
+
+/* What came of one attempt to collect a part's files. */
+export type Delivery =
+  | { kind: 'stored'; sizes: Record<string, number> }
+  /* The file was not there yet. Retryable — the link is already saved. */
+  | { kind: 'pending'; attempts: string[] }
+  /* The file arrived and is wrong, or could not be stored. Retrying would
+     fetch the same bytes, so this is final. */
+  | { kind: 'failed'; message: string };
+
+/** Downloads one archive, takes the named files out of it, and stores each of
+ *  them. Nothing is recorded in the database here — the caller does that, so the
+ *  callback and the retry decide the outcome the same way. */
+export async function deliver(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  opts: { link: string; garageId: string; exportId: string; names: readonly string[]; delaysMs: readonly number[] },
+): Promise<Delivery> {
+  const { bytes: archive, attempts } = await fetchExport(opts.link, opts.delaysMs);
+  if (!archive) return { kind: 'pending', attempts };
+
+  try {
+    const files = extractFiles(archive, opts.names);
+    const sizes: Record<string, number> = {};
+    for (const [name, bytes] of Object.entries(files)) {
+      const { error } = await admin.storage.from(BUCKET).upload(
+        exportPath(opts.garageId, opts.exportId, name),
+        bytes,
+        { contentType: 'application/octet-stream', upsert: true },
+      );
+      if (error) throw new Error(`could not store ${name}: ${error.message}`);
+      sizes[name] = bytes.byteLength;
+    }
+    return { kind: 'stored', sizes };
+  } catch (e) {
+    return { kind: 'failed', message: e instanceof Error ? e.message : String(e) };
+  }
+}

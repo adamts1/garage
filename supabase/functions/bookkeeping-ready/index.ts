@@ -1,5 +1,11 @@
-// bookkeeping-ready — the accounting provider calling back to say the export it
+// bookkeeping-ready — the accounting provider calling back to say one archive it
 // was asked for is built.
+//
+// An export is one or more orders (today one: see bookkeepingParts.ts),
+// and each order calls back here on its own, with its own token. The token says
+// which PART this is. This function downloads that part's archive, keeps only
+// the files that were ticked, and marks the part ready; the database decides
+// whether that completes the export (bookkeeping_part_ready).
 //
 //   POST /functions/v1/bookkeeping-ready/<token>
 //   body: cid=...&url=https%3A%2F%2F...   (form encoded, despite asking for JSON)
@@ -32,7 +38,8 @@
 // service_role, because there is no caller to act as.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { BUCKET, exportPath, extractMovein, fetchExport } from '../_shared/bookkeepingFile.ts';
+import { deliver } from '../_shared/bookkeepingFile.ts';
+import { settlePart, type PartRow } from '../_shared/bookkeepingParts.ts';
 
 /** Hex, exactly what newToken() in export-bookkeeping produces. Anything else is
  *  not a token we ever issued, so it is rejected before it reaches the database. */
@@ -106,80 +113,95 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const { data: row } = await admin
+    /* A part of an export ordered since the files could be chosen... */
+    const { data: part } = await admin
+      .from('bookkeeping_export_parts')
+      .select('id, export_id, garage_id, kind, files, status')
+      .eq('callback_token', token)
+      .maybeSingle();
+    /* ...or an export ordered before that, whose token is on the export itself.
+       Kept so an export that was in flight during the deploy still finishes. */
+    const { data: legacy } = part ? { data: null } : await admin
       .from('bookkeeping_exports')
       .select('id, garage_id, status')
       .eq('callback_token', token)
       .maybeSingle();
     /* Same answer as a malformed token, deliberately: a caller guessing tokens
-       learns nothing from the difference between "no such export" and "not a
-       token", and both are equally not their business. */
-    if (!row) return json({ error: 'not found' }, 404);
+       learns nothing from the difference. */
+    const target = part ?? legacy;
+    if (!target) return json({ error: 'not found' }, 404);
 
-    /* Already done. The provider may retry a callback it thinks failed, and a
-       second download would at best overwrite a good file with a copy of
-       itself. Answer 200 so it stops retrying. */
-    if (row.status === 'ready') return json({ ok: true, already: true });
+    /* Already done. The provider may retry a callback it thinks failed; answer
+       200 so it stops. */
+    if (target.status === 'ready') return json({ ok: true, already: true });
+    /* An order we already wrote off — refused as far as we could tell, or
+       stopped because the other order of the same export was. The export was
+       failed and the person told to order again; storing files for it now
+       would only put a "ready" part under a failed export. 200, so the provider
+       does not retry. */
+    if (part && part.status === 'error') return json({ ok: true, ignored: 'this order was already marked failed' });
 
     const raw = await req.text().catch(() => '');
     const link = findUrl(parseBody(raw, req.headers.get('content-type') ?? ''));
     if (!link) {
-      /* The payload itself, not a sentence about it. Whatever the provider sent
-         is the only thing that can say why no link was found, and this is the
-         one moment it exists. Truncated because an error column is not a log,
-         and safe to show: a body with no link in it has no link to leak. */
+      /* The payload itself, not a sentence about it — whatever the provider sent
+         is the only thing that can say why no link was found. Truncated, and
+         safe to show: a body with no link in it has no link to leak. */
       const seen = raw.slice(0, 500) || '(empty body)';
-      await admin.from('bookkeeping_exports')
-        .update({ status: 'error', error: `the callback carried no download link. it sent: ${seen}` })
-        .eq('id', row.id);
+      const message = `the callback carried no download link. it sent: ${seen}`;
+      if (part) {
+        await admin.rpc('bookkeeping_part_failed', { p_part: part.id, p_error: message });
+      } else {
+        await admin.from('bookkeeping_exports').update({ status: 'error', error: message }).eq('id', target.id);
+      }
       return json({ error: 'url required' }, 400);
     }
 
     /* Written down BEFORE anything is attempted with it. This is the only
-       moment the link exists anywhere, and a fetch that runs ahead of the file
-       must not take the pointer down with it — that is exactly how an export
-       that was merely early became an export nobody could ever recover. */
-    await admin.from('bookkeeping_exports').update({ source_url: link }).eq('id', row.id);
-
-    const { bytes: archive, attempts } = await fetchExport(link, DELAYS_MS);
-    if (!archive) {
-      /* Still `requested`, not `error`. The file is very likely on its way, and
-         the row now holds everything needed to go back for it. */
-      await admin.from('bookkeeping_exports')
-        .update({ error: `the file was not ready yet — ${attempts.join('; ')}` })
-        .eq('id', row.id);
-      return json({ ok: false, pending: true, attempts });
+       moment the link exists anywhere, and a download that runs ahead of the
+       file must not take the pointer down with it. */
+    if (part) {
+      await admin.from('bookkeeping_export_parts').update({ source_url: link }).eq('id', part.id);
+    } else {
+      await admin.from('bookkeeping_exports').update({ source_url: link }).eq('id', target.id);
     }
 
-    try {
-      const bytes = extractMovein(archive);
-      const path = exportPath(row.garage_id, row.id);
-      const { error: upErr } = await admin.storage.from(BUCKET).upload(path, bytes, {
-        contentType: 'application/octet-stream',
-        upsert: true,
-      });
-      if (upErr) throw new Error(upErr.message);
+    const delivery = await deliver(admin, {
+      link,
+      garageId: target.garage_id,
+      exportId: part ? part.export_id : target.id,
+      names: part ? part.files : ['movein.dat'],
+      delaysMs: DELAYS_MS,
+    });
 
-      await admin.from('bookkeeping_exports').update({
-        status: 'ready',
-        storage_path: path,
-        file_bytes: bytes.byteLength,
-        ready_at: new Date().toISOString(),
-        error: null,
-      }).eq('id', row.id);
-
-      return json({ ok: true });
-    } catch (e) {
-      /* The file arrived and we could not make sense of it. That IS final —
-         retrying would fetch the same bytes and fail the same way. */
-      const message = e instanceof Error ? e.message : String(e);
-      await admin.from('bookkeeping_exports')
-        .update({ status: 'error', error: message })
-        .eq('id', row.id);
-      /* 200: the provider did its part, and a 5xx would earn us retries of a
-         callback that is not going to go better. */
-      return json({ ok: false, error: message });
+    if (part) {
+      const status = await settlePart(admin, part as PartRow, delivery);
+      /* 200 whatever happened: the provider did its part, and a 5xx would only
+         earn retries of a callback that will not go better. */
+      return json({ ok: delivery.kind === 'stored', export_status: status });
     }
+
+    /* The old single-file export. `target` is the export row itself here. */
+    const old = target;
+    if (delivery.kind === 'pending') {
+      await admin.from('bookkeeping_exports')
+        .update({ error: `the file was not ready yet — ${delivery.attempts.join('; ')}` })
+        .eq('id', old.id);
+      return json({ ok: false, pending: true });
+    }
+    if (delivery.kind === 'failed') {
+      await admin.from('bookkeeping_exports').update({ status: 'error', error: delivery.message }).eq('id', old.id);
+      return json({ ok: false, error: delivery.message });
+    }
+    await admin.from('bookkeeping_exports').update({
+      status: 'ready',
+      storage_path: `${old.garage_id}/${old.id}/movein.dat`,
+      file_sizes: delivery.sizes,
+      file_bytes: delivery.sizes['movein.dat'],
+      ready_at: new Date().toISOString(),
+      error: null,
+    }).eq('id', old.id);
+    return json({ ok: true });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
