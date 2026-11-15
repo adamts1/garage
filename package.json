@@ -32,13 +32,18 @@
     "seed:board:prod": "node --env-file=.env.production.local scripts/seed-board.mjs",
     "import:ricbi": "node --env-file=.env.local scripts/ricbi/import-ricbi.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
-    "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs"
+    "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs",
+    "bookkeeping-software": "node --env-file=.env.local scripts/set-bookkeeping-software.mjs",
+    "bookkeeping-software:prod": "node --env-file=.env.production.local scripts/set-bookkeeping-software.mjs",
+    "resend-key": "zsh scripts/set-resend-key.sh poksqsdklnhaumozriqd",
+    "resend-key:prod": "zsh scripts/set-resend-key.sh farpgkljbmlaeiocrore"
   },
   "dependencies": {
     "@garage/shared": "*",
     "@reduxjs/toolkit": "^2.12.0",
     "@sentry/react": "^10.67.0",
     "@supabase/supabase-js": "^2.110.3",
+    "fflate": "^0.8.2",
     "i18next": "^26.3.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

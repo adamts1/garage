@@ -82,6 +82,9 @@
   overflow-y: auto;
   font-size: 16px;
   line-height: 1.55;
+  /* A message of several lines keeps them. No translation carries a newline,
+     so this changes nothing for any dialog that did not ask for it. */
+  white-space: pre-line;
 }
 
 .foot {

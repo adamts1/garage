@@ -1,20 +1,31 @@
-/* Bookkeeping exports — the file the garage's accountant imports.
+/* Bookkeeping exports — the files the garage's accountant imports into ריווחית.
 
-   For חשבשבת that is movein.dat, and the provider builds it in the format its
-   software expects. Nothing here computes it: the accounting provider holds the
-   chart of accounts, and a journal file we invented would be pointing at ledger
-   codes we do not have.
+   The person ticks which of three they want: movein.dat (movements), heshin.dat
+   (client and supplier cards) and heshin.prm (the layout of heshin.dat). The
+   provider builds them (export_type rivhit — see _shared/bookkeepingParts.ts).
+   Nothing here computes them: the accounting provider holds the chart of
+   accounts, and a journal file we invented would be pointing at ledger codes we
+   do not have.
 
    The shape is unlike anything else in the app because the provider's is: the
    order returns immediately and the file arrives minutes later, announced by a
    callback to an Edge Function. So the app orders, and then watches a row.
 
    See supabase/functions/export-bookkeeping and bookkeeping-ready, and the
-   migration 20260814000000_bookkeeping_exports.sql. */
+   migrations 20260814000000_bookkeeping_exports.sql and
+   20261112100000_bookkeeping_export_files.sql. */
 
 import { getClient } from './client';
 
 export type ExportStatus = 'requested' | 'ready' | 'error';
+
+/** The files that can be asked for, in the order they are shown. */
+export const BOOKKEEPING_FILES = ['movein.dat', 'heshin.dat', 'heshin.prm'] as const;
+export type BookkeepingFile = typeof BOOKKEEPING_FILES[number];
+
+/** The software the garage's bookkeeper imports into. It decides which files
+ *  the provider is asked for — the two are not interchangeable. */
+export type BookkeepingSoftware = 'rivhit' | 'hashavshevet';
 
 export interface BookkeepingExport {
   id: string;
@@ -24,6 +35,14 @@ export interface BookkeepingExport {
   expenses: boolean;
   clients: boolean;
   suppliers: boolean;
+  /** What was asked for. Old exports say ['movein.dat'], which is what they were. */
+  files: BookkeepingFile[];
+  /** What arrived, file name -> bytes. Null on exports from before the choice. */
+  fileSizes: Record<string, number> | null;
+  /** What the files were built for. Null on exports from before the setting. */
+  software: BookkeepingSoftware | null;
+  /** The most recent attempt to email it to the accountant, if any. */
+  lastEmail: BookkeepingEmail | null;
   status: ExportStatus;
   error: string | null;
   /** Bytes on disk once it exists — worth showing, because an export that comes
@@ -39,7 +58,7 @@ export interface BookkeepingExport {
    itself. A column list rather than `*` is what keeps the first of those out of
    a browser even if the grant is ever loosened. */
 const COLUMNS =
-  'id, start_date, end_date, export_docs, export_expenses, export_clients, export_suppliers, status, error, file_bytes, created_at, ready_at';
+  'id, start_date, end_date, export_docs, export_expenses, export_clients, export_suppliers, files, file_sizes, software, status, error, file_bytes, created_at, ready_at';
 
 const rowToExport = (r: any): BookkeepingExport => ({
   id: r.id,
@@ -49,12 +68,25 @@ const rowToExport = (r: any): BookkeepingExport => ({
   expenses: r.export_expenses,
   clients: r.export_clients,
   suppliers: r.export_suppliers,
+  files: r.files ?? ['movein.dat'],
+  fileSizes: r.file_sizes ?? null,
+  software: r.software ?? null,
+  lastEmail: null,
   status: r.status,
   error: r.error ?? null,
   fileBytes: r.file_bytes ?? null,
   createdAt: r.created_at,
   readyAt: r.ready_at ?? null,
 });
+
+export interface BookkeepingEmail {
+  status: 'sending' | 'sent' | 'error';
+  to: string;
+  cc: string | null;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+}
 
 export const listBookkeepingExports = async (): Promise<BookkeepingExport[]> => {
   const { data, error } = await getClient()
@@ -63,16 +95,83 @@ export const listBookkeepingExports = async (): Promise<BookkeepingExport[]> => 
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) throw error;
-  return (data ?? []).map(rowToExport);
+  const rows = (data ?? []).map(rowToExport);
+  if (!rows.length) return rows;
+
+  /* The latest send of each, newest first, so the first one seen per export
+     is the one to show. Capped: twenty exports rarely carry more than a few
+     sends each, and the page needs only the latest. */
+  const { data: emails, error: eErr } = await getClient()
+    .from('bookkeeping_export_emails')
+    .select('export_id, status, to_email, cc_email, error, created_at, sent_at')
+    .in('export_id', rows.map((r) => r.id))
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (eErr) throw eErr;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const e of emails ?? []) {
+    const row = byId.get(e.export_id);
+    if (row && !row.lastEmail) {
+      row.lastEmail = {
+        status: e.status, to: e.to_email, cc: e.cc_email ?? null,
+        error: e.error ?? null, createdAt: e.created_at, sentAt: e.sent_at ?? null,
+      };
+    }
+  }
+  return rows;
+};
+
+export interface BookkeepingSettings {
+  /** Null when nobody has set it — the server then refuses to export, and the
+   *  page says why before anyone tries. */
+  software: BookkeepingSoftware | null;
+  /** Where "send to accountant" goes. Null: nothing can be sent. */
+  accountantEmail: string | null;
+}
+
+export const getBookkeepingSettings = async (): Promise<BookkeepingSettings> => {
+  const { data, error } = await getClient()
+    .from('garage_billing')
+    .select('bookkeeping_software, accountant_email')
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    software: (data?.bookkeeping_software as BookkeepingSoftware | null) ?? null,
+    accountantEmail: data?.accountant_email ?? null,
+  };
+};
+
+/** Admin of the garage only, like the software. Empty clears it. */
+export const setAccountantEmail = async (email: string): Promise<string | null> => {
+  const { data, error } = await getClient().rpc('set_accountant_email', { p_email: email });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+};
+
+/** Emails a ready export to the garage's accountant, from the server. Resolves
+ *  once the email service has accepted it. */
+export const sendBookkeepingExport = async (id: string): Promise<{ to: string; cc: string | null }> => {
+  const { data, error } = await getClient().functions.invoke('send-bookkeeping', { body: { export_id: id } });
+  if (error) {
+    let msg = error.message ?? 'send failed';
+    try { const b = await error?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* keep msg */ }
+    throw new Error(msg);
+  }
+  return { to: data.to, cc: data.cc ?? null };
+};
+
+/** Admin of the garage only — the database refuses anyone else, and the page
+ *  only offers it to an admin. Returns what was stored. */
+export const setBookkeepingSoftware = async (software: BookkeepingSoftware): Promise<BookkeepingSoftware> => {
+  const { data, error } = await getClient().rpc('set_bookkeeping_software', { p_software: software });
+  if (error) throw error;
+  return data as BookkeepingSoftware;
 };
 
 export interface ExportRequest {
   startDate: string;
   endDate: string;
-  docs?: boolean;
-  expenses?: boolean;
-  clients?: boolean;
-  suppliers?: boolean;
+  files: BookkeepingFile[];
 }
 
 /** Orders one. Resolves when the provider has ACCEPTED the job — the file does
@@ -83,10 +182,7 @@ export const requestBookkeepingExport = async (req: ExportRequest): Promise<Book
     body: {
       start_date: req.startDate,
       end_date: req.endDate,
-      export_docs: req.docs,
-      export_expenses: req.expenses,
-      export_clients: req.clients,
-      export_suppliers: req.suppliers,
+      files: req.files,
     },
   });
   if (error) {
@@ -121,21 +217,24 @@ export const retryBookkeepingExport = async (id: string): Promise<void> => {
  *  a browser's history is no use to anybody later. */
 const DOWNLOAD_TTL_SECONDS = 120;
 
-/** A signed URL for the finished file. The bucket is private and read is scoped
- *  to the garage's own folder, so this can only ever sign what the caller is
- *  already allowed to read. */
-export const bookkeepingExportUrl = async (id: string): Promise<string> => {
+/** A signed URL for one finished file. The bucket is private and read is
+ *  scoped to the garage's own folder, so this can only ever sign what the caller
+ *  is already allowed to read. Refuses a file the export was not asked for, or
+ *  an export that is not ready — never a half-finished set. */
+export const bookkeepingExportUrl = async (id: string, file: BookkeepingFile): Promise<string> => {
   const { data: row, error: rErr } = await getClient()
     .from('bookkeeping_exports')
-    .select('storage_path, status')
+    .select('garage_id, status, files')
     .eq('id', id)
     .maybeSingle();
   if (rErr) throw rErr;
-  if (!row?.storage_path) throw new Error('this export has no file yet');
+  if (!row) throw new Error('export not found');
+  if (row.status !== 'ready') throw new Error('this export is not ready yet');
+  if (!(row.files ?? ['movein.dat']).includes(file)) throw new Error(`${file} was not part of this export`);
 
   const { data, error } = await getClient().storage
     .from('bookkeeping-exports')
-    .createSignedUrl(row.storage_path, DOWNLOAD_TTL_SECONDS, { download: 'movein.dat' });
+    .createSignedUrl(`${row.garage_id}/${id}/${file}`, DOWNLOAD_TTL_SECONDS, { download: file });
   if (error) throw error;
   return data.signedUrl;
 };
@@ -147,6 +246,9 @@ export const subscribeToBookkeepingExports = (onChange: () => void) => {
   const channel = getClient()
     .channel(`garage-bookkeeping-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'bookkeeping_exports' }, onChange)
+    /* Sends too — including ones made by someone else in the garage, which is
+       what lets the page warn before the same files go out twice. */
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bookkeeping_export_emails' }, onChange)
     .subscribe();
   return () => void getClient().removeChannel(channel);
 };
