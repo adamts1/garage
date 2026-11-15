@@ -56,13 +56,19 @@ export interface CounterSale {
   lines: StandaloneLine[];
 }
 
-interface Row extends StandaloneLine {
+interface Row extends Omit<StandaloneLine, 'qty'> {
   /** Local only — React needs a stable key and a sku is not always there. */
   uid: string;
   sku: string | null;
+  /** As typed. Starts blank (2026-11-15, as on the expense form): nothing is
+   *  pre-filled that nobody chose. A described line with no quantity holds
+   *  the issue button rather than being dropped from the document. */
+  qty: string;
 }
 
-const blank = (uid: string): Row => ({ uid, sku: null, desc: '', qty: 1, unit_price: 0 });
+const blank = (uid: string): Row => ({ uid, sku: null, desc: '', qty: '', unit_price: 0 });
+
+const qtyOf = (r: Row) => Number(r.qty) || 0;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -185,7 +191,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
         uid: i === 0 && empty ? empty.uid : `r${seq + i}`,
         /* The catalogue holds pre-VAT prices; with כולל מע״מ on, the line
            shows what the customer pays for it. */
-        sku: part.sku, desc: part.name, qty: 1, unit_price: inclVat ? round2(part.price * (1 + VAT)) : part.price,
+        sku: part.sku, desc: part.name, qty: '', unit_price: inclVat ? round2(part.price * (1 + VAT)) : part.price,
       }));
       const [first, ...rest] = lines;
       return empty
@@ -195,13 +201,16 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     setSeq((n) => n + parts.length);
   };
 
-  const priced = rows.filter((r) => r.desc.trim() && r.qty > 0);
-  const typedLines = priced.map((r) => ({ desc: r.desc.trim(), qty: r.qty, unit_price: r.unit_price }));
+  const priced = rows.filter((r) => r.desc.trim() && qtyOf(r) > 0);
+  /* Described or priced but no quantity: half a line. Issuing without it
+     would bill less than what is on the screen. */
+  const missingQty = rows.some((r) => (r.desc.trim() || r.unit_price) && !(qtyOf(r) > 0));
+  const typedLines = priced.map((r) => ({ desc: r.desc.trim(), qty: qtyOf(r), unit_price: r.unit_price }));
   /* What the document bills, before VAT: the typed lines as they are, or —
      with כולל מע״מ — the typed total brought back to pre-VAT and spread. */
   const billed = inclVat ? inclVatLines(typedLines) : null;
   const subtotal = billed ? billed.subtotal : round2(typedLines.reduce((s, l) => s + l.qty * l.unit_price, 0));
-  const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0;
+  const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0 && !missingQty;
 
   /* The dialog issues the document itself and closes only once it exists.
      Issuing is a round trip to the provider that can take seconds: until it
@@ -395,7 +404,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                     className={styles.cell} type="number" min={0} step="any" inputMode="decimal" dir="ltr"
                     aria-label={t('counterSale.fields.qty')}
                     value={r.qty}
-                    onChange={(e) => patch(r.uid, { qty: Number(e.target.value) || 0 })}
+                    onChange={(e) => patch(r.uid, { qty: e.target.value })}
                   />
                   <input
                     className={styles.cell} type="number" min={0} step="any" inputMode="decimal" dir="ltr"
@@ -403,7 +412,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                     value={r.unit_price}
                     onChange={(e) => patch(r.uid, { unit_price: Number(e.target.value) || 0 })}
                   />
-                  <span className={styles.lineTotal}>{money(r.qty * r.unit_price)}</span>
+                  <span className={styles.lineTotal}>{money(qtyOf(r) * r.unit_price)}</span>
                   <Button
                     variant="ghostDanger" size="sm"
                     aria-label={t('counterSale.removeLine')}
