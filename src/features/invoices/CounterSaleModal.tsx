@@ -20,7 +20,7 @@
  */
 
 import {
-  addressLabel, issueStandaloneInvoice, money, netFromGross, PAY_METHODS, VAT,
+  addressLabel, issueStandaloneInvoice, money, PAY_METHODS, VAT,
   type Invoice, type PartDef, type StandaloneLine,
 } from '@garage/shared';
 import { useRef, useState } from 'react';
@@ -37,6 +37,7 @@ import { settleModal } from '../../store/useModalResult';
 import { usePickPart } from '../works/usePickers';
 import styles from './CounterSaleModal.module.css';
 import { useCounterSaleLookup, type LookupField, type LookupOption } from './counterSaleLookup';
+import { inclVatLines } from './inclVat';
 
 /** What the dialog hands back. Null when it was dismissed. */
 export interface CounterSale {
@@ -90,9 +91,9 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const [plate, setPlate] = useState('');
   const [car, setCar] = useState('');
   /* כולל מע״מ (2026-11-15): the prices typed are what the customer pays,
-     VAT included. The lines keep the figures as typed; what is billed is the
-     pre-VAT price that comes back to each, the same rule a ticket line with
-     כולל מע״מ follows (catalog.ts: netFromGross). */
+     VAT included. The lines keep the figures as typed; the document's total
+     is converted once and spread back over the lines (inclVat.ts), so it
+     comes to the typed total, or an agora below it — never more. */
   const [inclVat, setInclVat] = useState(false);
   const [docType, setDocType] = useState<CounterSale['docType']>('invoice_receipt');
   const [payMethod, setPayMethod] = useState<string>('cash');
@@ -195,9 +196,11 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   };
 
   const priced = rows.filter((r) => r.desc.trim() && r.qty > 0);
-  /** What one unit of a line is billed at, before VAT. */
-  const netUnit = (r: Row) => (inclVat ? netFromGross(r.unit_price) : r.unit_price);
-  const subtotal = round2(priced.reduce((s, r) => s + r.qty * netUnit(r), 0));
+  const typedLines = priced.map((r) => ({ desc: r.desc.trim(), qty: r.qty, unit_price: r.unit_price }));
+  /* What the document bills, before VAT: the typed lines as they are, or —
+     with כולל מע״מ — the typed total brought back to pre-VAT and spread. */
+  const billed = inclVat ? inclVatLines(typedLines) : null;
+  const subtotal = billed ? billed.subtotal : round2(typedLines.reduce((s, l) => s + l.qty * l.unit_price, 0));
   const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0;
 
   /* The dialog issues the document itself and closes only once it exists.
@@ -252,7 +255,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     car: car.trim(),
     docType,
     payMethod: docType === 'invoice_receipt' ? payMethod : null,
-    lines: priced.map((r) => ({ desc: r.desc.trim(), qty: r.qty, unit_price: netUnit(r) })),
+    lines: billed ? billed.lines : typedLines,
   });
 
   /* The document as it would print, before it exists. Marked a preview on
@@ -460,6 +463,13 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
           <div className={styles.sumGrand}>
             <span>{t('counterSale.total')}</span><b>{money(total)}</b>
           </div>
+          {/* About one total in six cannot be reached once VAT is rounded to
+              the agora; said here rather than discovered on the document. */}
+          {billed && billed.gross > 0 && billed.total !== billed.gross && (
+            <p className={styles.muted} role="note">
+              {t('counterSale.inclVatAgora', { typed: money(billed.gross), total: money(billed.total) })}
+            </p>
+          )}
           {issuing && (
             <div className={styles.issuingNote} role="status" aria-live="polite">
               <span className={styles.spinner} aria-hidden /> {t('counterSale.issuingLong')}
