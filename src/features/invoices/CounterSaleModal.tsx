@@ -20,12 +20,14 @@
  */
 
 import {
-  addressLabel, issueStandaloneInvoice, money, PAY_METHODS, VAT, type Invoice, type PartDef, type StandaloneLine,
+  addressLabel, issueStandaloneInvoice, money, PAY_METHODS, VAT,
+  type Invoice, type PartDef, type StandaloneLine,
 } from '@garage/shared';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
+import { decimalDefaults } from '../../components/Table/RowControls';
 import Modal from '../../components/Modal/Modal';
 import type { ModalComponentProps } from '../../components/Modal/types';
 import { IconBox, IconDoc, IconInfo, IconSearch, IconTrash } from '../../icons';
@@ -36,6 +38,7 @@ import { settleModal } from '../../store/useModalResult';
 import { usePickPart } from '../works/usePickers';
 import styles from './CounterSaleModal.module.css';
 import { useCounterSaleLookup, type LookupField, type LookupOption } from './counterSaleLookup';
+import { inclVatLines } from './inclVat';
 
 /** What the dialog hands back. Null when it was dismissed. */
 export interface CounterSale {
@@ -47,18 +50,32 @@ export interface CounterSale {
   /** The car the sale was for. Required here (2026-11-11): the garage's
    *  documents name a car, and a counter sale is still a sale for one. */
   plate: string;
+  /** "טויוטה קורולה 2019" — optional, filled from the car on file. */
+  car: string;
   docType: 'invoice_receipt' | 'tax_invoice';
   payMethod: string | null;
   lines: StandaloneLine[];
 }
 
-interface Row extends StandaloneLine {
+interface Row extends Omit<StandaloneLine, 'qty'> {
   /** Local only — React needs a stable key and a sku is not always there. */
   uid: string;
   sku: string | null;
+  /** As typed. Starts blank (2026-11-15, as on the expense form): nothing is
+   *  pre-filled that nobody chose. A described line with no quantity holds
+   *  the issue button rather than being dropped from the document. */
+  qty: string;
 }
 
-const blank = (uid: string): Row => ({ uid, sku: null, desc: '', qty: 1, unit_price: 0 });
+const blank = (uid: string): Row => ({ uid, sku: null, desc: '', qty: '', unit_price: 0 });
+
+const qtyOf = (r: Row) => Number(r.qty) || 0;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The car's name as a ticket stores it, or '' when nothing is on file. */
+const carName = (v: { manufacturer: string | null; model: string | null; year: string | null }) =>
+  [v.manufacturer, v.model, v.year].filter(Boolean).join(' ');
 
 /* PAY_METHODS is imported from the shared vocabulary rather than retyped: a
    code this dialog offers that payment.ts has never heard of would be written
@@ -79,6 +96,12 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [plate, setPlate] = useState('');
+  const [car, setCar] = useState('');
+  /* כולל מע״מ (2026-11-15): the prices typed are what the customer pays,
+     VAT included. The lines keep the figures as typed; the document's total
+     is converted once and spread back over the lines (inclVat.ts), so it
+     comes to the typed total, or an agora below it — never more. */
+  const [inclVat, setInclVat] = useState(false);
   const [docType, setDocType] = useState<CounterSale['docType']>('invoice_receipt');
   const [payMethod, setPayMethod] = useState<string>('cash');
   const [rows, setRows] = useState<Row[]>([blank('r0')]);
@@ -101,7 +124,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     if (c.id_number) setCustomerIdNumber(c.id_number);
     const address = addressLabel({ address: c.address ?? undefined, city: c.city ?? undefined });
     if (address) setCustomerAddress(address);
-    if (v) setPlate(v.plate);
+    if (v) { setPlate(v.plate); setCar(carName(v)); }
     setSearch('');
     setLooking(null);
   };
@@ -109,7 +132,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   /* A customer not on file: the fields start empty, and the search with them. */
   const newCustomer = () => {
     setCustomerName(''); setCustomerPhone(''); setCustomerIdNumber('');
-    setCustomerAddress(''); setPlate(''); setSearch(''); setLooking(null);
+    setCustomerAddress(''); setPlate(''); setCar(''); setSearch(''); setLooking(null);
     nameRef.current?.focus();
   };
 
@@ -156,6 +179,17 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const patch = (uid: string, over: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.uid === uid ? { ...r, ...over } : r)));
 
+  /* A line picked from the catalogue was priced by it under the mode it was
+     picked in; flipping כולל מע״מ re-prices those lines to match, or a
+     pre-VAT catalogue price would be read as VAT-inclusive (and back). A
+     line typed by hand is left as typed: they chose what its price means. */
+  const toggleInclVat = (on: boolean) => {
+    setInclVat(on);
+    setRows((rs) => rs.map((r) => (r.sku
+      ? { ...r, unit_price: round2(on ? r.unit_price * (1 + VAT) : r.unit_price / (1 + VAT)) }
+      : r)));
+  };
+
   const addFromCatalogue = async () => {
     const parts: PartDef[] | null = await pickPart({ taken: rows.map((r) => r.sku ?? '').filter(Boolean) });
     if (!parts?.length) return;
@@ -167,7 +201,9 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
          would hand every one the same key. Numbered off it in one go instead. */
       const lines: Row[] = parts.map((part, i) => ({
         uid: i === 0 && empty ? empty.uid : `r${seq + i}`,
-        sku: part.sku, desc: part.name, qty: 1, unit_price: part.price,
+        /* The catalogue holds pre-VAT prices; with כולל מע״מ on, the line
+           shows what the customer pays for it. */
+        sku: part.sku, desc: part.name, qty: '', unit_price: inclVat ? round2(part.price * (1 + VAT)) : part.price,
       }));
       const [first, ...rest] = lines;
       return empty
@@ -177,9 +213,16 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     setSeq((n) => n + parts.length);
   };
 
-  const priced = rows.filter((r) => r.desc.trim() && r.qty > 0);
-  const subtotal = priced.reduce((s, r) => s + r.qty * r.unit_price, 0);
-  const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0;
+  const priced = rows.filter((r) => r.desc.trim() && qtyOf(r) > 0);
+  /* Described or priced but no quantity: half a line. Issuing without it
+     would bill less than what is on the screen. */
+  const missingQty = rows.some((r) => (r.desc.trim() || r.unit_price) && !(qtyOf(r) > 0));
+  const typedLines = priced.map((r) => ({ desc: r.desc.trim(), qty: qtyOf(r), unit_price: r.unit_price }));
+  /* What the document bills, before VAT: the typed lines as they are, or —
+     with כולל מע״מ — the typed total brought back to pre-VAT and spread. */
+  const billed = inclVat ? inclVatLines(typedLines) : null;
+  const subtotal = billed ? billed.subtotal : round2(typedLines.reduce((s, l) => s + l.qty * l.unit_price, 0));
+  const canIssue = Boolean(customerName.trim()) && Boolean(plate.trim()) && priced.length > 0 && subtotal > 0 && !missingQty;
 
   /* The dialog issues the document itself and closes only once it exists.
      Issuing is a round trip to the provider that can take seconds: until it
@@ -209,6 +252,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
         customerPhone: sale.customerPhone || null,
         customerAddress: sale.customerAddress || null,
         vehiclePlate: sale.plate,
+        vehicleCar: sale.car || null,
         docType: sale.docType,
         payMethod: sale.payMethod,
         lines: sale.lines,
@@ -220,7 +264,8 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     }
   };
 
-  const total = subtotal * (1 + VAT);
+  const vatAmount = round2(subtotal * VAT);
+  const total = round2(subtotal + vatAmount);
   const result = (): CounterSale => ({
     idempotencyKey,
     customerName: customerName.trim(),
@@ -228,9 +273,10 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
     customerPhone: customerPhone.trim(),
     customerAddress: customerAddress.trim(),
     plate: plate.trim(),
+    car: car.trim(),
     docType,
     payMethod: docType === 'invoice_receipt' ? payMethod : null,
-    lines: priced.map((r) => ({ desc: r.desc.trim(), qty: r.qty, unit_price: r.unit_price })),
+    lines: billed ? billed.lines : typedLines,
   });
 
   /* The document as it would print, before it exists. Marked a preview on
@@ -239,7 +285,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
   const preview = () => {
     const sale = result();
     const now = new Date().toISOString();
-    const vat = Math.round(subtotal * VAT * 100) / 100;
+    const vat = vatAmount;
     warnIfBlocked(printInvoice({
       id: 'preview', ticketId: null, ticketKey: null, docType: sale.docType, provider: '',
       docnum: '', allocationNumber: null, pdfUrl: null, issuedAt: '',   // not issued: printed as '-'
@@ -248,7 +294,7 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
       lines: sale.lines.map((l) => ({ ...l, line_total: Math.round(l.qty * l.unit_price * 100) / 100 })),
       subtotal, vatRate: VAT, vat, total: Math.round((subtotal + vat) * 100) / 100,
       payMethod: sale.payMethod, payReference: null, payments: null,
-      vehicle: sale.plate ? { plate: sale.plate, car: null, km: null, openedAt: null, closedAt: null } : null,
+      vehicle: sale.plate ? { plate: sale.plate, car: sale.car || null, km: null, openedAt: null, closedAt: null } : null,
       status: 'issued', cancelledBy: null, creditsInvoiceId: null, paysInvoiceId: null, createdAt: now,
     } as Invoice, { draft: true }));
   };
@@ -323,12 +369,16 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                   value={customerIdNumber} onChange={(e) => setCustomerIdNumber(e.target.value)} />
               </Field>
             </div>
-            <div className={styles.grid2}>
+            <div className={styles.grid3}>
               <Field label={t('counterSale.fields.plate')}>
                 <div className={styles.lookup}>
                   <input className="input" dir="ltr" required {...lookup('plate', plate, setPlate)} />
                   {suggestions('plate')}
                 </div>
+              </Field>
+              <Field label={t('counterSale.fields.car')}>
+                <input className="input" value={car} placeholder={t('counterSale.fields.carPlaceholder')}
+                  onChange={(e) => setCar(e.target.value)} />
               </Field>
               <Field label={t('counterSale.fields.address')}>
                 <input className="input" value={customerAddress}
@@ -363,18 +413,18 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                     onChange={(e) => patch(r.uid, { desc: e.target.value, sku: null })}
                   />
                   <input
-                    className={styles.cell} type="number" min={0} step="1" dir="ltr"
+                    className={styles.cell} type="number" min={0} {...decimalDefaults('number')} dir="ltr"
                     aria-label={t('counterSale.fields.qty')}
                     value={r.qty}
-                    onChange={(e) => patch(r.uid, { qty: Number(e.target.value) || 0 })}
+                    onChange={(e) => patch(r.uid, { qty: e.target.value })}
                   />
                   <input
-                    className={styles.cell} type="number" min={0} step="0.01" dir="ltr"
+                    className={styles.cell} type="number" min={0} {...decimalDefaults('number')} dir="ltr"
                     aria-label={t('counterSale.fields.unitPrice')}
                     value={r.unit_price}
                     onChange={(e) => patch(r.uid, { unit_price: Number(e.target.value) || 0 })}
                   />
-                  <span className={styles.lineTotal}>{money(r.qty * r.unit_price)}</span>
+                  <span className={styles.lineTotal}>{money(qtyOf(r) * r.unit_price)}</span>
                   <Button
                     variant="ghostDanger" size="sm"
                     aria-label={t('counterSale.removeLine')}
@@ -392,7 +442,10 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
                 onClick={() => setRows((rs) => [...rs, blank(nextUid())])}>
                 ＋ {t('counterSale.addLine')}
               </button>
-              <span className={styles.muted}>{t('counterSale.pricesBeforeVat')}</span>
+              <label className={styles.inclVat}>
+                <input type="checkbox" checked={inclVat} onChange={(e) => toggleInclVat(e.target.checked)} />
+                {t('counterSale.pricesInclVat')}
+              </label>
             </div>
           </section>
 
@@ -426,11 +479,18 @@ export default function CounterSaleModal({ props, isTop, stacked, onClose }: Mod
           {/* The provider adds VAT at the rate configured for this garage, which
               the browser does not hold; the note below says so. */}
           <div className={styles.sumRow}>
-            <span>{t('counterSale.vat', { percent: Math.round(VAT * 100) })}</span><b>{money(subtotal * VAT)}</b>
+            <span>{t('counterSale.vat', { percent: Math.round(VAT * 100) })}</span><b>{money(vatAmount)}</b>
           </div>
           <div className={styles.sumGrand}>
             <span>{t('counterSale.total')}</span><b>{money(total)}</b>
           </div>
+          {/* About one total in six cannot be reached once VAT is rounded to
+              the agora; said here rather than discovered on the document. */}
+          {billed && billed.gross > 0 && billed.total !== billed.gross && (
+            <p className={styles.muted} role="note">
+              {t('counterSale.inclVatAgora', { typed: money(billed.gross), total: money(billed.total) })}
+            </p>
+          )}
           {issuing && (
             <div className={styles.issuingNote} role="status" aria-live="polite">
               <span className={styles.spinner} aria-hidden /> {t('counterSale.issuingLong')}

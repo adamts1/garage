@@ -222,6 +222,15 @@
   text-decoration: underline;
 }
 
+.inclVat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-d);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
 .muted {
   color: var(--muted-d);
   font-size: 13.5px;

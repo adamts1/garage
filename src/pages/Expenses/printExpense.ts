@@ -28,6 +28,7 @@ export const printExpense = (e: SupplierExpense) =>
       ${row('קטגוריה', e.category)}
       ${row('תיאור', e.description)}
       ${row('תשלום', e.paid ? 'שולם' : 'טרם שולם')}
+      ${row('מספר צ׳ק', e.chequeNumber)}
       ${e.providerExpenseId ? row('אסמכתא iCount', '#' + e.providerExpenseId) : ''}
     </table>
     ${e.lines.length ? `<table class="lines">

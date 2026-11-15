@@ -55,6 +55,14 @@ describe('the items on an expense', () => {
     expect(readyLines([line('', '1', '80')]).incomplete).toBe(true);
   });
 
+  it('holds a priced line whose quantity was left blank', () => {
+    expect(readyLines([line('מגבים', '', '40')]).incomplete).toBe(true);
+  });
+
+  it('starts a line with the quantity blank', () => {
+    expect(blankLine().qty).toBe('');
+  });
+
   it('refuses an item with no quantity', () => {
     expect(readyLines([line('מגבים', '0', '40')]).incomplete).toBe(true);
   });
