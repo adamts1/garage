@@ -1,7 +1,13 @@
 # Only the landing page is public; every other path is the app, behind a
 # login. /assets/ must stay open: the landing page is rendered by its bundle,
 # and a crawler that cannot fetch it sees an empty <div id="root">.
+# The home page itself ("/$" — exactly "/", nothing under it) and the icon files
+# are open too: Google reads a site's search-result icon from its home page.
 User-agent: *
+Allow: /$
+Allow: /favicon.ico
+Allow: /favicon-192.png
+Allow: /apple-touch-icon.png
 Allow: /marketing/
 Allow: /assets/
 Allow: /privacy.html
