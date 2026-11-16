@@ -37,6 +37,14 @@ export const C = {
   onOverlay: '#8b93a1',
   /** Login sub-heading, on the navy header. */
   onInkDim: '#b8c4d6',
+  /** "Check this against the paper" — a scanned field that failed a check. */
+  warn: '#d99a2b',
+  warnBg: '#fdf6e7',
+  /** Text on warnBg; the border colour is too light to read at 12px. */
+  warnText: '#7a5c14',
+  /** A positive answer — the scan's sum matches, the supplier was found. */
+  okBg: '#e8f1ea',
+  okText: '#3f6349',
 };
 
 /* Hebrew UI. We don't call I18nManager.forceRTL — on native it needs a full app

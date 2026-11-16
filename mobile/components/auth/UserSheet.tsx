@@ -3,18 +3,20 @@
    sign-out is now one deliberate step behind the menu rather than a mistap. */
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { listWorkers, signedInAs, signOut, type Worker } from '@garage/shared';
 import { useAuth } from '../../lib/useAuth';
 import { C, s } from '../../lib/theme';
-import { PowerIcon } from '../ui';
+import { CameraIcon, PowerIcon } from '../ui';
 
 export function UserSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const auth = useAuth();
+  const router = useRouter();
 
   /* The staff list, only to turn the account into a person: the sheet showed
      "dani@garage.co.il" where every other screen in the app calls them דני כהן.
@@ -114,6 +116,31 @@ export function UserSheet({ open, onClose }: { open: boolean; onClose: () => voi
               )}
             </View>
           </View>
+
+          <View style={{ height: 1, backgroundColor: C.line, marginVertical: 4 }} />
+
+          <Pressable
+            onPress={() => {
+              onClose();
+              router.push('/scan-invoice');
+            }}
+            style={({ pressed }) => ({
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 12,
+              paddingHorizontal: 20,
+              paddingVertical: 15,
+              backgroundColor: pressed ? C.tint : 'transparent',
+            })}
+            accessibilityRole="button"
+          >
+            <View style={{ width: 44, alignItems: 'center' }}>
+              <CameraIcon />
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: C.ink, textAlign: 'right' }}>
+              {t('nav.scanInvoice')}
+            </Text>
+          </Pressable>
 
           <View style={{ height: 1, backgroundColor: C.line, marginVertical: 4 }} />
 

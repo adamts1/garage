@@ -34,5 +34,6 @@ export * from './waMessage';
 export * from './printDoc';
 export * from './invoices';
 export * from './expenses';
+export * from './invoiceScan';
 export * from './bookkeeping';
 export { setSupabaseClient, getClient } from './client';

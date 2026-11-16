@@ -95,3 +95,15 @@ export function MenuIcon({ color = C.onInk }: { color?: string }) {
     </View>
   );
 }
+
+/** A camera — body, lens and the bump on top. Scanning a supplier invoice. */
+export function CameraIcon({ color = C.ink }: { color?: string }) {
+  return (
+    <View style={{ width: 24, height: 22, alignItems: 'center', justifyContent: 'flex-end' }}>
+      <View style={{ position: 'absolute', top: 1, width: 9, height: 4, borderTopLeftRadius: 2, borderTopRightRadius: 2, backgroundColor: color }} />
+      <View style={{ width: 24, height: 17, borderRadius: 4, borderWidth: 2, borderColor: color, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 2, borderColor: color }} />
+      </View>
+    </View>
+  );
+}
