@@ -4,7 +4,7 @@
    live in the two HTML files, where crawlers and link previews read them. */
 
 import type { FormEvent } from 'react';
-import { AGENCY_URL, CONTACT, STORES, whatsappUrl } from './contact';
+import { AGENCY_URL, CONTACT, whatsappUrl } from './contact';
 import { COPY } from './copy';
 import { ANDROID_ICON, APPLE_ICON, FEATURE_ICONS } from './icons';
 import { LANDING_PATHS, type Lang } from './languages';
@@ -75,7 +75,11 @@ export default function LandingPage({ lang }: { lang: Lang }) {
                 <a href="#screens" className={`${styles.btnGhost} ${styles.btnLarge}`}>{t.hero.screens}</a>
               </div>
               <ul className={styles.highlights}>
-                {t.hero.highlights.map((h) => <li key={h}>{h}</li>)}
+                {t.hero.highlights.map((h) => (
+                  <li key={h.title}>
+                    <span>{h.body ? <><strong>{h.title}</strong> – {h.body}</> : h.title}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -195,12 +199,8 @@ export default function LandingPage({ lang }: { lang: Lang }) {
             <a href="/privacy.html">{t.footer.privacy}</a>
           </div>
           <div className={styles.stores} role="group" aria-label={t.footer.apps}>
-            <a href={STORES.appStore} target="_blank" rel="noopener noreferrer" aria-label={t.footer.appStore} className={styles.store}>
-              {APPLE_ICON}<span dir="ltr">App Store</span>
-            </a>
-            <a href={STORES.googlePlay} target="_blank" rel="noopener noreferrer" aria-label={t.footer.googlePlay} className={styles.store}>
-              {ANDROID_ICON}<span dir="ltr">Google Play</span>
-            </a>
+            <span className={styles.store}>{APPLE_ICON}<span dir="ltr">iOS</span></span>
+            <span className={styles.store}>{ANDROID_ICON}<span dir="ltr">Android</span></span>
           </div>
           <span>© {new Date().getFullYear()} Garagiox. {t.footer.rights}</span>
         </div>
