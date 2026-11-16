@@ -41,7 +41,7 @@ import { CheckboxField, SelectField, TextField } from '../../components/Field';
 import Modal from '../../components/Modal/Modal';
 import { usePickPart } from '../../features/works/usePickers';
 import { IconBox, IconTrash } from '../../icons';
-import { showError, showErrorKey, showSuccess, useAppDispatch, useAppSelector, useConfirm } from '../../store';
+import { showError, showErrorKey, showSuccess, useAppDispatch, useAppSelector, useBusyRun, useConfirm } from '../../store';
 import { DocumentPane, DropZone } from './DocumentPane';
 import styles from './ExpenseDrawer.module.css';
 import { useExpenseDocument, type DocError } from './useExpenseDocument';
@@ -102,6 +102,7 @@ export default function ExpenseDrawer({
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
   const confirm = useConfirm();
+  const run = useBusyRun();
   const pickPart = usePickPart();
   const pickerUp = useAppSelector((s) => s.modal.stack.length > 0);
   const doc = useExpenseDocument();
@@ -251,9 +252,8 @@ export default function ExpenseDrawer({
   const saveNewWithDocument = async (allowDuplicate: boolean): Promise<void> => {
     setSaving(true);
     try {
-      const scan = await doc.finishUploads();
-      await saveScannedExpense({
-        scanId: scan.id,
+      await run('busy.savingExpense', async () => saveScannedExpense({
+        scanId: (await doc.finishUploads()).id,
         supplierId: existingSupplier,
         supplierName: newSupplier.name,
         supplierTaxId: newSupplier.taxId,
@@ -266,7 +266,7 @@ export default function ExpenseDrawer({
         description: draft.description,
         pages: doc.names,
         allowDuplicate,
-      });
+      }));
       dispatch(showSuccess('expenses.saved'));
       onSavedWithDocument();
       onClose();
@@ -291,8 +291,8 @@ export default function ExpenseDrawer({
     if (hasNewDoc) {
       setSaving(true);
       try {
-        const scan = await doc.finishUploads();
-        await attachExpenseDocument(expense.id, scan.id, doc.names);
+        await run('busy.attachingDocument', async () =>
+          attachExpenseDocument(expense.id, (await doc.finishUploads()).id, doc.names));
         onSavedWithDocument();
       } catch (e) {
         dispatch(showError(e));
@@ -355,7 +355,6 @@ export default function ExpenseDrawer({
 
   const form = (
     <form className={styles.form} onSubmit={(e) => { e.preventDefault(); void save(); }}>
-      {doc.reading && <div className={styles.reading}>{t('expenses.doc.reading')}</div>}
       {read?.response.duplicate_of && <div className={styles.bannerBad}>{t('expenses.doc.duplicate')}</div>}
       {read?.response.extraction.unreadable && (
         <div className={styles.bannerWarn}>{t('expenses.doc.unreadable', { text: read.response.extraction.unreadable })}</div>
@@ -531,6 +530,16 @@ export default function ExpenseDrawer({
     </form>
   );
 
+  /* While the document is uploaded and read, the form waits under a spinner;
+     the document beside it stays in view, to look over in the meantime. */
+  const readingOverlay = doc.reading && (
+    <div className={styles.readingOverlay} role="status" aria-live="polite">
+      <span className={styles.spinner} aria-hidden="true" />
+      <strong>{doc.uploading ? t('expenses.doc.uploadingDoc') : t('expenses.doc.reading')}</strong>
+      <span className={styles.readingHint}>{t('expenses.doc.readingHint')}</span>
+    </div>
+  );
+
   /* The document column: what is on file, what was just added, or where to
      drop one. */
   const documentColumn = onFile && onFile.length > 0 ? (
@@ -558,7 +567,7 @@ export default function ExpenseDrawer({
     </>
   ) : wide ? (
     <div className={styles.withDoc}>
-      <div className={styles.formColumn}>{modeToggle}{form}</div>
+      <div className={styles.formColumn}>{modeToggle}{form}{readingOverlay}</div>
       <div className={styles.docColumn}>{documentColumn}</div>
     </div>
   ) : (
