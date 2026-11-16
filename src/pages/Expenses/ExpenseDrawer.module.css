@@ -129,11 +129,12 @@
 
 /* ---- with a document (2026-11-16) ----
 
-   The document on one side, the form on the other; one under the other on a
-   narrow screen. The document stays in view while the form scrolls. */
+   The form on the reading side (right), the document beside it; one under
+   the other on a narrow screen. The document stays in view while the form
+   scrolls. */
 .withDoc {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   gap: 24px;
   align-items: start;
 }
@@ -200,3 +201,40 @@
 }
 .checkOk { background: var(--ok-soft); color: var(--ok); }
 .checkBad { background: var(--danger-soft); color: var(--danger); }
+
+/* ---- a new expense: upload the invoice, or type it ---- */
+.modes {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.mode,
+.modeOn {
+  flex: 1;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mode { background: transparent; color: var(--muted-d); }
+.modeOn { background: white; color: var(--text); box-shadow: 0 2px 6px rgba(13, 19, 33, 0.1); }
+
+.uploadOnly {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 0;
+}
+.uploadHint {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted-d);
+  text-align: center;
+}

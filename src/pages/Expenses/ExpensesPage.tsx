@@ -1,6 +1,6 @@
 import { linesSummary, money } from '@garage/shared';
 import type { SupplierExpense } from '@garage/shared';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -11,7 +11,6 @@ import { Pill } from '../../components/Pill';
 import { PagedTable, RowMenu, type Column } from '../../components/Table';
 import { IconBox, IconCard, IconDoc } from '../../icons';
 import ExpenseDrawer from './ExpenseDrawer';
-import { AttachDocument, DocumentViewer } from './ExpenseDocumentModals';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
 import { NO_FILTERS, today, useExpenses, type ExpenseStatusFilter } from './useExpenses';
@@ -24,11 +23,10 @@ export default function ExpensesPage() {
   const { suppliers, totals, filters, setFilters } = ex;
 
   const [adding, setAdding] = useState(false);
-  /** The files "scan an invoice" was given; the drawer reads them at once. */
-  const [scanFiles, setScanFiles] = useState<File[] | null>(null);
-  const [viewing, setViewing] = useState<SupplierExpense | null>(null);
-  const [attaching, setAttaching] = useState<SupplierExpense | null>(null);
-  const scanInput = useRef<HTMLInputElement>(null);
+  /** An expense opened from the list — its form, with its document. */
+  const [opened, setOpened] = useState<SupplierExpense | null>(null);
+  /** Inside a row, a control acts on its own; the row's click opens it. */
+  const own = (e: React.MouseEvent) => e.stopPropagation();
   /* Kept between drawers: entering a stack of one day's invoices is the normal
      way this screen is used. */
   const [lastDate, setLastDate] = useState(today);
@@ -63,10 +61,9 @@ export default function ExpensesPage() {
         <span className={styles.reference}>
           {e.reference || '-'}
           {e.scanId && (
-            <button type="button" className={styles.docLink} onClick={() => setViewing(e)}
-              title={t('expenses.doc.view')} aria-label={t('expenses.doc.view')}>
+            <span className={styles.docLink} title={t('expenses.doc.hasDoc')} aria-label={t('expenses.doc.hasDoc')}>
               <IconDoc />
-            </button>
+            </span>
           )}
         </span>
       ),
@@ -94,7 +91,7 @@ export default function ExpensesPage() {
       header: 'expenses.fields.status',
       sortValue: (e) => (e.paid ? 1 : 0),
       render: (e) => (
-        <div className={styles.pills}>
+        <div className={styles.pills} onClick={own}>
           <Pill
             tone={e.paid ? 'ok' : 'warn'}
             title={t('expenses.togglePaid')}
@@ -110,14 +107,14 @@ export default function ExpensesPage() {
       header: 'common.actions',
       width: 90,
       render: (e) => (
+        <span onClick={own}>
         <RowMenu items={[
-          e.scanId
-            ? { label: 'expenses.doc.view', onSelect: () => setViewing(e) }
-            : { label: 'expenses.doc.attachMenu', onSelect: () => setAttaching(e) },
+          { label: 'expenses.doc.open', onSelect: () => setOpened(e) },
           { label: 'expenses.print', onSelect: () => printExpense(e) },
           { label: e.paid ? 'expenses.markUnpaid' : 'expenses.markPaid', onSelect: () => void ex.togglePaid(e) },
           { label: 'common.delete', onSelect: () => void ex.remove(e), danger: true },
         ]} />
+        </span>
       ),
     },
   ];
@@ -128,24 +125,11 @@ export default function ExpensesPage() {
         title="expenses.title"
         subtitle="expenses.subtitle"
         actions={
-          <>
-            {/* Scanning can create the supplier from the document, so it is
-                offered even when none is on file yet. */}
-            <Button variant="primary" onClick={() => scanInput.current?.click()}>
-              {t('expenses.doc.scan')}
-            </Button>
-            <input
-              ref={scanInput} type="file" accept="image/*,application/pdf" multiple hidden
-              onChange={(e) => {
-                const files = [...(e.target.files ?? [])];
-                e.target.value = '';
-                if (files.length) { setScanFiles(files); setAdding(true); }
-              }}
-            />
-            <Button onClick={() => { setScanFiles(null); setAdding(true); }} disabled={suppliers.length === 0}>
-              ＋ {t('expenses.drawer.title')}
-            </Button>
-          </>
+          /* Open with no supplier on file too: uploading an invoice creates
+             its supplier from the document. */
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            ＋ {t('expenses.drawer.title')}
+          </Button>
         }
       />
 
@@ -201,6 +185,7 @@ export default function ExpensesPage() {
         columns={columns}
         rows={ex.shown}
         rowKey={(e) => e.id}
+        onRowClick={setOpened}
         emptyKey={ex.filtered ? 'expenses.noMatch' : 'expenses.empty'}
       />
 
@@ -216,14 +201,24 @@ export default function ExpensesPage() {
             return ok;
           }}
           onSavedWithDocument={ex.reload}
-          scanFiles={scanFiles ?? undefined}
-          onClose={() => { setAdding(false); setScanFiles(null); }}
+          onClose={() => setAdding(false)}
         />
       )}
 
-      {viewing && <DocumentViewer expense={viewing} onClose={() => setViewing(null)} />}
-      {attaching && (
-        <AttachDocument expense={attaching} onClose={() => setAttaching(null)} onAttached={ex.reload} />
+      {opened && (
+        <ExpenseDrawer
+          key={opened.id}
+          expense={opened}
+          suppliers={suppliers}
+          usedCategories={ex.usedCategories}
+          busy={ex.busy}
+          onSave={async () => false}
+          onUpdate={ex.update}
+          onDelete={ex.remove}
+          onPrint={printExpense}
+          onSavedWithDocument={ex.reload}
+          onClose={() => setOpened(null)}
+        />
       )}
     </>
   );

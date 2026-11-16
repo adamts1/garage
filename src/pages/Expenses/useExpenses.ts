@@ -1,5 +1,5 @@
 import {
-  createExpense, deleteExpense, listExpenses, listSuppliers, setExpensePaid,
+  createExpense, deleteExpense, listExpenses, listSuppliers, setExpensePaid, updateExpense,
   linesSubtotal, subscribeToExpenses,
   type ExpenseLine, type Supplier, type SupplierExpense,
 } from '@garage/shared';
@@ -81,6 +81,27 @@ export function previewTotals(subtotal: string, vatRate: string) {
   const rate = Number(vatRate) || 0;
   const vat = round2(sub * rate);
   return { subtotal: sub, vat, total: round2(sub + vat) };
+}
+
+/** A saved expense, back in the form's terms — opening one from the list.
+ *  An expense from before items (one figure) opens as one line of that figure. */
+export function expenseToDraft(e: SupplierExpense): ExpenseDraft {
+  const lines: DraftLine[] = e.lines.length
+    ? e.lines.map((l) => ({ ...blankLine(), desc: l.desc, qty: String(l.qty), unitPrice: String(l.unit_price) }))
+    : [{ ...blankLine(), desc: e.description || '', qty: '1', unitPrice: String(e.subtotal) }];
+  return {
+    supplierId: e.supplierId,
+    date: e.date,
+    description: e.description ?? '',
+    category: e.category ?? '',
+    reference: e.reference ?? '',
+    lines,
+    vatRate: String(e.vatRate),
+    paid: e.paid,
+    dueDate: e.dueDate ?? '',
+    chequeNumber: e.chequeNumber ?? '',
+    chequeDate: e.chequeDate ?? '',
+  };
 }
 
 export type ExpenseStatusFilter = 'all' | 'paid' | 'unpaid';
@@ -175,6 +196,41 @@ export function useExpenses() {
     [dispatch, load, run],
   );
 
+  /** Save changes to an expense opened from the list. Resolves true once saved. */
+  const update = useCallback(
+    async (id: string, draft: ExpenseDraft) => {
+      const { lines, incomplete } = readyLines(draft.lines);
+      const subtotal = linesSubtotal(lines);
+      if (!draft.supplierId || incomplete || !(subtotal > 0)) return false;
+      setBusy(true);
+      try {
+        await run('busy.savingExpense', () => updateExpense(id, {
+          supplierId: draft.supplierId,
+          date: draft.date,
+          description: draft.description,
+          category: draft.category,
+          reference: draft.reference,
+          lines,
+          subtotal,
+          vatRate: Number(draft.vatRate),
+          paid: draft.paid,
+          dueDate: draft.dueDate || null,
+          chequeNumber: draft.chequeNumber || null,
+          chequeDate: draft.chequeDate || null,
+        }));
+        dispatch(showSuccess('expenses.updated'));
+        load();
+        return true;
+      } catch (e) {
+        dispatch(showError(e));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [dispatch, load, run],
+  );
+
   const togglePaid = useCallback(
     async (expense: SupplierExpense) => {
       try {
@@ -197,13 +253,15 @@ export function useExpenses() {
           : 'expenses.confirmDelete',
         danger: true,
       });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         await deleteExpense(expense.id);
         dispatch(showSuccess('expenses.deleted'));
         load();
+        return true;
       } catch (e) {
         dispatch(showError(e));
+        return false;
       }
     },
     [confirm, dispatch, load],
@@ -223,7 +281,7 @@ export function useExpenses() {
     rows, shown, suppliers, usedCategories, busy, totals,
     filters, setFilters,
     filtered: (Object.keys(NO_FILTERS) as (keyof ExpenseFilters)[]).some((k) => filters[k] !== NO_FILTERS[k]),
-    create, togglePaid, remove,
+    create, update, togglePaid, remove,
     /** After a save that went around create() — one with a document. */
     reload: load,
   };

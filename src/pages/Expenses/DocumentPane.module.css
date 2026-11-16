@@ -94,3 +94,55 @@
   font-size: 13px;
   font-weight: 600;
 }
+
+/* ---- the drop zone ---- */
+.drop {
+  border: 2px dashed var(--muted);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 52px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.dropSmall {
+  padding: 20px 18px;
+}
+.dropOver {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.dropIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 26px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dropSmall .dropIcon {
+  width: 40px;
+  height: 40px;
+}
+.dropTitle {
+  font-size: 17px;
+}
+.dropBody {
+  font-size: 14px;
+  color: var(--muted-d);
+}
+.dropButton {
+  margin-top: 4px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: white;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 8px 18px;
+  cursor: pointer;
+}

@@ -1,4 +1,5 @@
-/* The new-expense form, as a drawer beside the list (2026-11-11 redesign).
+/* The expense form, as a drawer beside the list (2026-11-11 redesign) — for a
+   new expense, and for one opened from the list to see or change it.
 
    Rendered by the page rather than opened through the modal registry: saving
    can fail, and a registry modal hands its answer back by closing — so a failed
@@ -10,25 +11,30 @@
 
    THE DOCUMENT (2026-11-16)
 
-   An expense can carry the supplier's document it was entered from — photos or
-   a PDF. Attached here, the drawer widens: the document on one side, the form
-   on the other. "Fill from the document" has the model read it
-   (extract-invoice) and fills the form; what failed a check is marked amber
-   and the lines are compared with the document's own totals, as on the phone
-   (scanChecks in @garage/shared). Scanning from the list is the same thing
-   with the reading started straight away.
+   An expense carries the supplier's document it was entered from — photos or a
+   PDF. A new expense starts with the choice: upload the invoice, or type it.
+   Uploading has the model read it (extract-invoice) and fills the form; what
+   failed a check is marked amber and the lines are compared with the
+   document's own totals, as on the phone (scanChecks in @garage/shared).
+   Typing can still attach the invoice, unread. With a document the drawer
+   widens: the form on the reading side, the document beside it.
 
-   With a document, the expense is saved through save_scanned_expense — one
-   transaction that can also create a supplier the garage has not seen yet,
-   refuses a duplicate invoice number unless confirmed, and links the document.
-   Without one, it is saved as it always was. */
+   A new expense with a document is saved through save_scanned_expense — one
+   transaction that can also create a supplier not on file yet, refuses a
+   duplicate invoice number unless confirmed, and links the document. Without
+   one, it is saved as it always was.
+
+   An expense opened from the list shows its document, or offers to attach one
+   if it has none. Its fields can be changed; the document, once attached,
+   cannot be swapped (attach_expense_document). */
 
 import {
-  applyDocumentDiscount, DuplicateInvoiceError, draftFromExtraction, money, saveScannedExpense,
-  scanChecks, VAT,
-  type ExtractResponse, type PartDef, type ScanDraft, type Supplier,
+  applyDocumentDiscount, DuplicateInvoiceError, draftFromExtraction, attachExpenseDocument,
+  expenseDocumentFiles, money, saveScannedExpense, scanChecks, VAT,
+  type DocumentFileLink, type ExtractResponse, type PartDef, type ScanDraft, type Supplier,
+  type SupplierExpense,
 } from '@garage/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { CheckboxField, SelectField, TextField } from '../../components/Field';
@@ -36,11 +42,11 @@ import Modal from '../../components/Modal/Modal';
 import { usePickPart } from '../../features/works/usePickers';
 import { IconBox, IconTrash } from '../../icons';
 import { showError, showErrorKey, showSuccess, useAppDispatch, useAppSelector, useConfirm } from '../../store';
-import { DocumentPane } from './DocumentPane';
+import { DocumentPane, DropZone } from './DocumentPane';
 import styles from './ExpenseDrawer.module.css';
 import { useExpenseDocument, type DocError } from './useExpenseDocument';
 import {
-  blankExpense, blankLine, draftSubtotal, lineQty, previewTotals, readyLines,
+  blankExpense, blankLine, draftSubtotal, expenseToDraft, lineQty, previewTotals, readyLines,
   type DraftLine, type ExpenseDraft,
 } from './useExpenses';
 
@@ -56,6 +62,7 @@ export const DEFAULT_CATEGORIES = [
 const NEW_SUPPLIER = '__new__';
 
 type LineFlag = 'desc' | 'qty' | 'unitPrice';
+type Mode = 'upload' | 'manual';
 
 /** What a reading left behind for the checks: the document's own figures and
  *  how its VAT was read. Null until the document has been read. */
@@ -74,19 +81,23 @@ export interface ExpenseDrawerProps {
   busy: boolean;
   /** Resolves true once saved — only then does the drawer close. */
   onSave: (draft: ExpenseDraft) => Promise<boolean>;
-  /** Saved with a document, through save_scanned_expense — the list reloads. */
+  /** Saved around onSave/onUpdate (with a document) — the list reloads. */
   onSavedWithDocument: () => void;
   onClose: () => void;
   /** The date the last expense was entered with — a stack of one day's
    *  invoices is the normal way this screen is used. */
   initialDate?: string;
-  /** Opened by "scan an invoice": these files are the document, and reading
-   *  starts at once. */
-  scanFiles?: File[];
+  /** Opened from the list: this expense, to see and change. */
+  expense?: SupplierExpense;
+  onUpdate?: (id: string, draft: ExpenseDraft) => Promise<boolean>;
+  /** Resolves true once deleted (after its own confirmation). */
+  onDelete?: (e: SupplierExpense) => Promise<boolean>;
+  onPrint?: (e: SupplierExpense) => void;
 }
 
 export default function ExpenseDrawer({
-  suppliers, usedCategories, busy, onSave, onSavedWithDocument, onClose, initialDate, scanFiles,
+  suppliers, usedCategories, busy, onSave, onSavedWithDocument, onClose, initialDate,
+  expense, onUpdate, onDelete, onPrint,
 }: ExpenseDrawerProps) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
@@ -94,18 +105,31 @@ export default function ExpenseDrawer({
   const pickPart = usePickPart();
   const pickerUp = useAppSelector((s) => s.modal.stack.length > 0);
   const doc = useExpenseDocument();
-  const [draft, setDraft] = useState<ExpenseDraft>(() => ({
-    ...blankExpense(), ...(initialDate ? { date: initialDate } : {}),
-  }));
+  const editing = expense != null;
+  const [mode, setMode] = useState<Mode>('upload');
+  const [draft, setDraft] = useState<ExpenseDraft>(() => (expense
+    ? expenseToDraft(expense)
+    : { ...blankExpense(), ...(initialDate ? { date: initialDate } : {}) }));
   const [newSupplier, setNewSupplier] = useState({ name: '', taxId: '' });
   const [matchedBy, setMatchedBy] = useState<'tax_id' | 'name' | null>(null);
   const [read, setRead] = useState<ReadState | null>(null);
   const [flags, setFlags] = useState<Record<string, LineFlag[]>>({});
   const [acceptMismatch, setAcceptMismatch] = useState(false);
   const [saving, setSaving] = useState(false);
-  const started = useRef(false);
+  /** The document already on an expense opened from the list. */
+  const [onFile, setOnFile] = useState<DocumentFileLink[] | null>(null);
 
-  const hasDoc = doc.files.length > 0;
+  useEffect(() => {
+    if (!expense?.scanId) return;
+    let live = true;
+    expenseDocumentFiles(expense.scanId)
+      .then((f) => { if (live) setOnFile(f); })
+      .catch((e) => { if (live) dispatch(showError(e)); });
+    return () => { live = false; };
+  }, [expense?.scanId, dispatch]);
+
+  const hasNewDoc = doc.files.length > 0;
+  const wide = editing || hasNewDoc;
 
   const set = (key: Exclude<keyof ExpenseDraft, 'lines' | 'paid'>) => ({
     value: draft[key],
@@ -156,16 +180,12 @@ export default function ExpenseDrawer({
     }
   };
 
-  // "Scan an invoice": the files came with the drawer; read them straight away.
-  useEffect(() => {
-    if (!scanFiles?.length || started.current) return;
-    started.current = true;
-    void (async () => {
-      sayDocError(await doc.add(scanFiles));
-      if (scanFiles.length) await readDocument();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanFiles]);
+  /** Files for the document. In "upload the invoice" mode they are read
+   *  straight away; typed or opened from the list, they are only attached. */
+  const addFiles = async (files: File[]) => {
+    sayDocError(await doc.add(files));
+    if (!editing && mode === 'upload' && !read) await readDocument();
+  };
 
   /* The form as a scan draft, so the phone's checks run on it unchanged. */
   const asScanDraft = (): ScanDraft => ({
@@ -228,7 +248,7 @@ export default function ExpenseDrawer({
     });
   };
 
-  const saveWithDocument = async (allowDuplicate: boolean): Promise<void> => {
+  const saveNewWithDocument = async (allowDuplicate: boolean): Promise<void> => {
     setSaving(true);
     try {
       const scan = await doc.finishUploads();
@@ -254,7 +274,7 @@ export default function ExpenseDrawer({
       if (e instanceof DuplicateInvoiceError) {
         setSaving(false);
         const again = await confirm({ titleKey: 'expenses.doc.dupTitle', bodyKey: 'expenses.doc.dupBody', danger: true });
-        if (again) await saveWithDocument(true);
+        if (again) await saveNewWithDocument(true);
         return;
       }
       dispatch(showError(e));
@@ -263,16 +283,35 @@ export default function ExpenseDrawer({
     }
   };
 
+  /** Changes to an expense opened from the list, and the document if one was
+   *  attached just now. */
+  const saveChanges = async () => {
+    if (!expense || !onUpdate) return;
+    if (!(await onUpdate(expense.id, draft))) return;
+    if (hasNewDoc) {
+      setSaving(true);
+      try {
+        const scan = await doc.finishUploads();
+        await attachExpenseDocument(expense.id, scan.id, doc.names);
+        onSavedWithDocument();
+      } catch (e) {
+        dispatch(showError(e));
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+    onClose();
+  };
+
   const save = async () => {
     if (!canSave || busy || saving) return;
-    if (hasDoc) {
-      await saveWithDocument(false);
-      return;
-    }
+    if (editing) return saveChanges();
+    if (hasNewDoc) return saveNewWithDocument(false);
     if (await onSave(draft)) onClose();
   };
 
-  const footer = (() => {
+  const footerCheck = (() => {
     if (!checks || checks.expected == null) return null;
     if (checks.mismatch == null) {
       return <div className={`${styles.check} ${styles.checkOk}`}>{t('expenses.doc.match')}</div>;
@@ -300,6 +339,20 @@ export default function ExpenseDrawer({
       : read.vatBasis === 'no_vat_on_document' ? 'expenses.doc.vatNoneFound' : null)
     : (read.vatBasis === 'unclear' ? 'expenses.doc.vatUnclear' : null));
 
+  /* A new expense, before it has a document: upload or type. */
+  const modeToggle = !editing && !hasNewDoc && (
+    <div className={styles.modes} role="tablist">
+      <button type="button" role="tab" aria-selected={mode === 'upload'}
+        className={mode === 'upload' ? styles.modeOn : styles.mode} onClick={() => setMode('upload')}>
+        {t('expenses.doc.modeUpload')}
+      </button>
+      <button type="button" role="tab" aria-selected={mode === 'manual'}
+        className={mode === 'manual' ? styles.modeOn : styles.mode} onClick={() => setMode('manual')}>
+        {t('expenses.doc.modeManual')}
+      </button>
+    </div>
+  );
+
   const form = (
     <form className={styles.form} onSubmit={(e) => { e.preventDefault(); void save(); }}>
       {doc.reading && <div className={styles.reading}>{t('expenses.doc.reading')}</div>}
@@ -311,15 +364,7 @@ export default function ExpenseDrawer({
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h4 className={styles.sectionTitle}>{t('expenses.drawer.details')}</h4>
-          {!hasDoc ? (
-            <label className={styles.attach}>
-              {t('expenses.doc.attach')}
-              <input
-                type="file" accept="image/*,application/pdf" multiple hidden
-                onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void doc.add(f).then(sayDocError); }}
-              />
-            </label>
-          ) : (
+          {!editing && hasNewDoc && (
             <Button size="sm" disabled={doc.reading} onClick={() => void readDocument()}>
               {read ? t('expenses.doc.readAgain') : t('expenses.doc.read')}
             </Button>
@@ -332,7 +377,7 @@ export default function ExpenseDrawer({
         >
           <option value="">{t('expenses.pickSupplier')}</option>
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          <option value={NEW_SUPPLIER}>{t('expenses.doc.newSupplier')}</option>
+          {!editing && <option value={NEW_SUPPLIER}>{t('expenses.doc.newSupplier')}</option>}
         </SelectField>
         {draft.supplierId === NEW_SUPPLIER && (
           <div className={styles.pair}>
@@ -353,7 +398,8 @@ export default function ExpenseDrawer({
           <TextField label="expenses.drawer.reference" {...set('reference')} />
         </div>
         <div className={styles.pair}>
-          <SelectField label="expenses.fields.category" required {...set('category')}>
+          <SelectField label="expenses.fields.category" required {...set('category')}
+            className={read && !draft.category ? styles.warn : undefined}>
             <option value="">{t('expenses.drawer.pickCategory')}</option>
             {categories.map((c) => <option key={c} value={c}>{c}</option>)}
           </SelectField>
@@ -463,6 +509,14 @@ export default function ExpenseDrawer({
         )}
       </section>
 
+      {/* Typing a new expense: the invoice can still go with it, unread. */}
+      {!editing && mode === 'manual' && !hasNewDoc && (
+        <section className={styles.section}>
+          <DropZone size="small" title="expenses.doc.attachOptional" body="expenses.doc.attachOptionalBody"
+            onFiles={(f) => void addFiles(f)} />
+        </section>
+      )}
+
       <div className={styles.summary}>
         <div><span>{t('expenses.fields.subtotal')}</span><span>{money(totals.subtotal)}</span></div>
         <div>
@@ -471,41 +525,70 @@ export default function ExpenseDrawer({
         </div>
         <div className={styles.grand}><span>{t('expenses.drawer.total')}</span><span>{money(totals.total)}</span></div>
       </div>
-      {footer}
+      {footerCheck}
       {/* Enter in a field saves, as it did in the old inline form. */}
       <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
     </form>
   );
 
+  /* The document column: what is on file, what was just added, or where to
+     drop one. */
+  const documentColumn = onFile && onFile.length > 0 ? (
+    <DocumentPane files={onFile.map((f) => ({ key: f.name, url: f.url, kind: f.kind }))} />
+  ) : hasNewDoc ? (
+    <DocumentPane
+      files={doc.files.map((f) => ({ key: f.name, url: f.previewUrl, kind: f.kind, status: f.upload }))}
+      canAdd={!doc.reading}
+      onAdd={(f) => void addFiles(f)}
+      onRemove={doc.reading ? undefined : doc.remove}
+    />
+  ) : editing && !expense?.scanId ? (
+    <DropZone title="expenses.doc.noDocTitle" body="expenses.doc.noDocBody" onFiles={(f) => void addFiles(f)} />
+  ) : null;
+
+  /* A new expense in "upload the invoice" mode shows only where to drop it —
+     the form comes once there is something to fill it from. */
+  const body = !editing && !hasNewDoc && mode === 'upload' ? (
+    <>
+      {modeToggle}
+      <div className={styles.uploadOnly}>
+        <DropZone title="expenses.doc.dropTitle" body="expenses.doc.dropBody" onFiles={(f) => void addFiles(f)} />
+        <p className={styles.uploadHint}>{t('expenses.doc.dropHint')}</p>
+      </div>
+    </>
+  ) : wide ? (
+    <div className={styles.withDoc}>
+      <div className={styles.formColumn}>{modeToggle}{form}</div>
+      <div className={styles.docColumn}>{documentColumn}</div>
+    </div>
+  ) : (
+    <>{modeToggle}{form}</>
+  );
+
   return (
     <Modal
-      title={scanFiles?.length ? 'expenses.doc.scanTitle' : 'expenses.drawer.title'}
+      title={editing ? 'expenses.doc.editTitle' : 'expenses.drawer.title'}
+      titleValues={editing ? { supplier: expense.supplierName ?? '', reference: expense.reference ?? '' } : undefined}
       variant="drawer"
-      wide={hasDoc}
+      wide={wide}
       isTop={!pickerUp}
       onClose={onClose}
       actions={
         <>
           <Button variant="primary" className={styles.save} disabled={busy || saving || !canSave} onClick={() => void save()}>
-            {busy || saving ? t('expenses.saving') : t('expenses.drawer.save')}
+            {busy || saving ? t('expenses.saving') : editing ? t('expenses.doc.saveChanges') : t('expenses.drawer.save')}
           </Button>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={onClose}>{editing ? t('common.close') : t('common.cancel')}</Button>
+          {editing && onPrint && <Button onClick={() => onPrint(expense)}>{t('expenses.print')}</Button>}
+          {editing && onDelete && (
+            <Button variant="ghostDanger" onClick={() => void onDelete(expense).then((gone) => { if (gone) onClose(); })}>
+              <IconTrash /> {t('expenses.doc.delete')}
+            </Button>
+          )}
         </>
       }
     >
-      {hasDoc ? (
-        <div className={styles.withDoc}>
-          <div className={styles.docColumn}>
-            <DocumentPane
-              files={doc.files.map((f) => ({ key: f.name, url: f.previewUrl, kind: f.kind, status: f.upload }))}
-              canAdd={!doc.reading}
-              onAdd={(f) => void doc.add(f).then(sayDocError)}
-              onRemove={doc.reading ? undefined : doc.remove}
-            />
-          </div>
-          <div className={styles.formColumn}>{form}</div>
-        </div>
-      ) : form}
+      {body}
     </Modal>
   );
 }

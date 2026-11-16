@@ -99,3 +99,42 @@ export function DocumentPane({
     </div>
   );
 }
+
+/** Where a document is dropped or chosen before there is one. Large as the
+ *  "upload an invoice" mode of a new expense; small under a typed one. */
+export function DropZone({
+  onFiles, title, body, size = 'large', disabled = false,
+}: {
+  onFiles: (files: File[]) => void;
+  /** i18n keys. */
+  title: string;
+  body: string;
+  size?: 'large' | 'small';
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [over, setOver] = useState(false);
+  return (
+    <div
+      className={`${styles.drop} ${size === 'small' ? styles.dropSmall : ''} ${over ? styles.dropOver : ''}`}
+      onDragOver={(e) => { if (!disabled) { e.preventDefault(); setOver(true); } }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); if (!disabled) onFiles([...e.dataTransfer.files]); }}
+    >
+      <span className={styles.dropIcon} aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 20h16" />
+        </svg>
+      </span>
+      <strong className={styles.dropTitle}>{t(title)}</strong>
+      <span className={styles.dropBody}>{t(body)}</span>
+      <label className={styles.dropButton}>
+        {t('expenses.doc.chooseFile')}
+        <input
+          type="file" accept="image/*,application/pdf" multiple hidden disabled={disabled}
+          onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) onFiles(f); }}
+        />
+      </label>
+    </div>
+  );
+}
