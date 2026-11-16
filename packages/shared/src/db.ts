@@ -934,7 +934,7 @@ export const listTicketPhotos = async (key: string): Promise<TicketPhoto[]> => {
    base64 and we upload the bytes directly. Hermes has atob, but not on every RN
    version we might land on - 20 lines here is cheaper than depending on that. */
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const decodeBase64 = (input: string): Uint8Array => {
+export const decodeBase64 = (input: string): Uint8Array => {
   const b64 = input.replace(/[^A-Za-z0-9+/]/g, '');            // drops padding and any newlines
   const bytes = new Uint8Array(Math.floor((b64.length * 3) / 4)); // 4 chars -> 3 bytes; a short final group carries 1 or 2
   // Past the end of the string indexOf gives -1, whose bits would corrupt the

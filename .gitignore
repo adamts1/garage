@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-ssr/
 
 # secrets — never commit; the .example files are the templates.
 # Deny everything env-shaped, then allow back only the templates: the old

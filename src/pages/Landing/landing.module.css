@@ -123,8 +123,10 @@
 
 .ctaRow { display: flex; flex-wrap: wrap; gap: 12px; }
 
-.highlights { display: flex; flex-wrap: wrap; gap: 10px 22px; color: var(--body); font-size: 15px; font-weight: 500; }
-.highlights li { display: inline-flex; align-items: center; gap: 8px; }
+.highlights { display: flex; flex-direction: column; gap: 10px; color: var(--body); font-size: 15px; font-weight: 500; }
+.highlights li { display: flex; align-items: baseline; gap: 10px; }
+.highlights li::before { flex: none; }
+.highlights strong { color: var(--ink, inherit); }
 .highlights li::before {
   content: '';
   width: 14px;
@@ -203,6 +205,20 @@
 .form label { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: 15px; }
 .form input { min-height: 48px; padding: 12px 14px; border: 1px solid #cbd4e2; border-radius: 10px; font-weight: 400; text-align: right; }
 
+/* ---------- faq ---------- */
+
+.faq { max-width: 820px; }
+.faqItem { border-bottom: 1px solid var(--line); }
+.faqItem summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 20px 0; cursor: pointer; list-style: none;
+}
+.faqItem summary::-webkit-details-marker { display: none; }
+.faqItem summary::after { content: '+'; flex: none; font-size: 24px; font-weight: 400; color: var(--body); }
+.faqItem[open] summary::after { content: '−'; }
+.faqItem h3 { margin: 0; font-size: 18px; }
+.faqItem p { margin: 0 0 20px; color: var(--body); line-height: 1.7; }
+
 /* ---------- footer ---------- */
 
 .footer { padding: 40px 0; background: var(--ink-deep); color: #c9d3e4; font-size: 15px; }
@@ -212,6 +228,17 @@
 .footerLinks { display: flex; flex-wrap: wrap; gap: 20px; }
 .footerLinks a { color: #c9d3e4; }
 .footerLinks a:hover { color: #fff; }
+.stores { display: flex; flex-wrap: wrap; gap: 20px; }
+.store {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #fff; font-weight: 600; font-size: 15px;
+}
+.poweredBy {
+  margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .1);
+  justify-content: center !important; font-size: 13px;
+}
+.poweredBy a { color: #8f9bb3; }
+.poweredBy a:hover { color: #fff; }
 
 /* ---------- small screens ---------- */
 

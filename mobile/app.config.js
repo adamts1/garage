@@ -66,8 +66,8 @@ module.exports = {
       [
         'expo-image-picker',
         {
-          photosPermission: 'כדי לצרף תמונות לכרטיס העבודה, יש לאשר גישה לתמונות.',
-          cameraPermission: 'כדי לצלם את הרכב ולצרף לכרטיס העבודה, יש לאשר גישה למצלמה.',
+          photosPermission: 'כדי לצרף תמונות לכרטיס העבודה או לסרוק חשבונית ספק שקיבלת, יש לאשר גישה לתמונות.',
+          cameraPermission: 'כדי לצלם את הרכב לכרטיס העבודה או לסרוק חשבונית ספק, יש לאשר גישה למצלמה.',
           microphonePermission: false,
         },
       ],

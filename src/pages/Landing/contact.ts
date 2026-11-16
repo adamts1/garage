@@ -8,3 +8,5 @@ export const CONTACT = {
 
 export const whatsappUrl = (text?: string) =>
   `https://wa.me/${CONTACT.whatsapp}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+
+export const AGENCY_URL = 'https://tsityat.com';

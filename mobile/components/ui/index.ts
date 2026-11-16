@@ -17,7 +17,7 @@ export { ComboField } from './ComboField';
 export { CreateRow } from './CreateRow';
 export { Field } from './Field';
 export { FormActions } from './FormActions';
-export { MenuIcon, PowerIcon, TrashIcon } from './Icons';
+export { CameraIcon, MenuIcon, PowerIcon, TrashIcon } from './Icons';
 export { NumberPrompt } from './NumberPrompt';
 export { ReadOnly } from './ReadOnly';
 export { ScrollRow } from './ScrollRow';
