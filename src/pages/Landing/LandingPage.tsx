@@ -4,9 +4,9 @@
    live in the two HTML files, where crawlers and link previews read them. */
 
 import type { FormEvent } from 'react';
-import { CONTACT, whatsappUrl } from './contact';
+import { AGENCY_URL, CONTACT, STORES, whatsappUrl } from './contact';
 import { COPY } from './copy';
-import { FEATURE_ICONS } from './icons';
+import { ANDROID_ICON, APPLE_ICON, FEATURE_ICONS } from './icons';
 import { LANDING_PATHS, type Lang } from './languages';
 import styles from './landing.module.css';
 
@@ -194,7 +194,18 @@ export default function LandingPage({ lang }: { lang: Lang }) {
             {CONTACT.email && <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>}
             <a href="/privacy.html">{t.footer.privacy}</a>
           </div>
+          <div className={styles.stores} role="group" aria-label={t.footer.apps}>
+            <a href={STORES.appStore} target="_blank" rel="noopener noreferrer" aria-label={t.footer.appStore} className={styles.store}>
+              {APPLE_ICON}<span dir="ltr">App Store</span>
+            </a>
+            <a href={STORES.googlePlay} target="_blank" rel="noopener noreferrer" aria-label={t.footer.googlePlay} className={styles.store}>
+              {ANDROID_ICON}<span dir="ltr">Google Play</span>
+            </a>
+          </div>
           <span>© {new Date().getFullYear()} Garagiox. {t.footer.rights}</span>
+        </div>
+        <div className={`${styles.container} ${styles.poweredBy}`} dir="ltr">
+          <a href={AGENCY_URL} target="_blank" rel="noopener">Powered by Tsityat AI AGENCY</a>
         </div>
       </footer>
     </div>

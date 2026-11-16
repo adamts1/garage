@@ -212,6 +212,19 @@
 .footerLinks { display: flex; flex-wrap: wrap; gap: 20px; }
 .footerLinks a { color: #c9d3e4; }
 .footerLinks a:hover { color: #fff; }
+.stores { display: flex; flex-wrap: wrap; gap: 12px; }
+.store {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, .25); border-radius: 10px;
+  color: #fff; font-weight: 600; font-size: 15px;
+}
+.store:hover { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .5); }
+.poweredBy {
+  margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .1);
+  justify-content: center !important; font-size: 13px;
+}
+.poweredBy a { color: #8f9bb3; }
+.poweredBy a:hover { color: #fff; }
 
 /* ---------- small screens ---------- */
 
