@@ -10,7 +10,7 @@ import { ANDROID_ICON, APPLE_ICON, FEATURE_ICONS } from './icons';
 import { LANDING_PATHS, type Lang } from './languages';
 import styles from './landing.module.css';
 
-const SECTIONS = ['features', 'how', 'screens', 'demo'] as const;
+const SECTIONS = ['features', 'how', 'screens', 'faq', 'demo'] as const;
 
 function SectionHead({ eyebrow, title, lead }: { eyebrow: string; title: string; lead?: string }) {
   return (
@@ -165,6 +165,18 @@ export default function LandingPage({ lang }: { lang: Lang }) {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section id="faq" className={styles.section}>
+          <div className={`${styles.container} ${styles.faq}`}>
+            <SectionHead eyebrow={t.faq.eyebrow} title={t.faq.title} />
+            {t.faq.items.map((f) => (
+              <details key={f.q} className={styles.faqItem}>
+                <summary><h3>{f.q}</h3></summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </section>
 
