@@ -61,6 +61,7 @@ export default function RootLayout() {
                 repeat headerShown:false themselves; it belongs here, once. */}
             <Stack.Screen name="ticket/[key]" options={{ headerShown: false }} />
             <Stack.Screen name="new" options={{ headerShown: false }} />
+            <Stack.Screen name="scan-invoice" options={{ headerShown: false }} />
           </Stack>
           <UserSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
         </TicketsProvider>
