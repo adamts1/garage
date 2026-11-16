@@ -1,9 +1,10 @@
 // extract-invoice — reads the pages of a scanned supplier invoice.
 //
-//   POST { scan_id }  ->  { scan_id, extraction, supplier, duplicate_of, model }
+//   POST { scan_id, pages }  ->  { scan_id, extraction, supplier, duplicate_of, model }
 //
 // The app has already inserted the expense_scans row and uploaded its pages to
-// expense-scans/{garage_id}/{scan_id}/page-{n}.jpg. This reads them, asks the
+// expense-scans/{garage_id}/{scan_id}/{name}.jpg as they were taken; `pages` is
+// their final order. This stores that order, reads them, asks the
 // model (_shared/extractInvoice.ts), writes the result onto the row, and adds
 // the two things only the server can answer cheaply: which of the garage's
 // suppliers this is, and whether that supplier's invoice number is already on
@@ -13,8 +14,9 @@
 //
 // Like record-expense: the CALLER'S JWT reads the scan, so RLS decides whose it
 // is, and service_role reads the images and writes the result, which the client
-// may not. The caller names a scan, never a path: the paths are derived from the
-// row, so no input reaches another garage's folder.
+// may not. The caller names a scan and, within it, bare page names — checked
+// against a pattern that admits no slash or dot-dot — so every path is built
+// from the row's own garage and scan id and no input reaches another folder.
 //
 // Idempotent. A scan already extracted answers from the row without calling the
 // model again — the processing screen's retry, a second tap, a dropped response
@@ -24,6 +26,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ExtractionError, extractInvoice, type InvoiceExtraction } from '../_shared/extractInvoice.ts';
 
 const BUCKET = 'expense-scans';
+const MAX_PAGES = 5;
+/** A page's object name inside its scan's folder. No slash, no dot-dot. */
+const PAGE_NAME = /^[A-Za-z0-9_-]{4,64}\.jpg$/;
+
+/** The page list the app sent, or null when it sent none (or a bad one). */
+function pageList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length < 1 || raw.length > MAX_PAGES) return null;
+  if (!raw.every((p) => typeof p === 'string' && PAGE_NAME.test(p))) return null;
+  if (new Set(raw).size !== raw.length) return null;
+  return raw as string[];
+}
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -84,25 +98,41 @@ Deno.serve(async (req) => {
     // Caller's JWT -> RLS: a scan of their own garage, or nothing.
     const { data: scan, error: sErr } = await userClient
       .from('expense_scans')
-      .select('id, garage_id, status, page_count, result, model')
+      .select('id, garage_id, status, page_count, pages, result, model')
       .eq('id', scanId)
       .maybeSingle();
     if (sErr) return json({ error: sErr.message }, 400);
     if (!scan) return json({ error: 'scan not found in your garage' }, 404);
     if (scan.status === 'saved') return json({ error: 'this scan is already saved' }, 409);
 
+    if (body.pages !== undefined && !pageList(body.pages)) {
+      return json({ error: `pages must be 1–${MAX_PAGES} page names`, code: 'bad_pages' }, 400);
+    }
+    const sent = pageList(body.pages);
+    /* The order to read: what the app sent now, else what it sent before, else
+       a scan from before named pages (page-1…page-n). */
+    const names: string[] = sent
+      ?? (scan.pages as string[] | null)
+      ?? Array.from({ length: scan.page_count }, (_, i) => `page-${i + 1}.jpg`);
+    const samePages = !sent || JSON.stringify(sent) === JSON.stringify(scan.pages);
+
     let extraction: InvoiceExtraction;
     let model: string = scan.model ?? '';
-    if (scan.status === 'extracted' && scan.result && !body.force) {
+    if (scan.status === 'extracted' && scan.result && samePages && !body.force) {
       extraction = scan.result as InvoiceExtraction;
     } else {
+      if (sent && !samePages) {
+        await admin.from('expense_scans')
+          .update({ pages: sent, page_count: sent.length })
+          .eq('id', scan.id);
+      }
       const pages: Uint8Array[] = [];
-      for (let n = 1; n <= scan.page_count; n++) {
+      for (let i = 0; i < names.length; i++) {
         const { data: blob, error } = await admin.storage
           .from(BUCKET)
-          .download(`${scan.garage_id}/${scan.id}/page-${n}.jpg`);
+          .download(`${scan.garage_id}/${scan.id}/${names[i]}`);
         if (error || !blob) {
-          return json({ error: `page ${n} has not been uploaded`, code: 'pages_missing' }, 409);
+          return json({ error: `page ${i + 1} has not been uploaded`, code: 'pages_missing' }, 409);
         }
         pages.push(new Uint8Array(await blob.arrayBuffer()));
       }
@@ -117,7 +147,7 @@ Deno.serve(async (req) => {
           extracted_at: new Date().toISOString(),
         }).eq('id', scan.id);
         console.log(JSON.stringify({
-          fn: 'extract-invoice', scan: scan.id, pages: scan.page_count, model: run.model,
+          fn: 'extract-invoice', scan: scan.id, pages: names.length, model: run.model,
           ms: run.ms, input_tokens: run.inputTokens, output_tokens: run.outputTokens,
           lines: run.extraction.lines?.length ?? 0,
         }));

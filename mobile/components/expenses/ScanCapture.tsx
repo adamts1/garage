@@ -1,5 +1,6 @@
 /* Collecting the pages: photograph or pick up to five, put them in order, take
-   one again, drop one. Nothing leaves the phone until סיום. */
+   one again, drop one. Each one uploads in the background as soon as it is
+   taken (useInvoiceScan); the line under its title says how that is going. */
 
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,7 @@ import { SCAN_MAX_PAGES } from '@garage/shared';
 import { C, s } from '../../lib/theme';
 import { Button, TrashIcon } from '../ui';
 import { capturePage, type LocalPage, type PageSource } from './scanPages';
+import type { ScanPage } from './useInvoiceScan';
 
 export function ScanCapture({
   pages,
@@ -16,7 +18,7 @@ export function ScanCapture({
   onMove,
   onDone,
 }: {
-  pages: LocalPage[];
+  pages: ScanPage[];
   onAdd: (p: LocalPage) => void;
   onReplace: (i: number, p: LocalPage) => void;
   onRemove: (i: number) => void;
@@ -46,7 +48,7 @@ export function ScanCapture({
         <Text style={[s.body, { color: C.slate }]}>{t('scan.capture.hint')}</Text>
 
         {pages.map((p, i) => (
-          <View key={p.uri} style={[s.card, s.row, { gap: 12, padding: 10 }]}>
+          <View key={p.name} style={[s.card, s.row, { gap: 12, padding: 10 }]}>
             <Image
               source={{ uri: p.uri }}
               style={{ width: 64, height: 86, borderRadius: 6, backgroundColor: C.tint }}
@@ -55,6 +57,11 @@ export function ScanCapture({
             />
             <View style={{ flex: 1, gap: 8 }}>
               <Text style={s.h2}>{t('scan.capture.page', { n: i + 1 })}</Text>
+              <Text style={[s.dim, p.upload === 'done' ? { color: C.okText } : p.upload === 'error' ? { color: C.danger } : null]}>
+                {p.upload === 'done' ? t('scan.capture.uploaded')
+                  : p.upload === 'error' ? t('scan.capture.uploadFailed')
+                  : t('scan.capture.uploading')}
+              </Text>
               <View style={[s.row, { flexWrap: 'wrap', gap: 6 }]}>
                 <Button size="sm" variant="secondary" label={t('scan.capture.retake')} onPress={() => void take('camera', i)} />
                 {i > 0 && (

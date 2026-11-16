@@ -334,7 +334,10 @@
       "libraryPermission": "כדי לבחור תמונה צריך לאשר גישה לתמונות בהגדרות.",
       "discardTitle": "לצאת בלי לשמור?",
       "discardBody": "העמודים שצילמת יימחקו.",
-      "discard": "צא"
+      "discard": "צא",
+      "uploading": "מעלה…",
+      "uploaded": "הועלה ✓",
+      "uploadFailed": "לא הועלה – ננסה שוב בסיום"
     },
     "processing": {
       "uploading": "מעלה עמוד {{n}} מתוך {{count}}…",

@@ -265,18 +265,26 @@ export function applyDocumentDiscount(draft: ScanDraft): ScanDraft {
 export const SCAN_BUCKET = 'expense-scans';
 export const SCAN_MAX_PAGES = 5;
 
-/** Where a page lives — the layout extract-invoice reads (n from 1). */
-export const scanPagePath = (garageId: string, scanId: string, n: number) =>
-  `${garageId}/${scanId}/page-${n}.jpg`;
+/** Where a page lives: its own name inside the scan's folder. Pages upload as
+ *  they are taken, so a name is not a position — the order is the list handed
+ *  to extractScan(). */
+export const scanPagePath = (garageId: string, scanId: string, name: string) =>
+  `${garageId}/${scanId}/${name}`;
+
+/** A fresh page name, unique within its scan. Matches extract-invoice's
+ *  PAGE_NAME: letters, digits and dashes, then .jpg. */
+export const newScanPageName = () =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.jpg`;
 
 export interface ScanStart { id: string; garageId: string }
 
-/** Start a scan of `pageCount` pages. The row comes back with the garage its
- *  pages must be uploaded under — the storage policy checks that prefix. */
-export const startScan = async (pageCount: number): Promise<ScanStart> => {
+/** Start a scan — on the first page, before the rest are taken. The row comes
+ *  back with the garage its pages must be uploaded under: the storage policy
+ *  checks that prefix. The page count is set at סיום, by extract-invoice. */
+export const startScan = async (): Promise<ScanStart> => {
   const { data, error } = await getClient()
     .from('expense_scans')
-    .insert({ page_count: pageCount })
+    .insert({ page_count: 1 })
     .select('id, garage_id')
     .single();
   if (error) throw error;
@@ -285,10 +293,10 @@ export const startScan = async (pageCount: number): Promise<ScanStart> => {
 
 /** Upload one page, already shrunk to a JPEG. A page that is already there
  *  counts as uploaded: that is a retry after a response that never arrived. */
-export const uploadScanPage = async (scan: ScanStart, n: number, base64Jpeg: string): Promise<void> => {
+export const uploadScanPage = async (scan: ScanStart, name: string, base64Jpeg: string): Promise<void> => {
   const { error } = await getClient()
     .storage.from(SCAN_BUCKET)
-    .upload(scanPagePath(scan.garageId, scan.id, n), decodeBase64(base64Jpeg), {
+    .upload(scanPagePath(scan.garageId, scan.id, name), decodeBase64(base64Jpeg), {
       contentType: 'image/jpeg', upsert: false,
     });
   if (error && !/exists|duplicate/i.test(error.message)) throw error;
@@ -301,11 +309,12 @@ export class ScanExtractError extends Error {
   }
 }
 
-/** Ask extract-invoice to read the scan. Answers from the stored result when
- *  the scan was already read, so a retry costs nothing. */
-export const extractScan = async (scanId: string): Promise<ExtractResponse> => {
+/** Ask extract-invoice to read the scan's pages, in this order. Answers from
+ *  the stored result when the same pages were already read, so a retry costs
+ *  nothing. */
+export const extractScan = async (scanId: string, pages: readonly string[]): Promise<ExtractResponse> => {
   const { data, error } = await getClient().functions.invoke('extract-invoice', {
-    body: { scan_id: scanId },
+    body: { scan_id: scanId, pages },
   });
   if (error) {
     let body: any = null;
@@ -370,8 +379,8 @@ export const saveScannedExpense = async (input: SaveScanInput): Promise<string> 
 /** Signed URLs for a scan's pages, in order — for the review screen to show
  *  the original beside what was read. An hour: a review is minutes, and a
  *  draft re-signs when it is reopened. */
-export const signScanPages = async (scan: ScanStart, pageCount: number): Promise<string[]> => {
-  const paths = Array.from({ length: pageCount }, (_, i) => scanPagePath(scan.garageId, scan.id, i + 1));
+export const signScanPages = async (scan: ScanStart, pages: readonly string[]): Promise<string[]> => {
+  const paths = pages.map((name) => scanPagePath(scan.garageId, scan.id, name));
   const { data, error } = await getClient().storage.from(SCAN_BUCKET).createSignedUrls(paths, 3600);
   if (error) throw error;
   return (data ?? []).map((d) => d.signedUrl ?? '');
