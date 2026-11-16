@@ -1,6 +1,6 @@
 import { linesSummary, money } from '@garage/shared';
 import type { SupplierExpense } from '@garage/shared';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,8 +9,9 @@ import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
 import { PagedTable, RowMenu, type Column } from '../../components/Table';
-import { IconBox, IconCard } from '../../icons';
+import { IconBox, IconCard, IconDoc } from '../../icons';
 import ExpenseDrawer from './ExpenseDrawer';
+import { AttachDocument, DocumentViewer } from './ExpenseDocumentModals';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
 import { NO_FILTERS, today, useExpenses, type ExpenseStatusFilter } from './useExpenses';
@@ -23,6 +24,11 @@ export default function ExpensesPage() {
   const { suppliers, totals, filters, setFilters } = ex;
 
   const [adding, setAdding] = useState(false);
+  /** The files "scan an invoice" was given; the drawer reads them at once. */
+  const [scanFiles, setScanFiles] = useState<File[] | null>(null);
+  const [viewing, setViewing] = useState<SupplierExpense | null>(null);
+  const [attaching, setAttaching] = useState<SupplierExpense | null>(null);
+  const scanInput = useRef<HTMLInputElement>(null);
   /* Kept between drawers: entering a stack of one day's invoices is the normal
      way this screen is used. */
   const [lastDate, setLastDate] = useState(today);
@@ -52,7 +58,18 @@ export default function ExpensesPage() {
       key: 'reference',
       header: 'expenses.drawer.reference',
       cellClassName: styles.muted,
-      render: (e) => e.reference || '-',
+      /* The document, one click from the number it is filed under. */
+      render: (e) => (
+        <span className={styles.reference}>
+          {e.reference || '-'}
+          {e.scanId && (
+            <button type="button" className={styles.docLink} onClick={() => setViewing(e)}
+              title={t('expenses.doc.view')} aria-label={t('expenses.doc.view')}>
+              <IconDoc />
+            </button>
+          )}
+        </span>
+      ),
     },
     {
       key: 'cheque',
@@ -94,6 +111,9 @@ export default function ExpensesPage() {
       width: 90,
       render: (e) => (
         <RowMenu items={[
+          e.scanId
+            ? { label: 'expenses.doc.view', onSelect: () => setViewing(e) }
+            : { label: 'expenses.doc.attachMenu', onSelect: () => setAttaching(e) },
           { label: 'expenses.print', onSelect: () => printExpense(e) },
           { label: e.paid ? 'expenses.markUnpaid' : 'expenses.markPaid', onSelect: () => void ex.togglePaid(e) },
           { label: 'common.delete', onSelect: () => void ex.remove(e), danger: true },
@@ -108,9 +128,24 @@ export default function ExpensesPage() {
         title="expenses.title"
         subtitle="expenses.subtitle"
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)} disabled={suppliers.length === 0}>
-            ＋ {t('expenses.drawer.title')}
-          </Button>
+          <>
+            {/* Scanning can create the supplier from the document, so it is
+                offered even when none is on file yet. */}
+            <Button variant="primary" onClick={() => scanInput.current?.click()}>
+              {t('expenses.doc.scan')}
+            </Button>
+            <input
+              ref={scanInput} type="file" accept="image/*,application/pdf" multiple hidden
+              onChange={(e) => {
+                const files = [...(e.target.files ?? [])];
+                e.target.value = '';
+                if (files.length) { setScanFiles(files); setAdding(true); }
+              }}
+            />
+            <Button onClick={() => { setScanFiles(null); setAdding(true); }} disabled={suppliers.length === 0}>
+              ＋ {t('expenses.drawer.title')}
+            </Button>
+          </>
         }
       />
 
@@ -180,8 +215,15 @@ export default function ExpensesPage() {
             if (ok) setLastDate(draft.date);
             return ok;
           }}
-          onClose={() => setAdding(false)}
+          onSavedWithDocument={ex.reload}
+          scanFiles={scanFiles ?? undefined}
+          onClose={() => { setAdding(false); setScanFiles(null); }}
         />
+      )}
+
+      {viewing && <DocumentViewer expense={viewing} onClose={() => setViewing(null)} />}
+      {attaching && (
+        <AttachDocument expense={attaching} onClose={() => setAttaching(null)} onAttached={ex.reload} />
       )}
     </>
   );

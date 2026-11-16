@@ -224,5 +224,7 @@ export function useExpenses() {
     filters, setFilters,
     filtered: (Object.keys(NO_FILTERS) as (keyof ExpenseFilters)[]).some((k) => filters[k] !== NO_FILTERS[k]),
     create, togglePaid, remove,
+    /** After a save that went around create() — one with a document. */
+    reload: load,
   };
 }

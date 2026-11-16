@@ -73,7 +73,7 @@ describe('filterExpenses', () => {
     id: Math.random().toString(36).slice(2), supplierId: 's1', supplierName: 'ספק חלפים מרכזי',
     date: '2026-11-02', description: null, category: null, reference: null, lines: [],
     subtotal: 100, vatRate: 0.18, vat: 18, total: 118, paid: false,
-    dueDate: null, chequeNumber: null, chequeDate: null,
+    dueDate: null, chequeNumber: null, chequeDate: null, source: 'manual', scanId: null,
     provider: 'icount', providerExpenseId: null, syncStatus: 'synced', syncError: null,
     createdAt: '2026-11-02T00:00:00.000Z', ...over,
   });

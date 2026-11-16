@@ -253,6 +253,9 @@ export function useInvoiceScan() {
       paid: choices.paid,
       chequeNumber: choices.chequeNumber,
       allowDuplicate,
+      /* The pages as read — or, entered by hand after a failed reading, the
+         pages that made it up — so the expense always has its document. */
+      pages: readPages.current,
     };
     const id = await saveScannedExpense(input);
     await AsyncStorage.removeItem(DRAFT_KEY);

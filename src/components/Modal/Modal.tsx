@@ -24,6 +24,9 @@ export interface ModalProps {
    *  form long enough to want the height (2026-11-11, the expense form). The
    *  behaviour is the dialog's: same Escape, focus and scroll lock. */
   variant?: 'dialog' | 'drawer';
+  /** A drawer with a second column — the expense form beside the supplier's
+   *  document it is entered from (2026-11-16). */
+  wide?: boolean;
 }
 
 /** The shell every modal shares: scrim, panel, heading, footer. What goes in
@@ -39,6 +42,7 @@ export default function Modal({
   stacked = false,
   size = 'md',
   variant = 'dialog',
+  wide = false,
 }: ModalProps) {
   const drawer = variant === 'drawer';
   const { t } = useTranslation();
@@ -56,7 +60,7 @@ export default function Modal({
     >
       <div
         ref={panelRef}
-        className={[styles.panel, size === 'sm' ? styles.sm : size === 'lg' ? styles.lg : null, drawer ? styles.drawer : null].filter(Boolean).join(' ')}
+        className={[styles.panel, size === 'sm' ? styles.sm : size === 'lg' ? styles.lg : null, drawer ? styles.drawer : null, drawer && wide ? styles.drawerWide : null].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal="true"
         aria-label={t(title, titleValues)}

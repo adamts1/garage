@@ -15,3 +15,26 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* The reference, and the document it was entered from beside it. */
+.reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.docLink {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+}
+.docLink:hover {
+  background: var(--surface-2);
+}
+.docLink svg {
+  width: 16px;
+  height: 16px;
+}
