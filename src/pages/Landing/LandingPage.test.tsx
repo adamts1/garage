@@ -10,8 +10,8 @@ afterEach(() => {
 
 describe('LandingPage', () => {
   it.each([
-    ['he', 'המוסך מתקדם.הניהול מתקדם איתו.', 'العربية', '/marketing/ar/'],
-    ['ar', 'الكراج يتقدّم.والإدارة تتقدّم معه.', 'עברית', '/marketing/'],
+    ['he', 'Garagioxמוסך חכם', 'العربية', '/marketing/ar/'],
+    ['ar', 'Garagioxكراج ذكي', 'עברית', '/marketing/'],
   ] as const)('renders in %s and links to the other language', (lang, heading, switchLabel, switchHref) => {
     render(<LandingPage lang={lang} />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(heading);
