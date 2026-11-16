@@ -4,13 +4,13 @@
    live in the two HTML files, where crawlers and link previews read them. */
 
 import type { FormEvent } from 'react';
-import { CONTACT, whatsappUrl } from './contact';
+import { AGENCY_URL, CONTACT, whatsappUrl } from './contact';
 import { COPY } from './copy';
-import { FEATURE_ICONS } from './icons';
+import { ANDROID_ICON, APPLE_ICON, FEATURE_ICONS } from './icons';
 import { LANDING_PATHS, type Lang } from './languages';
 import styles from './landing.module.css';
 
-const SECTIONS = ['features', 'how', 'screens', 'demo'] as const;
+const SECTIONS = ['features', 'how', 'screens', 'faq', 'demo'] as const;
 
 function SectionHead({ eyebrow, title, lead }: { eyebrow: string; title: string; lead?: string }) {
   return (
@@ -75,7 +75,11 @@ export default function LandingPage({ lang }: { lang: Lang }) {
                 <a href="#screens" className={`${styles.btnGhost} ${styles.btnLarge}`}>{t.hero.screens}</a>
               </div>
               <ul className={styles.highlights}>
-                {t.hero.highlights.map((h) => <li key={h}>{h}</li>)}
+                {t.hero.highlights.map((h) => (
+                  <li key={h.title}>
+                    <span>{h.body ? <><strong>{h.title}</strong> – {h.body}</> : h.title}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -164,6 +168,18 @@ export default function LandingPage({ lang }: { lang: Lang }) {
           </div>
         </section>
 
+        <section id="faq" className={styles.section}>
+          <div className={`${styles.container} ${styles.faq}`}>
+            <SectionHead eyebrow={t.faq.eyebrow} title={t.faq.title} />
+            {t.faq.items.map((f) => (
+              <details key={f.q} className={styles.faqItem}>
+                <summary><h3>{f.q}</h3></summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
         <section id="demo" className={`${styles.section} ${styles.dark}`}>
           <div className={`${styles.container} ${styles.demo}`}>
             <div className={styles.demoCopy}>
@@ -194,7 +210,14 @@ export default function LandingPage({ lang }: { lang: Lang }) {
             {CONTACT.email && <a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a>}
             <a href="/privacy.html">{t.footer.privacy}</a>
           </div>
+          <div className={styles.stores} role="group" aria-label={t.footer.apps}>
+            <span className={styles.store}>{APPLE_ICON}<span dir="ltr">iOS</span></span>
+            <span className={styles.store}>{ANDROID_ICON}<span dir="ltr">Android</span></span>
+          </div>
           <span>© {new Date().getFullYear()} Garagiox. {t.footer.rights}</span>
+        </div>
+        <div className={`${styles.container} ${styles.poweredBy}`} dir="ltr">
+          <a href={AGENCY_URL} target="_blank" rel="noopener">Powered by Tsityat AI AGENCY</a>
         </div>
       </footer>
     </div>
