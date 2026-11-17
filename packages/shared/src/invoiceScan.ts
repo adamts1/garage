@@ -272,9 +272,13 @@ export const scanPagePath = (garageId: string, scanId: string, name: string) =>
   `${garageId}/${scanId}/${name}`;
 
 /** A fresh page name, unique within its scan. Matches extract-invoice's
- *  PAGE_NAME: letters, digits and dashes, then .jpg. */
-export const newScanPageName = () =>
-  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+ *  PAGE_NAME and valid_scan_pages(): letters, digits and dashes, then .jpg
+ *  for a photographed page or .pdf for a PDF as the supplier sent it. */
+export const newScanPageName = (ext: 'jpg' | 'pdf' = 'jpg') =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+
+/** Whether a stored page is a PDF rather than a photographed page. */
+export const isPdfPage = (name: string) => name.toLowerCase().endsWith('.pdf');
 
 export interface ScanStart { id: string; garageId: string }
 
@@ -298,6 +302,21 @@ export const uploadScanPage = async (scan: ScanStart, name: string, base64Jpeg: 
     .storage.from(SCAN_BUCKET)
     .upload(scanPagePath(scan.garageId, scan.id, name), decodeBase64(base64Jpeg), {
       contentType: 'image/jpeg', upsert: false,
+    });
+  if (error && !/exists|duplicate/i.test(error.message)) throw error;
+};
+
+/** Upload one file as it is — the browser's path: a JPEG it has already
+ *  shrunk, or a PDF. A file already there counts as uploaded (a retry). */
+export const uploadScanFile = async (
+  scan: ScanStart,
+  name: string,
+  data: Blob | ArrayBuffer | Uint8Array,
+): Promise<void> => {
+  const { error } = await getClient()
+    .storage.from(SCAN_BUCKET)
+    .upload(scanPagePath(scan.garageId, scan.id, name), data, {
+      contentType: isPdfPage(name) ? 'application/pdf' : 'image/jpeg', upsert: false,
     });
   if (error && !/exists|duplicate/i.test(error.message)) throw error;
 };
@@ -349,6 +368,11 @@ export interface SaveScanInput {
   chequeDate?: string | null;
   /** The person saw the duplicate warning and saves anyway. */
   allowDuplicate?: boolean;
+  category?: string | null;
+  description?: string | null;
+  /** The document's files in order. Needed when nobody read it (attached on
+   *  the form, or reviewed by hand); a scan that was read already has them. */
+  pages?: readonly string[] | null;
 }
 
 /** Save the reviewed scan as one supplier expense (save_scanned_expense). */
@@ -368,6 +392,9 @@ export const saveScannedExpense = async (input: SaveScanInput): Promise<string> 
     p_cheque_number: input.chequeNumber || null,
     p_cheque_date: input.chequeDate || null,
     p_allow_duplicate: input.allowDuplicate ?? false,
+    p_category: input.category || null,
+    p_description: input.description || null,
+    p_pages: input.pages && input.pages.length > 0 ? [...input.pages] : null,
   });
   if (error) {
     if (error.code === '23505') throw new DuplicateInvoiceError(error.hint || null);
@@ -384,4 +411,38 @@ export const signScanPages = async (scan: ScanStart, pages: readonly string[]): 
   const { data, error } = await getClient().storage.from(SCAN_BUCKET).createSignedUrls(paths, 3600);
   if (error) throw error;
   return (data ?? []).map((d) => d.signedUrl ?? '');
+};
+
+/** Put a document on an expense that was saved without one. Refused when it
+ *  already has one: the document an expense was entered from is not swapped. */
+export const attachExpenseDocument = async (
+  expenseId: string,
+  scanId: string,
+  pages: readonly string[],
+): Promise<void> => {
+  const { error } = await getClient().rpc('attach_expense_document', {
+    p_expense_id: expenseId, p_scan_id: scanId, p_pages: [...pages],
+  });
+  if (error) throw error;
+};
+
+export interface DocumentFileLink {
+  name: string;
+  url: string;
+  kind: 'image' | 'pdf';
+}
+
+/** An expense's document, ready to show: its files in order, each with a
+ *  signed URL. Scans from before named pages read as page-1…page-n. */
+export const expenseDocumentFiles = async (scanId: string): Promise<DocumentFileLink[]> => {
+  const { data, error } = await getClient()
+    .from('expense_scans')
+    .select('id, garage_id, pages, page_count')
+    .eq('id', scanId)
+    .single();
+  if (error) throw error;
+  const names: string[] = data.pages
+    ?? Array.from({ length: data.page_count }, (_, i) => `page-${i + 1}.jpg`);
+  const urls = await signScanPages({ id: data.id, garageId: data.garage_id }, names);
+  return names.map((name, i) => ({ name, url: urls[i] ?? '', kind: isPdfPage(name) ? 'pdf' : 'image' }));
 };

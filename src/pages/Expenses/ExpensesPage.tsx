@@ -9,7 +9,7 @@ import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
 import { PagedTable, RowMenu, type Column } from '../../components/Table';
-import { IconBox, IconCard } from '../../icons';
+import { IconBox, IconCard, IconDoc } from '../../icons';
 import ExpenseDrawer from './ExpenseDrawer';
 import styles from './ExpensesPage.module.css';
 import { printExpense } from './printExpense';
@@ -23,6 +23,10 @@ export default function ExpensesPage() {
   const { suppliers, totals, filters, setFilters } = ex;
 
   const [adding, setAdding] = useState(false);
+  /** An expense opened from the list — its form, with its document. */
+  const [opened, setOpened] = useState<SupplierExpense | null>(null);
+  /** Inside a row, a control acts on its own; the row's click opens it. */
+  const own = (e: React.MouseEvent) => e.stopPropagation();
   /* Kept between drawers: entering a stack of one day's invoices is the normal
      way this screen is used. */
   const [lastDate, setLastDate] = useState(today);
@@ -52,7 +56,17 @@ export default function ExpensesPage() {
       key: 'reference',
       header: 'expenses.drawer.reference',
       cellClassName: styles.muted,
-      render: (e) => e.reference || '-',
+      /* The document, one click from the number it is filed under. */
+      render: (e) => (
+        <span className={styles.reference}>
+          {e.reference || '-'}
+          {e.scanId && (
+            <span className={styles.docLink} title={t('expenses.doc.hasDoc')} aria-label={t('expenses.doc.hasDoc')}>
+              <IconDoc />
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: 'cheque',
@@ -77,7 +91,7 @@ export default function ExpensesPage() {
       header: 'expenses.fields.status',
       sortValue: (e) => (e.paid ? 1 : 0),
       render: (e) => (
-        <div className={styles.pills}>
+        <div className={styles.pills} onClick={own}>
           <Pill
             tone={e.paid ? 'ok' : 'warn'}
             title={t('expenses.togglePaid')}
@@ -93,11 +107,14 @@ export default function ExpensesPage() {
       header: 'common.actions',
       width: 90,
       render: (e) => (
+        <span onClick={own}>
         <RowMenu items={[
+          { label: 'expenses.doc.open', onSelect: () => setOpened(e) },
           { label: 'expenses.print', onSelect: () => printExpense(e) },
           { label: e.paid ? 'expenses.markUnpaid' : 'expenses.markPaid', onSelect: () => void ex.togglePaid(e) },
           { label: 'common.delete', onSelect: () => void ex.remove(e), danger: true },
         ]} />
+        </span>
       ),
     },
   ];
@@ -108,7 +125,9 @@ export default function ExpensesPage() {
         title="expenses.title"
         subtitle="expenses.subtitle"
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)} disabled={suppliers.length === 0}>
+          /* Open with no supplier on file too: uploading an invoice creates
+             its supplier from the document. */
+          <Button variant="primary" onClick={() => setAdding(true)}>
             ＋ {t('expenses.drawer.title')}
           </Button>
         }
@@ -166,6 +185,7 @@ export default function ExpensesPage() {
         columns={columns}
         rows={ex.shown}
         rowKey={(e) => e.id}
+        onRowClick={setOpened}
         emptyKey={ex.filtered ? 'expenses.noMatch' : 'expenses.empty'}
       />
 
@@ -180,7 +200,24 @@ export default function ExpensesPage() {
             if (ok) setLastDate(draft.date);
             return ok;
           }}
+          onSavedWithDocument={ex.reload}
           onClose={() => setAdding(false)}
+        />
+      )}
+
+      {opened && (
+        <ExpenseDrawer
+          key={opened.id}
+          expense={opened}
+          suppliers={suppliers}
+          usedCategories={ex.usedCategories}
+          busy={ex.busy}
+          onSave={async () => false}
+          onUpdate={ex.update}
+          onDelete={ex.remove}
+          onPrint={printExpense}
+          onSavedWithDocument={ex.reload}
+          onClose={() => setOpened(null)}
         />
       )}
     </>
