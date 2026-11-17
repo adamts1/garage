@@ -104,7 +104,7 @@ const SCHEMA = {
 
 const SYSTEM = `You read photographed Israeli supplier invoices for a car garage's bookkeeping.
 
-The images are the pages of ONE document, in order. The text is Hebrew, right to left; numbers are written left to right. Items may continue from one page to the next.
+The images and PDF files are the pages of ONE document, in order. The text is Hebrew, right to left; numbers are written left to right. Items may continue from one page to the next.
 
 Return:
 - supplier_name: the business that ISSUED the document (usually at the top), not the garage it was issued to.
@@ -126,22 +126,29 @@ Use null for anything you cannot read with certainty. Never guess or compute a m
  *  served from the row rather than read twice. */
 const TIMEOUT_MS = 50_000;
 
-export async function extractInvoice(pages: Uint8Array[]): Promise<ExtractionRun> {
+/** One file of the document: a page photographed (JPEG) or a PDF as the
+ *  supplier sent it — the model reads a PDF's pages itself. */
+export interface DocumentFile {
+  bytes: Uint8Array;
+  mediaType: 'image/jpeg' | 'application/pdf';
+}
+
+export async function extractInvoice(files: DocumentFile[]): Promise<ExtractionRun> {
   const model = Deno.env.get('EXTRACT_MODEL') || 'claude-haiku-5-5';
   const effort = (Deno.env.get('EXTRACT_EFFORT') || 'low') as 'low' | 'medium' | 'high';
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) throw new ExtractionError('invoice scanning is not configured on this server', false);
   const client = new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: 0 });
 
-  const content: Anthropic.ContentBlockParam[] = pages.map((bytes) => ({
-    type: 'image',
-    source: { type: 'base64', media_type: 'image/jpeg', data: toBase64(bytes) },
-  }));
+  const content: Anthropic.ContentBlockParam[] = files.map((f): Anthropic.ContentBlockParam =>
+    f.mediaType === 'application/pdf'
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: toBase64(f.bytes) } }
+      : { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: toBase64(f.bytes) } });
   content.push({
     type: 'text',
-    text: pages.length === 1
-      ? 'One page. Extract the invoice.'
-      : `${pages.length} pages of one invoice, in order. Extract it.`,
+    text: files.length === 1
+      ? 'One file of one invoice. Extract the invoice.'
+      : `${files.length} files of one invoice, in order. Extract it.`,
   });
 
   const started = Date.now();

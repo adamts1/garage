@@ -100,6 +100,11 @@ export interface SupplierExpense {
    *  was written nor the day the bill was due — it is the day the money leaves
    *  the account, which is the only date a cash-flow question cares about. */
   chequeDate: string | null;     // YYYY-MM-DD
+  /** Typed ('manual') or read off a scanned document ('scan'). */
+  source: 'manual' | 'scan';
+  /** The document it was entered from, when one is on file — scanned, or
+   *  attached to a typed expense. See expenseDocumentFiles(). */
+  scanId: string | null;
   provider: string;
   providerExpenseId: string | null;
   syncStatus: ExpenseSyncStatus;
@@ -147,6 +152,8 @@ const rowToExpense = (r: any): SupplierExpense => ({
   dueDate: r.due_date ?? null,
   chequeNumber: r.cheque_number ?? null,
   chequeDate: r.cheque_date ?? null,
+  source: r.source === 'scan' ? 'scan' : 'manual',
+  scanId: r.scan_id ?? null,
   provider: r.provider,
   providerExpenseId: r.provider_expense_id ?? null,
   syncStatus: r.sync_status,

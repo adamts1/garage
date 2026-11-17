@@ -23,12 +23,14 @@
 // all cost nothing. `force: true` reads it again.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { ExtractionError, extractInvoice, type InvoiceExtraction } from '../_shared/extractInvoice.ts';
+import { ExtractionError, extractInvoice, type DocumentFile, type InvoiceExtraction } from '../_shared/extractInvoice.ts';
 
 const BUCKET = 'expense-scans';
 const MAX_PAGES = 5;
-/** A page's object name inside its scan's folder. No slash, no dot-dot. */
-const PAGE_NAME = /^[A-Za-z0-9_-]{4,64}\.jpg$/;
+/** A page's object name inside its scan's folder: a photographed page (.jpg)
+ *  or a PDF as the supplier sent it. No slash, no dot-dot. The database checks
+ *  the same rule (valid_scan_pages). */
+const PAGE_NAME = /^[A-Za-z0-9_-]{4,64}\.(jpg|pdf)$/;
 
 /** The page list the app sent, or null when it sent none (or a bad one). */
 function pageList(raw: unknown): string[] | null {
@@ -126,7 +128,7 @@ Deno.serve(async (req) => {
           .update({ pages: sent, page_count: sent.length })
           .eq('id', scan.id);
       }
-      const pages: Uint8Array[] = [];
+      const pages: DocumentFile[] = [];
       for (let i = 0; i < names.length; i++) {
         const { data: blob, error } = await admin.storage
           .from(BUCKET)
@@ -134,7 +136,10 @@ Deno.serve(async (req) => {
         if (error || !blob) {
           return json({ error: `page ${i + 1} has not been uploaded`, code: 'pages_missing' }, 409);
         }
-        pages.push(new Uint8Array(await blob.arrayBuffer()));
+        pages.push({
+          bytes: new Uint8Array(await blob.arrayBuffer()),
+          mediaType: names[i].endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+        });
       }
 
       try {

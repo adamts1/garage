@@ -11,7 +11,7 @@ const bill = (over: Partial<SupplierExpense>): SupplierExpense => ({
   description: null, category: null, reference: null, lines: [],
   subtotal: 1000, vatRate: 0.18, vat: 180, total: 1180,
   paid: false,
-  dueDate: null, chequeNumber: null, chequeDate: null,
+  dueDate: null, chequeNumber: null, chequeDate: null, source: 'manual', scanId: null,
   provider: 'icount', providerExpenseId: null,
   syncStatus: 'synced', syncError: null,
   createdAt: '2026-08-01T00:00:00.000Z',
