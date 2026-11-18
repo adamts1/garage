@@ -171,6 +171,78 @@ export const listExpenses = async (): Promise<SupplierExpense[]> => {
   return rows.map(rowToExpense);
 };
 
+/* ------------------------------------------------------------ by month
+
+   The phone shows one month at a time (2026-11-18). A month is the month of
+   the invoice's own date — expense_date — not the day it was entered: that is
+   the month the reports and the bookkeeping export put it in, so the phone
+   agrees with them. */
+
+/** 'YYYY-MM' of a 'YYYY-MM-DD' date. */
+export const monthOf = (isoDate: string): string => isoDate.slice(0, 7);
+
+/** The month `delta` months from `month` ('YYYY-MM'). */
+export const shiftMonth = (month: string, delta: number): string => {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+/** First day of the month and first day of the next — a half-open range, so
+ *  a month's last day is never lost to the length of the month. */
+const monthRange = (month: string): [string, string] => [`${month}-01`, `${shiftMonth(month, 1)}-01`];
+
+/** One month's expenses, newest first. */
+export const listExpensesForMonth = async (month: string): Promise<SupplierExpense[]> => {
+  const [from, to] = monthRange(month);
+  const rows = await fetchAll((a, b) => getClient()
+    .from('supplier_expenses')
+    .select('*, suppliers(name)')
+    .gte('expense_date', from)
+    .lt('expense_date', to)
+    .order('expense_date', { ascending: false })
+    .order('id')
+    .range(a, b));
+  return rows.map(rowToExpense);
+};
+
+/** Every expense not yet paid, whatever its month — oldest first, since the
+ *  oldest is the most urgent. What "awaiting payment" means is "what do we
+ *  owe", and a September bill is still owed in November. */
+export const listUnpaidExpenses = async (): Promise<SupplierExpense[]> => {
+  const rows = await fetchAll((a, b) => getClient()
+    .from('supplier_expenses')
+    .select('*, suppliers(name)')
+    .eq('paid', false)
+    .order('expense_date', { ascending: true })
+    .order('id')
+    .range(a, b));
+  return rows.map(rowToExpense);
+};
+
+export const getExpense = async (id: string): Promise<SupplierExpense | null> => {
+  const { data, error } = await getClient()
+    .from('supplier_expenses')
+    .select('*, suppliers(name)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToExpense(data) : null;
+};
+
+/** What a list of expenses comes to: everything, and what is still owed. */
+export const expenseTotals = (rows: readonly SupplierExpense[]) => ({
+  total: round2(rows.reduce((s, e) => s + e.total, 0)),
+  unpaid: round2(rows.filter((e) => !e.paid).reduce((s, e) => s + e.total, 0)),
+});
+
+/** What a garage buys, offered before anything has been typed. Both apps'
+ *  forms offer these, plus the categories already on file. */
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  'חלפים', 'שמנים ונוזלים', 'צמיגים', 'כלים וציוד', 'שכירות', 'חשמל ומים',
+  'תקשורת', 'דלק', 'אחזקה', 'כללי',
+] as const;
+
 export interface ExpenseInput {
   supplierId: string;
   date: string;
@@ -194,6 +266,9 @@ export interface ExpenseInput {
  *  the same fact, and a later migration adding payment terms needs to tell them
  *  apart. Everything that ages an unpaid bill goes through this. */
 export const dueOn = (e: SupplierExpense): string => e.dueDate ?? e.date;
+
+/** Unpaid and past the day it was owed (`today` as 'YYYY-MM-DD'). */
+export const isOverdue = (e: SupplierExpense, today: string): boolean => !e.paid && dueOn(e) < today;
 
 /** Insert the expense natively (garage_id fills from current_garage_id()). VAT
  *  and total are derived from subtotal + rate so the stored figures are

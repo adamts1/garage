@@ -62,6 +62,8 @@ export default function RootLayout() {
             <Stack.Screen name="ticket/[key]" options={{ headerShown: false }} />
             <Stack.Screen name="new" options={{ headerShown: false }} />
             <Stack.Screen name="scan-invoice" options={{ headerShown: false }} />
+            <Stack.Screen name="expenses/index" options={{ headerShown: false }} />
+            <Stack.Screen name="expenses/[id]" options={{ headerShown: false }} />
           </Stack>
           <UserSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
         </TicketsProvider>

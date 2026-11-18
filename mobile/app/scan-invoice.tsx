@@ -5,6 +5,7 @@
 
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { monthOf } from '@garage/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { C, s } from '../lib/theme';
@@ -105,9 +106,14 @@ export default function ScanInvoiceRoute() {
           onDraft={scan.setDraft}
           onChoices={scan.setChoices}
           onSave={scan.save}
-          onSaved={(count) => {
+          onSaved={(count, id, date) => {
             Alert.alert(t('scan.review.savedTitle'), t('scan.review.savedBody', { count }), [
-              { text: t('common.close'), onPress: () => router.back() },
+              {
+                text: t('common.close'),
+                /* Back to the expenses, on the invoice's month (which may not
+                   be this one), with the new expense marked. */
+                onPress: () => router.dismissTo({ pathname: '/expenses', params: { month: monthOf(date), highlight: id } }),
+              },
             ]);
           }}
         />

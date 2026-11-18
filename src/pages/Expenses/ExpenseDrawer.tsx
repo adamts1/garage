@@ -29,7 +29,7 @@
    cannot be swapped (attach_expense_document). */
 
 import {
-  applyDocumentDiscount, DuplicateInvoiceError, draftFromExtraction, attachExpenseDocument,
+  applyDocumentDiscount, DEFAULT_EXPENSE_CATEGORIES, DuplicateInvoiceError, draftFromExtraction, attachExpenseDocument,
   expenseDocumentFiles, money, saveScannedExpense, scanChecks, VAT,
   type DocumentFileLink, type ExtractResponse, type PartDef, type ScanDraft, type Supplier,
   type SupplierExpense,
@@ -52,11 +52,9 @@ import {
 
 /** What a garage buys, offered before anything has been typed. Categories
  *  already used are added to these; iCount matches a category by name and
- *  creates it when new, so any of them is a valid answer. */
-export const DEFAULT_CATEGORIES = [
-  'חלפים', 'שמנים ונוזלים', 'צמיגים', 'כלים וציוד', 'שכירות', 'חשמל ומים',
-  'תקשורת', 'דלק', 'אחזקה', 'כללי',
-];
+ *  creates it when new, so any of them is a valid answer. Shared with the
+ *  phone's form. */
+export const DEFAULT_CATEGORIES: readonly string[] = DEFAULT_EXPENSE_CATEGORIES;
 
 /** The supplier select's "a supplier not on file yet" option. */
 const NEW_SUPPLIER = '__new__';
