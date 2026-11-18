@@ -200,14 +200,44 @@ describe('a car already open for this customer', () => {
     expect(setTickets).not.toHaveBeenCalled();
   });
 
-  it('does not ask about a paid one', () => {
+  /* Closed means paid AND billed, and whether it was billed is asked of the
+     server — so these run against a mocked one. */
+  const withBills = async (billedKeys: string[]) => {
+    vi.resetModules();
+    vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
+    vi.doMock('@garage/shared', async (importActual) => ({
+      ...(await importActual<typeof import('@garage/shared')>()),
+      searchCustomers: vi.fn(async () => ({ rows: [], total: 0 })),
+      customersWithPhone: vi.fn(async () => []),
+      customerHoldingIdNumber: vi.fn(async () => null),
+      ticketsWithLiveBill: vi.fn(async (keys: string[]) => new Set(keys.filter((k) => billedKeys.includes(k)))),
+    }));
+    const { useNewTicket: fresh } = await import('./useNewTicket');
     const setTickets = vi.fn();
-    const { result } = renderHook(() =>
-      useNewTicket({ tickets: [{ ...open, st: 'paid' }], setTickets, onDone: vi.fn() }));
-    fill(result);
+    const hook = renderHook(() =>
+      fresh({ tickets: [{ ...open, st: 'paid' }], setTickets, onDone: vi.fn() }));
+    fill(hook.result as never);
+    return { ...hook, setTickets };
+  };
+
+  it('asks about a paid one that has no invoice yet', async () => {
+    const { result } = await withBills([]);
+    await waitFor(() => expect(result.current.openTickets.map((x) => x.k)).toEqual(['GAR-7']));
+    act(() => { result.current.submit(); });
+    expect(result.current.askOpenTicket).toBe(true);
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
+  });
+
+  it('does not ask about a paid one with its invoice — that one is closed', async () => {
+    const { result, setTickets } = await withBills(['GAR-7']);
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    expect(result.current.openTickets).toEqual([]);
     act(() => { result.current.submit(); });
     expect(result.current.askOpenTicket).toBe(false);
     expect(setTickets).toHaveBeenCalledTimes(1);
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
   });
 });
 

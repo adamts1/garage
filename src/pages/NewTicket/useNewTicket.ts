@@ -1,7 +1,7 @@
 import {
   CUSTOMER_MATCH_LIMIT, EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, customerHoldingIdNumber,
   customersWithPhone, getCustomer, idNumberConflict, intakeFlags, isUsablePhone, matchCustomers,
-  matchVehiclesByPlate, nextTicketNumbers, openTicketsFor, ownersOfPlate, phoneConflict, searchCustomers,
+  matchVehiclesByPlate, nextTicketNumbers, openTicketsFor, ownersOfPlate, ticketsOnCarFor, ticketsWithLiveBill, phoneConflict, searchCustomers,
   subtasksFromWorks, titleFromWorks, worksSummary,
   type Customer, type CustomerWithVehicles, type PhoneConflict, type Priority, type Ticket, type TicketWork,
   type PlateOwner, type Vehicle,
@@ -37,6 +37,7 @@ const askSearch = (q: string) =>
   searchCustomers({ query: q, pageSize: SEARCH_FETCH }).then((p) => p.rows);
 const askPhone = (phone: string) => customersWithPhone(phone);
 const askIdNumber = (id: string) => customerHoldingIdNumber(id).then((c) => (c ? [c] : []));
+const askBilled = (keys: string) => ticketsWithLiveBill(keys.split(','));
 
 export interface TicketForm {
   customerSearch: string;
@@ -399,11 +400,19 @@ export function useNewTicket({
      a second job on the same visit is a real thing — but asked about on save,
      because far more often it is the same car being opened twice. Shown in the
      form as soon as it is known, so nobody fills in the works first. */
+  const who = useMemo(
+    () => ({ plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone }),
+    [form.licensePlate, form.customerId, form.customerPhone],
+  );
+  const onCar = useMemo(() => ticketsOnCarFor(tickets, who), [tickets, who]);
+  /* A paid one is closed only if it was billed, which the board does not
+     know — so it is asked. Until the answer is in, paid counts as closed: a
+     moment's silence beats a false alarm on every returning customer. */
+  const paidKeys = onCar.filter((x) => x.st === 'paid').map((x) => x.k).join(',');
+  const billed = useServerAnswer<Set<string> | null>(paidKeys, askBilled, null);
   const openTickets = useMemo(
-    () => openTicketsFor(tickets, {
-      plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone,
-    }),
-    [tickets, form.licensePlate, form.customerId, form.customerPhone],
+    () => openTicketsFor(onCar, who, billed ?? new Set(paidKeys.split(','))),
+    [onCar, who, billed, paidKeys],
   );
   const [askOpenTicket, setAskOpenTicket] = useState(false);
   /** Answered "open another" — the next save goes through without asking. */

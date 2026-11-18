@@ -268,10 +268,15 @@ describe('openTicketsFor', () => {
     expect(found.map((x) => x.k)).toEqual(['GAR-1']);
   });
 
-  it('counts כניסה, ממתין לאישור and מוכן as open, not paid or cancelled', () => {
+  it('counts everything not yet closed as open — closed is paid AND billed', () => {
     const statuses = ['todo', 'appr', 'done', 'paid', 'cancelled'] as const;
-    const found = openTicketsFor(statuses.map((st) => t({ k: st, st })), { plate: '1234567', phone: '0501234567' });
-    expect(found.map((x) => x.k)).toEqual(['todo', 'appr', 'done']);
+    const tickets = statuses.map((st) => t({ k: st, st }));
+    const who = { plate: '1234567', phone: '0501234567' };
+    // Paid with no bill is still open.
+    expect(openTicketsFor(tickets, who).map((x) => x.k)).toEqual(['todo', 'appr', 'done', 'paid']);
+    // Paid and billed is closed; a bill on an unpaid ticket does not close it.
+    expect(openTicketsFor(tickets, who, new Set(['paid', 'done'])).map((x) => x.k))
+      .toEqual(['todo', 'appr', 'done']);
   });
 
   it('goes by the customer id when both sides have one', () => {

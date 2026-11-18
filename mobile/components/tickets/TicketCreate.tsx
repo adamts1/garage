@@ -26,6 +26,8 @@ import {
   phoneConflict,
   searchCustomers,
   subscribeToTable,
+  ticketsOnCarFor,
+  ticketsWithLiveBill,
   worksSummary,
 } from '@garage/shared';
 import type { Customer, CustomerWithVehicles, PlateOwner, TicketWork, Vehicle } from '@garage/shared';
@@ -163,11 +165,15 @@ export default function TicketCreate({
       .catch(() => {});
   };
 
-  /* This customer's car already has a work order open. Allowed, but asked
-     about on save — usually it is the same car being opened twice. */
-  const openTickets = openTicketsFor(tickets, {
-    plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone,
-  });
+  /* This customer's car already has a work order open — anything not yet
+     closed, and closed means paid AND billed. Allowed, but asked about on
+     save: usually it is the same car being opened twice. A paid ticket's bill
+     is asked of the server; until it answers, paid counts as closed. */
+  const who = { plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone };
+  const onCar = ticketsOnCarFor(tickets, who);
+  const paidKeys = onCar.filter((x) => x.st === 'paid').map((x) => x.k).join(',');
+  const billed = useBilled(paidKeys);
+  const openTickets = openTicketsFor(onCar, who, billed ?? new Set(paidKeys.split(',')));
 
   /* The two numbers, checked against everybody on file. The phone may be
      shared — a couple, a company, a parent paying for a student's car — so a
@@ -405,4 +411,21 @@ function useCustomerDirectory(search: string, phone: string, idNumber: string) {
       vehicles: found.flatMap((c) => c.vehicles ?? []),
     };
   }, [found, holders]);
+}
+
+/** Which of these paid tickets (comma-joined keys) carry a live bill; null
+ *  until the server has answered for exactly these keys. */
+function useBilled(paidKeys: string): Set<string> | null {
+  const settled = useSettled(paidKeys);
+  const [answer, setAnswer] = useState<{ key: string; set: Set<string> } | null>(null);
+  useEffect(() => {
+    if (!settled) return;
+    let alive = true;
+    ticketsWithLiveBill(settled.split(','))
+      .then((set) => { if (alive) setAnswer({ key: settled, set }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [settled]);
+  if (!paidKeys) return new Set();
+  return answer?.key === paidKeys ? answer.set : null;
 }
