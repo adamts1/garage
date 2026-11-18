@@ -107,3 +107,14 @@ export function CameraIcon({ color = C.ink }: { color?: string }) {
     </View>
   );
 }
+
+/** A receipt — a page with a torn foot and two lines. The expenses screen. */
+export function ReceiptIcon({ color = C.ink }: { color?: string }) {
+  return (
+    <View style={{ width: 20, height: 24, borderWidth: 2, borderColor: color, borderRadius: 3, paddingHorizontal: 3, paddingTop: 5, gap: 3 }}>
+      <View style={{ height: 2, backgroundColor: color, borderRadius: 1 }} />
+      <View style={{ height: 2, width: '70%', backgroundColor: color, borderRadius: 1 }} />
+      <View style={{ height: 2, width: '85%', backgroundColor: color, borderRadius: 1 }} />
+    </View>
+  );
+}

@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { listWorkers, signedInAs, signOut, type Worker } from '@garage/shared';
 import { useAuth } from '../../lib/useAuth';
 import { C, s } from '../../lib/theme';
-import { CameraIcon, PowerIcon } from '../ui';
+import { PowerIcon, ReceiptIcon } from '../ui';
 
 export function UserSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -122,7 +122,7 @@ export function UserSheet({ open, onClose }: { open: boolean; onClose: () => voi
           <Pressable
             onPress={() => {
               onClose();
-              router.push('/scan-invoice');
+              router.push('/expenses');
             }}
             style={({ pressed }) => ({
               flexDirection: 'row-reverse',
@@ -135,10 +135,10 @@ export function UserSheet({ open, onClose }: { open: boolean; onClose: () => voi
             accessibilityRole="button"
           >
             <View style={{ width: 44, alignItems: 'center' }}>
-              <CameraIcon />
+              <ReceiptIcon />
             </View>
             <Text style={{ fontSize: 15, fontWeight: '600', color: C.ink, textAlign: 'right' }}>
-              {t('nav.scanInvoice')}
+              {t('nav.expenses')}
             </Text>
           </Pressable>
 
