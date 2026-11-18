@@ -96,6 +96,12 @@ export function missingFields(form: TicketForm): RequiredField[] {
   return missing;
 }
 
+/** Nothing said yet about who the customer is — the only time a known plate
+ *  may fill them in. */
+export function isCustomerBlank(form: TicketForm): boolean {
+  return !form.customerId && !form.customerName.trim() && !form.customerPhone.trim();
+}
+
 /** Anything typed at all — not "is it valid". A half-filled form is exactly the
     one worth warning about on the way out. */
 export function isDirty(form: TicketForm, works: TicketWork[], search: string): boolean {

@@ -10,7 +10,7 @@
    The shape of what gets saved lives in newTicket.ts, the two halves of the form
    in CustomerSection / VehicleSection. What is left here is the wiring. */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -21,13 +21,14 @@ import {
   idNumberConflict,
   isUsablePhone,
   money,
+  openTicketsFor,
+  ownersOfPlate,
   phoneConflict,
   searchCustomers,
   subscribeToTable,
-  vehiclesForPlate,
   worksSummary,
 } from '@garage/shared';
-import type { Customer, CustomerWithVehicles, TicketWork, Vehicle } from '@garage/shared';
+import type { Customer, CustomerWithVehicles, PlateOwner, TicketWork, Vehicle } from '@garage/shared';
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard';
 import { useTicketsStore } from '../../lib/TicketsProvider';
 import { C, s } from '../../lib/theme';
@@ -40,6 +41,7 @@ import {
   EMPTY_FORM,
   fillFromKnownPlate,
   IDENTITY_FIELDS,
+  isCustomerBlank,
   isDirty,
   missingFields,
   type TicketForm,
@@ -48,11 +50,15 @@ import {
 export default function TicketCreate({
   onClose,
   onCreated,
+  onOpenTicket,
   embedded = false,
 }: {
   onClose: () => void;
   /** The server-assigned key of the new ticket, so the caller can open it. */
   onCreated: (key: string) => void;
+  /** Opens a ticket already on file — "go to the open ticket" instead of
+   *  opening another for the same customer and car. */
+  onOpenTicket?: (key: string) => void;
   embedded?: boolean;
 }) {
   const { t } = useTranslation();
@@ -64,6 +70,10 @@ export default function TicketCreate({
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
+  const [ownerChoices, setOwnerChoices] = useState<PlateOwner[]>([]);
+  /** The form as last rendered, for the plate answer that arrives later. */
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; }, [form]);
 
   const { customers, vehicles } = useCustomerDirectory(search, form.customerPhone, form.idNumber);
 
@@ -87,7 +97,8 @@ export default function TicketCreate({
       vehicleCode: v.vehicle_code ?? '',
     }));
 
-  const pickCustomer = (c: Customer) => {
+  /** The customer half, from a record — nothing about the car. */
+  const fillCustomer = (c: Customer) => {
     setForm((prev) => ({
       ...prev,
       customerId: c.id,
@@ -98,6 +109,11 @@ export default function TicketCreate({
       address: c.address ?? '',
       city: c.city ?? '',
     }));
+    setOwnerChoices([]);
+  };
+
+  const pickCustomer = (c: Customer) => {
+    fillCustomer(c);
     setSearch('');
 
     const offer = (owned: Vehicle[]) => {
@@ -127,12 +143,31 @@ export default function TicketCreate({
     pickVehicle(v);
   };
 
+  /* A known plate fills the car's blanks — and, while the customer half is
+     still blank, the car's customer too (2026-11-18): one is filled in,
+     several are offered. A customer already typed is left alone. Same rule as
+     the web form. */
   const fillKnownPlate = () => {
-    if (!form.licensePlate.trim()) return;
-    vehiclesForPlate(form.licensePlate)
-      .then((onFile) => setForm((prev) => fillFromKnownPlate(prev, onFile)))
+    setOwnerChoices([]);
+    const typed = form.licensePlate;
+    if (!typed.trim()) return;
+    ownersOfPlate(typed)
+      .then((owners) => {
+        const now = formRef.current;
+        if (!owners.length || now.licensePlate !== typed) return;
+        setForm((prev) => fillFromKnownPlate(prev, owners.map((o) => o.vehicle)));
+        if (!isCustomerBlank(now)) return;
+        if (owners.length === 1) fillCustomer(owners[0].customer);
+        else setOwnerChoices(owners);
+      })
       .catch(() => {});
   };
+
+  /* This customer's car already has a work order open. Allowed, but asked
+     about on save — usually it is the same car being opened twice. */
+  const openTickets = openTicketsFor(tickets, {
+    plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone,
+  });
 
   /* The two numbers, checked against everybody on file. The phone may be
      shared — a couple, a company, a parent paying for a student's car — so a
@@ -156,8 +191,26 @@ export default function TicketCreate({
   const canSave = missing.length === 0 && !idConflict;
   const total = worksSummary(works).total;
 
-  const save = async () => {
+  const save = async (openAnother = false) => {
     if (!canSave || saving) return;
+    if (openTickets.length && !openAnother) {
+      Alert.alert(
+        t('create.openTicket.title'),
+        t('create.openTicket.body', {
+          name: form.customerName,
+          plate: form.licensePlate,
+          keys: openTickets.map((o) => o.k).join(', '),
+        }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('create.openTicket.another'), onPress: () => { void save(true); } },
+          ...(onOpenTicket
+            ? [{ text: t('create.openTicket.goTo'), onPress: () => onOpenTicket(openTickets[0].k) }]
+            : []),
+        ],
+      );
+      return;
+    }
     setSaving(true);
     try {
       const key = await addTicket(buildNewTicket({ form, works, existing: tickets }));
@@ -219,7 +272,15 @@ export default function TicketCreate({
           onSearch={setSearch}
         />
 
-        <VehicleSection form={form} onSet={set} onPlateDone={fillKnownPlate} />
+        <VehicleSection
+          form={form}
+          onSet={set}
+          onPlateDone={fillKnownPlate}
+          ownerChoices={ownerChoices}
+          onPickOwner={(o) => fillCustomer(o.customer)}
+          openTicketKey={openTickets[0]?.k ?? null}
+          onGoToOpenTicket={onOpenTicket}
+        />
 
         <View style={[s.card, { gap: 10 }]}>
           <Field label={t('create.fields.details')}>
@@ -272,7 +333,7 @@ export default function TicketCreate({
         </View>
         <Button
           label={t('create.submit')}
-          onPress={save}
+          onPress={() => { void save(); }}
           busy={saving}
           disabled={!canSave}
           style={{ paddingHorizontal: 28 }}

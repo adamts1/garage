@@ -1,10 +1,10 @@
 import {
   CUSTOMER_MATCH_LIMIT, EMPTY_FIELD, EPICS, TYPES, addressLabel, carLabel, customerHoldingIdNumber,
   customersWithPhone, getCustomer, idNumberConflict, intakeFlags, isUsablePhone, matchCustomers,
-  matchVehiclesByPlate, nextTicketNumbers, phoneConflict, searchCustomers, subtasksFromWorks,
-  titleFromWorks, vehiclesForPlate, worksSummary,
+  matchVehiclesByPlate, nextTicketNumbers, openTicketsFor, ownersOfPlate, phoneConflict, searchCustomers,
+  subtasksFromWorks, titleFromWorks, worksSummary,
   type Customer, type CustomerWithVehicles, type PhoneConflict, type Priority, type Ticket, type TicketWork,
-  type Vehicle,
+  type PlateOwner, type Vehicle,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { isConfigured } from '../../lib/supabase';
@@ -140,13 +140,21 @@ export interface UseNewTicketOptions {
   tickets: Ticket[];
   setTickets: Dispatch<SetStateAction<Ticket[]>>;
   onDone: () => void;
+  /** Leaves the form for a ticket already on the board — the way out of the
+   *  "this car is already open for this customer" question. */
+  onOpenTicket?: (key: string) => void;
   /** Reports whether anything has been entered yet, up to the shell, which asks
    *  before any exit discards it. See app/useLeaveGuard. */
   onDirtyChange?: (started: boolean) => void;
 }
 
-export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: UseNewTicketOptions) {
+export function useNewTicket({
+  tickets, setTickets, onDone, onOpenTicket, onDirtyChange,
+}: UseNewTicketOptions) {
   const [form, setForm] = useState<TicketForm>(emptyForm);
+  /** The form as last rendered, for answers that arrive after a pause. */
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; }, [form]);
   const [works, setWorks] = useState<TicketWork[]>([]);
 
   /* Started means anything at all differs from a blank form — a search typed,
@@ -167,6 +175,8 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
   }, [started]);
   const [showMatches, setShowMatches] = useState(false);
   const [vehicleChoices, setVehicleChoices] = useState<Vehicle[]>([]);
+  /** A typed plate whose car several customers share — they choose who came. */
+  const [ownerChoices, setOwnerChoices] = useState<PlateOwner[]>([]);
 
   /* Known customers, asked of the database as the box is typed in. This used
      to load every customer and every car up front and filter them here — which
@@ -219,11 +229,9 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     }));
   }, []);
 
-  /** Picking a match fills the customer half, and the vehicle too when it is
-   *  unambiguous. Several vehicles means asking; none means nothing to ask. */
-  const pickCustomer = useCallback(
-    (c: Customer) => {
-      setForm((prev) => ({
+  /** The customer half of the form, from a record — and nothing about the car. */
+  const fillCustomer = useCallback((c: Customer) => {
+    setForm((prev) => ({
         ...prev,
         customerSearch: '',
         customerId: c.id,
@@ -234,6 +242,14 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
         address: c.address ?? '',
         city: c.city ?? '',
       }));
+    setOwnerChoices([]);
+  }, []);
+
+  /** Picking a match fills the customer half, and the vehicle too when it is
+   *  unambiguous. Several vehicles means asking; none means nothing to ask. */
+  const pickCustomer = useCallback(
+    (c: Customer) => {
+      fillCustomer(c);
       setShowMatches(false);
 
       /* Their cars came with the search; a customer reached another way (the
@@ -246,7 +262,7 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
       if (known) offer(known);
       else if (isConfigured) getCustomer(c.id).then((full) => offer(full?.vehicles ?? [])).catch(() => {});
     },
-    [fillVehicle],
+    [fillCustomer, fillVehicle],
   );
 
   const pickVehicle = useCallback((v: Vehicle) => {
@@ -257,19 +273,35 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
   /** A plate typed by hand that is already on file is that car, with that
    *  car's details — one plate, one description (2026-11-04). Fills what is
    *  still blank and leaves alone what was typed; the database does the same
-   *  on save (tickets_resolve_car). The km is this visit's, never copied. */
+   *  on save (tickets_resolve_car). The km is this visit's, never copied.
+   *
+   *  And when the customer half is still blank, the car's customer comes with
+   *  it (2026-11-18): one owner is filled in, several are offered to choose
+   *  from. A customer already typed or picked is left alone — opening a ticket
+   *  for somebody new on a known car is how a second driver gets linked. */
   const fillKnownPlate = useCallback(() => {
+    setOwnerChoices([]);
     if (!isConfigured || !form.licensePlate.trim()) return;
-    void vehiclesForPlate(form.licensePlate).then(([known]) => known && setForm((prev) => {
-      return {
+    const typed = form.licensePlate;
+    void ownersOfPlate(typed).then((owners) => {
+      const known = owners[0]?.vehicle;
+      const now = formRef.current;
+      // Typed over while the answer was on its way: it is about another plate.
+      if (!known || now.licensePlate !== typed) return;
+      setForm((prev) => ({
         ...prev,
         manufacturer: prev.manufacturer || known.manufacturer || '',
         model: prev.model || known.model || '',
         year: prev.year || known.year || '',
         vehicleCode: prev.vehicleCode || known.vehicle_code || '',
-      };
-    })).catch(() => {});
-  }, [form.licensePlate]);
+      }));
+      if (now.customerId || now.customerName.trim() || now.customerPhone.trim()) return;
+      if (owners.length === 1) fillCustomer(owners[0].customer);
+      else setOwnerChoices(owners);
+    }).catch(() => {});
+  }, [fillCustomer, form.licensePlate]);
+
+  const pickOwner = useCallback((o: PlateOwner) => fillCustomer(o.customer), [fillCustomer]);
 
   /** Picking by plate: the owner, and that car — not a question about which of
    *  their cars it was. */
@@ -363,6 +395,20 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
      which. A phone somebody else holds is on neither list — that is allowed. */
   const canSave = missing.length === 0 && !idConflict;
 
+  /* This customer's car already has a work order open (2026-11-18). Allowed —
+     a second job on the same visit is a real thing — but asked about on save,
+     because far more often it is the same car being opened twice. Shown in the
+     form as soon as it is known, so nobody fills in the works first. */
+  const openTickets = useMemo(
+    () => openTicketsFor(tickets, {
+      plate: form.licensePlate, customerId: form.customerId, phone: form.customerPhone,
+    }),
+    [tickets, form.licensePlate, form.customerId, form.customerPhone],
+  );
+  const [askOpenTicket, setAskOpenTicket] = useState(false);
+  /** Answered "open another" — the next save goes through without asking. */
+  const openAnyway = useRef(false);
+
   /* Returns whether it saved, so the page can move focus to the first field it
      objected to rather than leaving somebody to hunt for the red one. */
   const submit = useCallback((): boolean => {
@@ -371,6 +417,10 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
        press is what turns the objections on. */
     setAttempted(true);
     if (!canSave) return false;
+    if (openTickets.length && !openAnyway.current) {
+      setAskOpenTicket(true);
+      return true;
+    }
 
     /* One ticket per form, whatever the counter does with the mouse.
        Saving is synchronous here — it hands the ticket to setTickets and
@@ -431,12 +481,28 @@ export function useNewTicket({ tickets, setTickets, onDone, onDirtyChange }: Use
     onDirtyChange?.(false);
     onDone();
     return true;
-  }, [canSave, form, onDirtyChange, onDone, setTickets, tickets, totals.total, works]);
+  }, [canSave, form, onDirtyChange, onDone, openTickets.length, setTickets, tickets, totals.total, works]);
+
+  /** "Open another one" — the question is answered, save as asked. */
+  const confirmOpenAnother = useCallback(() => {
+    openAnyway.current = true;
+    setAskOpenTicket(false);
+    submit();
+  }, [submit]);
+
+  /** "Take me to it" — what was typed here is dropped, knowingly. */
+  const goToOpenTicket = useCallback((key: string) => {
+    setAskOpenTicket(false);
+    onDirtyChange?.(false);
+    onOpenTicket?.(key);
+  }, [onDirtyChange, onOpenTicket]);
 
   return {
     form, set, works, setWorks,
     matches, plateMatches, showMatches, setShowMatches,
     vehicleChoices, pickCustomer, pickVehicle, pickPlate, fillKnownPlate,
+    ownerChoices, pickOwner,
+    openTickets, askOpenTicket, setAskOpenTicket, confirmOpenAnother, goToOpenTicket,
     totals, canSave, missing, invalid, touch,
     conflict, idConflict, adoptConflict, adoptIdConflict, submit,
   };

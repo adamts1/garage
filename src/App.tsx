@@ -154,6 +154,7 @@ export default function App() {
                       workers={workers}
                       onDone={() => navigate('/')}
                       onCancel={() => navigate('/')}
+                      onOpenTicket={openTicket}
                       onDirtyChange={setIntakeStarted}
                     />
                   }

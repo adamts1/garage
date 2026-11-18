@@ -281,3 +281,26 @@ export function customerKind(raw: string | null | undefined): CustomerKind {
 
 export const isBusinessCustomer = (raw: string | null | undefined): boolean =>
   customerKind(raw) === BUSINESS_CUSTOMER;
+
+/** The work orders still open on this car for this customer — what the intake
+ *  form asks about before opening another one (2026-11-18). Open is anything
+ *  not yet paid and not cancelled: כניסה, ממתין לאישור and מוכן. Imported
+ *  history is never open.
+ *
+ *  "This customer" is the picked record when both sides know it, and otherwise
+ *  the phone by its digits: a customer typed in by hand has no id yet, and the
+ *  ticket they would duplicate may predate tickets.customer_id. */
+export function openTicketsFor<T extends Pick<Ticket, 'k' | 'st' | 'plate' | 'phone' | 'customerId' | 'legacy'>>(
+  tickets: readonly T[],
+  who: { plate: string; customerId?: string | null; phone?: string | null },
+): T[] {
+  const plate = plateKey(who.plate);
+  if (!plate) return [];
+  const phone = phoneDigits(who.phone);
+  return tickets.filter((t) => {
+    if (t.st === 'paid' || t.st === 'cancelled' || t.legacy) return false;
+    if (plateKey(t.plate) !== plate) return false;
+    if (who.customerId && t.customerId) return t.customerId === who.customerId;
+    return phone.length >= PHONE_MIN_DIGITS && phoneDigits(t.phone) === phone;
+  });
+}
