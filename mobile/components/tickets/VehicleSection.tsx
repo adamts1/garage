@@ -3,22 +3,33 @@
    makes. The models follow the make above, and a make the catalog does not carry
    simply offers none. */
 
-import { TextInput, Text, View } from 'react-native';
+import { Pressable, TextInput, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { VEHICLE_MAKES, modelsFor } from '@garage/shared';
-import { s } from '../../lib/theme';
-import { Checkbox, ComboField, Field } from '../ui';
+import { VEHICLE_MAKES, modelsFor, type PlateOwner } from '@garage/shared';
+import { C, rtl, s } from '../../lib/theme';
+import { Button, Checkbox, ComboField, Field } from '../ui';
 import type { TicketForm } from './newTicket';
 
 export function VehicleSection({
   form,
   onSet,
   onPlateDone,
+  ownerChoices = [],
+  onPickOwner,
+  openTicketKey,
+  onGoToOpenTicket,
 }: {
   form: TicketForm;
   onSet: <K extends keyof TicketForm>(key: K, value: TicketForm[K]) => void;
   /** The plate field was left — a plate already on file fills the car's blanks. */
   onPlateDone: () => void;
+  /** A known plate several customers share, typed with the customer still
+   *  blank — they choose who brought it in. */
+  ownerChoices?: PlateOwner[];
+  onPickOwner?: (o: PlateOwner) => void;
+  /** A work order already open on this car for this customer. */
+  openTicketKey?: string | null;
+  onGoToOpenTicket?: (key: string) => void;
 }) {
   const { t } = useTranslation();
 
@@ -34,6 +45,49 @@ export function VehicleSection({
           onEndEditing={onPlateDone}
         />
       </Field>
+
+      {ownerChoices.length > 0 && (
+        <View style={{ gap: 8 }}>
+          <Text style={s.label}>{t('create.pickOwner')}</Text>
+          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+            {ownerChoices.map((o) => (
+              <Pressable
+                key={o.vehicle.id}
+                onPress={() => onPickOwner?.(o)}
+                style={{ borderWidth: 1, borderColor: C.line, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <Text style={{ fontWeight: '700', color: C.ink, textAlign: 'right' }}>{o.customer.name}</Text>
+                <Text style={[s.dim, { fontSize: 11 }]}>
+                  {[o.customer.phone, o.customer.city].filter(Boolean).join(' · ')}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Said as soon as it is known, and asked again on save. */}
+      {openTicketKey ? (
+        <View
+          style={{
+            gap: 8, padding: 10, borderRadius: 10, borderWidth: 1,
+            borderColor: C.danger, backgroundColor: C.dangerBg,
+          }}
+        >
+          <Text style={{ fontSize: 12.5, fontWeight: '700', color: C.danger, ...rtl }}>
+            {t('create.openTicket.exists', { key: openTicketKey })}
+          </Text>
+          {onGoToOpenTicket && (
+            <Button
+              label={t('create.openTicket.goTo')}
+              onPress={() => onGoToOpenTicket(openTicketKey)}
+              variant="outline"
+              size="sm"
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
+        </View>
+      ) : null}
 
       <ComboField
         label={t('create.fields.manufacturer')}

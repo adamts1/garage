@@ -175,6 +175,21 @@ export const ticketHasLiveBill = async (ticketKey: string): Promise<boolean> => 
   return (count ?? 0) > 0;
 };
 
+/** Which of these tickets carry a live bill — the same rule as
+ *  ticketHasLiveBill, for several at once. Used to tell a paid ticket that is
+ *  closed (billed) from one paid with no invoice yet. */
+export const ticketsWithLiveBill = async (ticketKeys: readonly string[]): Promise<Set<string>> => {
+  if (!ticketKeys.length) return new Set();
+  const { data, error } = await getClient()
+    .from('invoices')
+    .select('ticket_key')
+    .in('ticket_key', [...ticketKeys])
+    .in('doc_type', ['invoice_receipt', 'tax_invoice'])
+    .eq('status', 'issued');
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.ticket_key as string));
+};
+
 /* Can this garage issue a document at all?
  *
  * Asked before the app issues one on the garage's behalf rather than because
