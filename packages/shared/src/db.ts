@@ -192,6 +192,26 @@ export const vehiclesForPlate = async (plate: string): Promise<Vehicle[]> => {
   return ((data as { vehicles?: Vehicle[] } | null)?.vehicles ?? []);
 };
 
+/** A customer linked to a car, with the link itself. */
+export interface PlateOwner {
+  vehicle: Vehicle;
+  customer: Customer;
+}
+
+/** Everyone the car under this plate is linked to, however the plate was
+ *  typed — what the intake form fills the customer from when a known plate is
+ *  typed by hand (2026-11-18). Empty for a plate not on file. */
+export const ownersOfPlate = async (plate: string): Promise<PlateOwner[]> => {
+  const key = plate.toLowerCase().replace(/[^0-9a-z\u0590-\u05ff]/g, '');
+  if (!key) return [];
+  const { data, error } = await getClient()
+    .from('cars').select('vehicles(*, customers(*))').eq('plate_key', key).maybeSingle();
+  if (error) throw error;
+  // A many-to-one embed: PostgREST returns the customer as an object, not a list.
+  const links = (data as { vehicles?: (Vehicle & { customers: Customer | null })[] } | null)?.vehicles ?? [];
+  return links.flatMap(({ customers, ...vehicle }) => (customers ? [{ vehicle, customer: customers }] : []));
+};
+
 type CarRow = Car & { vehicles: { customers: CarOwner | null }[] };
 // A many-to-one embed: PostgREST returns the customer as an object, not a list.
 const withOwners = ({ vehicles, ...car }: CarRow): CarWithOwners => ({

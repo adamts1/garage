@@ -5,6 +5,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { CheckboxField, SelectField, TextAreaField, TextField } from '../../components/Field';
+import Modal from '../../components/Modal/Modal';
 import { WorksStep } from '../../features/works';
 import { IconCar, IconCustomers, IconDoc } from '../../icons';
 import styles from './NewTicketPage.module.css';
@@ -30,16 +31,18 @@ export interface NewTicketPageProps {
   workers: Worker[];
   onDone: () => void;
   onCancel: () => void;
+  /** Opens a ticket already on the board, for "go to the open ticket". */
+  onOpenTicket?: (key: string) => void;
   /** Told whenever the form goes from blank to started and back, so the shell
    *  can ask before any way out of the page throws the typing away. */
   onDirtyChange?: (started: boolean) => void;
 }
 
 export default function NewTicketPage({
-  tickets, setTickets, workers, onDone, onCancel, onDirtyChange,
+  tickets, setTickets, workers, onDone, onCancel, onOpenTicket, onDirtyChange,
 }: NewTicketPageProps) {
   const { t } = useTranslation();
-  const form = useNewTicket({ tickets, setTickets, onDone, onDirtyChange });
+  const form = useNewTicket({ tickets, setTickets, onDone, onOpenTicket, onDirtyChange });
   const [tab, setTab] = useState<1 | 2>(1);
 
   const field = (key: 'customerName' | 'customerPhone' | 'idNumber' | 'address' | 'email'
@@ -267,6 +270,40 @@ export default function NewTicketPage({
               {VEHICLE_MAKES.map((m) => <option key={m} value={m} />)}
             </datalist>
           </div>
+          {/* A known plate several customers drive, typed while the customer
+              half was still blank: which of them brought it in. */}
+          {form.ownerChoices.length > 0 && (
+            <div className={styles.vehiclePicker}>
+              <span className={styles.vehicleLabel}>{t('newTicket.pickOwner')}</span>
+              <div className={styles.vehicleList}>
+                {form.ownerChoices.map((o) => (
+                  <button
+                    key={o.vehicle.id}
+                    type="button"
+                    className={styles.vehicleChip}
+                    onClick={() => form.pickOwner(o)}
+                  >
+                    <b>{o.customer.name}</b>
+                    <span>{[o.customer.phone, o.customer.city].filter(Boolean).join(' · ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* The same customer and car already have a work order open. Said
+              here as soon as it is known, and asked again on save. */}
+          {form.openTickets.length > 0 && (
+            <div className={`${styles.conflict} ${styles.conflictWarn}`} role="status">
+              <span>{t('newTicket.openTicketExists', { key: form.openTickets[0].k })}</span>
+              {onOpenTicket && (
+                <Button onClick={() => form.goToOpenTicket(form.openTickets[0].k)}>
+                  {t('newTicket.goToOpenTicket')}
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className={styles.row2}>
             {/* The models of whichever make was typed above — nothing at all for
                 a make the list does not know, which is not an error. */}
@@ -349,6 +386,31 @@ export default function NewTicketPage({
           <WorksStep works={form.works} setWorks={form.setWorks} />
         </div>
       </div>
+
+      {form.askOpenTicket && form.openTickets.length > 0 && (
+        <Modal
+          title="newTicket.openTicketTitle"
+          size="sm"
+          onClose={() => form.setAskOpenTicket(false)}
+          actions={
+            <>
+              <Button data-autofocus onClick={() => form.setAskOpenTicket(false)}>{t('common.cancel')}</Button>
+              <Button onClick={form.confirmOpenAnother}>{t('newTicket.openAnother')}</Button>
+              {onOpenTicket && (
+                <Button variant="primary" onClick={() => form.goToOpenTicket(form.openTickets[0].k)}>
+                  {t('newTicket.goToOpenTicket')}
+                </Button>
+              )}
+            </>
+          }
+        >
+          {t('newTicket.openTicketBody', {
+            name: form.form.customerName,
+            plate: form.form.licensePlate,
+            keys: form.openTickets.map((o) => o.k).join(', '),
+          })}
+        </Modal>
+      )}
 
       <div className="form-foot">
         <div className="total-card">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, matchVehiclesByPlate, nameAndPhoneHolder, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
+import { CUSTOMER_MATCH_LIMIT, customerByPhone, customerKind, isBusinessCustomer, isUsablePhone, matchCustomers, matchVehiclesByPlate, nameAndPhoneHolder, openTicketsFor, phoneConflict, phoneDigits, ticketCustomerKey, type CustomerIdentity } from './identity';
 import type { Ticket } from './types';
 
 const cust = (over: Partial<CustomerIdentity>): CustomerIdentity => ({
@@ -256,5 +256,42 @@ describe('phoneConflict with several holders', () => {
     const c = phoneConflict(people, { name: 'משה כהן', phone: '050-1234567' });
     expect(c?.customer.id).toBe('dad');
     expect(c?.differentName).toBe(false);
+  });
+});
+
+describe('openTicketsFor', () => {
+  const t = (over: Partial<Ticket>): Ticket =>
+    ({ k: 'GAR-1', st: 'todo', plate: '12-345-67', phone: '050-1234567', customerId: null, ...over }) as Ticket;
+
+  it('finds an open ticket on the same plate and phone, however each was typed', () => {
+    const found = openTicketsFor([t({}), t({ k: 'GAR-2', plate: '9999999' })], { plate: '1234567', phone: '0501234567' });
+    expect(found.map((x) => x.k)).toEqual(['GAR-1']);
+  });
+
+  it('counts everything not yet closed as open — closed is paid AND billed', () => {
+    const statuses = ['todo', 'appr', 'done', 'paid', 'cancelled'] as const;
+    const tickets = statuses.map((st) => t({ k: st, st }));
+    const who = { plate: '1234567', phone: '0501234567' };
+    // Paid with no bill is still open.
+    expect(openTicketsFor(tickets, who).map((x) => x.k)).toEqual(['todo', 'appr', 'done', 'paid']);
+    // Paid and billed is closed; a bill on an unpaid ticket does not close it.
+    expect(openTicketsFor(tickets, who, new Set(['paid', 'done'])).map((x) => x.k))
+      .toEqual(['todo', 'appr', 'done']);
+  });
+
+  it('goes by the customer id when both sides have one', () => {
+    const tickets = [t({ k: 'A', customerId: 'c1' }), t({ k: 'B', customerId: 'c2' })];
+    expect(openTicketsFor(tickets, { plate: '1234567', customerId: 'c1', phone: '0501234567' }).map((x) => x.k))
+      .toEqual(['A']);
+  });
+
+  it('ignores imported history and a ticket for somebody else on the same car', () => {
+    const tickets = [t({ legacy: { source: 'x', number: '1' } }), t({ phone: '0529999999' })];
+    expect(openTicketsFor(tickets, { plate: '1234567', phone: '0501234567' })).toEqual([]);
+  });
+
+  it('says nothing without a plate or a usable phone', () => {
+    expect(openTicketsFor([t({})], { plate: '', phone: '0501234567' })).toEqual([]);
+    expect(openTicketsFor([t({})], { plate: '1234567', phone: '050' })).toEqual([]);
   });
 });

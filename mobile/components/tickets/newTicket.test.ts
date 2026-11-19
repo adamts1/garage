@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Ticket, TicketWork, Vehicle } from '@garage/shared';
-import { buildNewTicket, EMPTY_FORM, fillFromKnownPlate, isDirty, missingFields, type TicketForm } from './newTicket';
+import { buildNewTicket, EMPTY_FORM, fillFromKnownPlate, isCustomerBlank, isDirty, missingFields, type TicketForm } from './newTicket';
 
 const form = (over: Partial<TicketForm> = {}): TicketForm => ({
   ...EMPTY_FORM,
@@ -160,5 +160,16 @@ describe('fillFromKnownPlate', () => {
   it('leaves an unknown plate alone', () => {
     const f = { ...EMPTY_FORM, licensePlate: '99-999-99' };
     expect(fillFromKnownPlate(f, [known])).toBe(f);
+  });
+});
+
+describe('isCustomerBlank', () => {
+  it('is blank only with no picked record, no name and no phone', () => {
+    expect(isCustomerBlank(EMPTY_FORM)).toBe(true);
+    expect(isCustomerBlank({ ...EMPTY_FORM, customerName: 'דנה' })).toBe(false);
+    expect(isCustomerBlank({ ...EMPTY_FORM, customerPhone: '050' })).toBe(false);
+    expect(isCustomerBlank({ ...EMPTY_FORM, customerId: 'c1' })).toBe(false);
+    // The car half says nothing about who brought it.
+    expect(isCustomerBlank({ ...EMPTY_FORM, licensePlate: '1234567', email: 'x@y' })).toBe(true);
   });
 });

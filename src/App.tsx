@@ -62,9 +62,10 @@ export default function App() {
      outside it. */
   const leaveGuard = useLeaveGuard();
   // Stable, or the intake form would report itself clean and dirty on every render.
+  const { setUnsaved } = leaveGuard;
   const setIntakeStarted = useCallback(
-    (started: boolean) => leaveGuard.setUnsaved(started, 'newTicket.confirmLeave'),
-    [leaveGuard.setUnsaved],
+    (started: boolean) => setUnsaved(started, 'newTicket.confirmLeave'),
+    [setUnsaved],
   );
 
   // Name the browser tab after the garage — several are often open at once.
@@ -154,6 +155,7 @@ export default function App() {
                       workers={workers}
                       onDone={() => navigate('/')}
                       onCancel={() => navigate('/')}
+                      onOpenTicket={openTicket}
                       onDirtyChange={setIntakeStarted}
                     />
                   }

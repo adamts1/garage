@@ -2,7 +2,7 @@
 // The module reaches lib/supabase, which builds a client against window on import.
 import type { Customer, Vehicle } from '@garage/shared';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyForm, missingRequired, useNewTicket, type TicketForm } from './useNewTicket';
 
 /* Unconfigured, so the hook skips its load-and-subscribe effect. These tests
@@ -85,28 +85,157 @@ describe('missingRequired', () => {
    rides along — and has to stop riding the moment the form stops describing
    that person. */
 describe('a plate already on file', () => {
-  it('fills the blanks from that car and keeps what was typed', async () => {
+  const kia = {
+    id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
+    year: '2022', km: '3000', vehicle_code: '4111',
+  };
+  const person = (id: string, name: string, phone: string) => ({
+    id, name, phone, id_number: null, email: null, address: null, city: 'חיפה', kind: 'פרטי',
+  } as unknown as Customer);
+
+  /** The hook against a database whose car under 12345678 is linked to `owners`. */
+  const withOwners = async (owners: Customer[]) => {
     vi.resetModules();
     vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
     vi.doMock('@garage/shared', async (importActual) => ({
       ...(await importActual<typeof import('@garage/shared')>()),
-      // The car on file under that plate, however it was typed — asked of the database.
-      vehiclesForPlate: vi.fn(async (plate: string) => (plate.replace(/\D/g, '') === '12345678' ? [{
-        id: 'v1', customer_id: 'c1', plate: '12345678', manufacturer: 'קיה', model: 'נירו',
-        year: '2022', km: '3000', vehicle_code: '4111',
-      }] : [])),
+      // The car's links and who they are, however the plate was typed — asked of the database.
+      ownersOfPlate: vi.fn(async (plate: string) => (plate.replace(/\D/g, '') === '12345678'
+        ? owners.map((customer, i) => ({ vehicle: { ...kia, id: `v${i}`, customer_id: customer.id }, customer }))
+        : [])),
     }));
     const { useNewTicket: fresh } = await import('./useNewTicket');
-    const { result } = renderHook(() => fresh({ tickets: [], setTickets: vi.fn(), onDone: vi.fn() }));
+    const hook = renderHook(() => fresh({ tickets: [], setTickets: vi.fn(), onDone: vi.fn() }));
     await act(async () => { await Promise.resolve(); });
+    return hook;
+  };
 
-    act(() => { result.current.set('licensePlate', '12-345-678'); result.current.set('model', 'נירו EV'); });
+  const typePlate = async (result: { current: ReturnType<typeof useNewTicket> }) => {
+    act(() => { result.current.set('licensePlate', '12-345-678'); });
     await act(async () => { result.current.fillKnownPlate(); await Promise.resolve(); });
+  };
+
+  afterEach(() => {
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
+  });
+
+  it('fills the blanks from that car and keeps what was typed', async () => {
+    const { result } = await withOwners([person('c1', 'דנה', '0501111111')]);
+    act(() => { result.current.set('model', 'נירו EV'); });
+    await typePlate(result);
 
     await waitFor(() => expect(result.current.form.manufacturer).toBe('קיה'));
     expect(result.current.form).toMatchObject({
       manufacturer: 'קיה', model: 'נירו EV', year: '2022', vehicleCode: '4111', km: '',
     });
+  });
+
+  it('fills the customer when the car has one and the customer half is blank', async () => {
+    const { result } = await withOwners([person('c1', 'דנה', '0501111111')]);
+    await typePlate(result);
+
+    await waitFor(() => expect(result.current.form.customerId).toBe('c1'));
+    expect(result.current.form).toMatchObject({ customerName: 'דנה', customerPhone: '0501111111', city: 'חיפה' });
+    expect(result.current.ownerChoices).toEqual([]);
+  });
+
+  it('offers the owners to choose from when several share the car', async () => {
+    const { result } = await withOwners([person('c1', 'דנה', '0501111111'), person('c2', 'יוסי', '0502222222')]);
+    await typePlate(result);
+
+    await waitFor(() => expect(result.current.ownerChoices).toHaveLength(2));
+    expect(result.current.form.customerId).toBeNull();
+
+    act(() => result.current.pickOwner(result.current.ownerChoices[1]));
+    expect(result.current.form).toMatchObject({ customerId: 'c2', customerName: 'יוסי', licensePlate: '12-345-678' });
+    expect(result.current.ownerChoices).toEqual([]);
+  });
+
+  it('leaves a customer already typed alone — a new driver of a known car', async () => {
+    const { result } = await withOwners([person('c1', 'דנה', '0501111111')]);
+    act(() => { result.current.set('customerName', 'משה'); });
+    await typePlate(result);
+
+    await waitFor(() => expect(result.current.form.manufacturer).toBe('קיה'));
+    expect(result.current.form).toMatchObject({ customerId: null, customerName: 'משה' });
+    expect(result.current.ownerChoices).toEqual([]);
+  });
+});
+
+describe('a car already open for this customer', () => {
+  const open = {
+    k: 'GAR-7', job: 'W-7', st: 'appr', plate: '12-345-67', phone: '050-1234567', customerId: null,
+  } as unknown as import('@garage/shared').Ticket;
+
+  const fill = (result: { current: ReturnType<typeof useNewTicket> }) => act(() => {
+    for (const [k, v] of Object.entries(complete)) result.current.set(k as keyof TicketForm, v as never);
+  });
+
+  it('asks before saving, and saves when told to open another', () => {
+    const setTickets = vi.fn();
+    const onDone = vi.fn();
+    const { result } = renderHook(() => useNewTicket({ tickets: [open], setTickets, onDone }));
+    fill(result);
+
+    expect(result.current.openTickets.map((x) => x.k)).toEqual(['GAR-7']);
+    act(() => { result.current.submit(); });
+    expect(result.current.askOpenTicket).toBe(true);
+    expect(setTickets).not.toHaveBeenCalled();
+
+    act(() => result.current.confirmOpenAnother());
+    expect(setTickets).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('goes to the open ticket instead, saving nothing', () => {
+    const setTickets = vi.fn();
+    const onOpenTicket = vi.fn();
+    const { result } = renderHook(() =>
+      useNewTicket({ tickets: [open], setTickets, onDone: vi.fn(), onOpenTicket }));
+    fill(result);
+    act(() => { result.current.submit(); });
+    act(() => result.current.goToOpenTicket('GAR-7'));
+    expect(onOpenTicket).toHaveBeenCalledWith('GAR-7');
+    expect(setTickets).not.toHaveBeenCalled();
+  });
+
+  /* Closed means paid AND billed, and whether it was billed is asked of the
+     server — so these run against a mocked one. */
+  const withBills = async (billedKeys: string[]) => {
+    vi.resetModules();
+    vi.doMock('../../lib/supabase', () => ({ isConfigured: true }));
+    vi.doMock('@garage/shared', async (importActual) => ({
+      ...(await importActual<typeof import('@garage/shared')>()),
+      searchCustomers: vi.fn(async () => ({ rows: [], total: 0 })),
+      customersWithPhone: vi.fn(async () => []),
+      customerHoldingIdNumber: vi.fn(async () => null),
+      ticketsWithLiveBill: vi.fn(async (keys: string[]) => new Set(keys.filter((k) => billedKeys.includes(k)))),
+    }));
+    const { useNewTicket: fresh } = await import('./useNewTicket');
+    const setTickets = vi.fn();
+    const hook = renderHook(() =>
+      fresh({ tickets: [{ ...open, st: 'paid' }], setTickets, onDone: vi.fn() }));
+    fill(hook.result as never);
+    return { ...hook, setTickets };
+  };
+
+  it('asks about a paid one that has no invoice yet', async () => {
+    const { result } = await withBills([]);
+    await waitFor(() => expect(result.current.openTickets.map((x) => x.k)).toEqual(['GAR-7']));
+    act(() => { result.current.submit(); });
+    expect(result.current.askOpenTicket).toBe(true);
+    vi.doUnmock('../../lib/supabase');
+    vi.doUnmock('@garage/shared');
+  });
+
+  it('does not ask about a paid one with its invoice — that one is closed', async () => {
+    const { result, setTickets } = await withBills(['GAR-7']);
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    expect(result.current.openTickets).toEqual([]);
+    act(() => { result.current.submit(); });
+    expect(result.current.askOpenTicket).toBe(false);
+    expect(setTickets).toHaveBeenCalledTimes(1);
     vi.doUnmock('../../lib/supabase');
     vi.doUnmock('@garage/shared');
   });

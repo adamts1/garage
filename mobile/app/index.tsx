@@ -78,6 +78,7 @@ function TabletHome() {
             embedded
             onClose={() => setSelection(null)}
             onCreated={(key) => setSelection({ mode: 'ticket', key })}
+            onOpenTicket={(key) => setSelection({ mode: 'ticket', key })}
           />
         ) : selection?.mode === 'ticket' ? (
           <TicketEditor

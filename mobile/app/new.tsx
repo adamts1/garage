@@ -13,6 +13,7 @@ export default function NewTicketRoute() {
     <TicketCreate
       onClose={() => router.back()}
       onCreated={(key) => router.replace(`/ticket/${key}`)}
+      onOpenTicket={(key) => router.replace(`/ticket/${key}`)}
     />
   );
 }
