@@ -36,4 +36,5 @@ export * from './invoices';
 export * from './expenses';
 export * from './invoiceScan';
 export * from './bookkeeping';
+export * from './cardPayments';
 export { setSupabaseClient, getClient } from './client';

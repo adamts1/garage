@@ -33,6 +33,8 @@
     "import:ricbi": "node --env-file=.env.local scripts/ricbi/import-ricbi.mjs",
     "connect-billing": "node --env-file=.env.local scripts/connect-billing.mjs",
     "connect-billing:prod": "node --env-file=.env.production.local scripts/connect-billing.mjs",
+    "connect-payments": "node --env-file=.env.local scripts/connect-payments.mjs",
+    "connect-payments:prod": "node --env-file=.env.production.local scripts/connect-payments.mjs",
     "bookkeeping-software": "node --env-file=.env.local scripts/set-bookkeeping-software.mjs",
     "bookkeeping-software:prod": "node --env-file=.env.production.local scripts/set-bookkeeping-software.mjs",
     "resend-key": "zsh scripts/set-resend-key.sh poksqsdklnhaumozriqd",

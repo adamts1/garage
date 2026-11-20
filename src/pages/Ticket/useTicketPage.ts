@@ -1,5 +1,5 @@
 import {
-  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -42,11 +42,19 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** How far short of the bill a visit's payments may stop and still have paid
+ *  it: an agora or two when a card the provider charged is among them — the
+ *  server charged the bill's own figure, which can sit that far from the
+ *  screen's — and nothing otherwise. issue-invoice allows the same. */
+const settledWithin = (parts: readonly PaymentPart[]) => (parts.some((p) => p.cardPaymentId) ? 0.02 : 0);
+
 /** One round of the drawer, as a payment among the visit's others. */
 const partOf = (r: CloseResult): PaymentPart => ({
   method: r.method!,
   amount: r.amount,
   ...(r.reference ? { reference: r.reference } : {}),
+  ...(r.installments && r.installments > 1 ? { installments: r.installments } : {}),
+  ...(r.card ?? {}),
 });
 
 /* The ticket page edits a DRAFT, and the draft reaches the database only when
@@ -499,8 +507,9 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      Appends to `parts` and returns it. `due` is what is owed before them. */
   const gather = useCallback(async (parts: PaymentPart[], due: number, docnum: string) => {
     let left = round2(due - paymentsTotal(parts));
-    while (left > 0) {
-      const answer = await openCollectDrawer(draft, left, docnum, paymentsTotal(parts));
+    while (left > settledWithin(parts)) {
+      const claimed = parts.map((p) => p.cardPaymentId).filter((id): id is string => !!id);
+      const answer = await openCollectDrawer(draft, left, docnum, paymentsTotal(parts), claimed);
       /* Collecting offers no open-charge card, so a finished drawer always names
          a method — but the type allows null, and defaulting beats asserting. */
       if (!answer || !answer.method) break;
@@ -681,6 +690,13 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         return;
       }
 
+      /* Unsaved works are saved BEFORE the drawer opens. A card is charged
+         from inside it, and the server prices that charge from the stored
+         ticket — never from the screen — so a work added and not yet saved
+         was a bill of nothing ("no priced works") while the drawer showed
+         its sum. The closing save below still follows the money. */
+      if (dirty && !(await save())) return;
+
       /* Asked before the drawer opens rather than after, because it decides
          what the drawer may offer: a part payment leaves a balance, and the
          balance is read off the tax invoice and its receipts. With no provider
@@ -698,7 +714,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       if (first.method && !first.paid) await gather(parts, total, '');
 
       const taken = paymentsTotal(parts);
-      const paid = parts.length > 0 && taken >= total;
+      const paid = parts.length > 0 && taken >= round2(total - settledWithin(parts));
       /** Money taken, but not all of it. */
       const partPaid = parts.length > 0 && !paid;
       const left = Math.max(0, round2(total - taken));
@@ -717,7 +733,13 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         doc: paid ? t('close.docReceipt') : partPaid ? t('close.docInvoiceAndReceipt') : first.doc,
         reference: parts.length === 1 ? parts[0].reference : undefined,
       });
-      if (!saved) return;
+      if (!saved) {
+        /* The card was charged and the ticket did not save. Said plainly: the
+           money is taken. Closing again finds that payment (card-payment
+           hands it back) rather than charging the card a second time. */
+        if (parts.some((p) => p.cardPaymentId)) dispatch(showErrorKey('ticket.cardChargedNotSaved'));
+        return;
+      }
 
       dispatch(
         partPaid
@@ -771,7 +793,10 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
           /* One method is the ordinary document, read off the saved ticket as
              it always was; several are sent, and the server checks they add up
              to the bill. */
-          await issueNow('invoice_receipt', parts.length > 1 ? parts : undefined);
+          /* A single card with installments or card details is sent as a part
+             too: the ticket's columns name a method and a reference, not a
+             payment plan or an approval number. */
+          await issueNow('invoice_receipt', parts.length > 1 || parts.some(partHasCardDetails) ? parts : undefined);
         } else {
           const bill = await issueNow('tax_invoice');
           if (partPaid) {
@@ -800,7 +825,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         setBusy(false);
       }
     },
-    [collect, dispatch, draft, gather, invoice, issueNow, openCloseDrawer, owed, run, save, t, ticket.k, totals.total],
+    [collect, dirty, dispatch, draft, gather, invoice, issueNow, openCloseDrawer, owed, run, save, t, ticket.k, totals.total],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button

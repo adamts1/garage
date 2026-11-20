@@ -45,6 +45,9 @@ vi.mock('@garage/shared', async (importActual) => {
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
     collectInvoice: (...a: unknown[]) => collectInvoice(...a),
     invoicingActive: () => invoicingActive(),
+    /* No clearing provider: the card method records a card taken on a
+       terminal of its own, as these tests have always assumed. */
+    cardPaymentsActive: vi.fn(async () => actual.DEFAULT_CARD_SETTINGS),
   };
 });
 
@@ -204,6 +207,24 @@ beforeEach(() => {
 });
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+describe('unsaved edits when closing', () => {
+  /* The card is charged from inside the drawer, and the server prices that
+     charge from the STORED ticket. A work added and not saved used to reach
+     it as a ticket with nothing on it: "no priced works", under a drawer that
+     showed the sum. So the draft is saved first, before the drawer opens. */
+  it('saves them before the drawer opens', async () => {
+    const saveTicket = vi.fn(async (_t: Ticket) => {});
+    await renderPage(saveTicket);
+    const notes = document.querySelector('textarea') as HTMLTextAreaElement;
+    await act(async () => { fireEvent.change(notes, { target: { value: 'נוסף לפני התשלום' } }); });
+    await act(async () => { screen.getByText(/גבה תשלום|סגור כרטיס וחייב לקוח/).click(); });
+
+    expect(saveTicket).toHaveBeenCalledTimes(1);
+    expect(saveTicket.mock.calls[0][0].notes).toBe('נוסף לפני התשלום');
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+  });
+});
 
 describe('taking a payment', () => {
   it('issues the invoice-receipt, without asking a second time', async () => {

@@ -12,7 +12,7 @@
 import { laborCharged, partUnitCharged, type TicketWork } from './catalog';
 import { getClient, invokeError } from './client';
 import { fetchAll } from './paging';
-import { paymentsTotal, type PayMethod, type PaymentPart } from './payment';
+import { partInstallments, paymentsTotal, type CardType, type PayMethod, type PaymentPart } from './payment';
 
 /* Four documents, two of which are bills.
  *
@@ -102,6 +102,11 @@ export interface Invoice {
 
 const paymentToBody = (p: PaymentPart) => ({
   method: p.method, amount: p.amount, reference: p.reference ?? null,
+  ...(partInstallments(p) > 1 ? { installments: partInstallments(p) } : {}),
+  ...(p.method === 'card' && p.cardLast4 ? { card_last4: p.cardLast4 } : {}),
+  ...(p.method === 'card' && p.cardType ? { card_type: p.cardType } : {}),
+  ...(p.method === 'card' && p.approvalNumber ? { approval_number: p.approvalNumber } : {}),
+  ...(p.method === 'card' && p.cardPaymentId ? { card_payment_id: p.cardPaymentId } : {}),
 });
 
 const rowToInvoice = (r: any): Invoice => ({
@@ -126,10 +131,17 @@ const rowToInvoice = (r: any): Invoice => ({
   payMethod: r.pay_method ?? null,
   payReference: r.pay_reference ?? null,
   payments: Array.isArray(r.payments) && r.payments.length > 0
-    ? (r.payments as Array<{ method: PayMethod; amount: number; reference?: string | null }>).map((p) => ({
+    ? (r.payments as Array<{
+        method: PayMethod; amount: number; reference?: string | null; installments?: number | null;
+        card_last4?: string | null; card_type?: CardType | null; approval_number?: string | null;
+      }>).map((p) => ({
         method: p.method,
         amount: Number(p.amount),
         ...(p.reference ? { reference: p.reference } : {}),
+        ...(p.installments && p.installments > 1 ? { installments: Number(p.installments) } : {}),
+        ...(p.card_last4 ? { cardLast4: p.card_last4 } : {}),
+        ...(p.card_type ? { cardType: p.card_type } : {}),
+        ...(p.approval_number ? { approvalNumber: p.approval_number } : {}),
       }))
     : null,
   vehicle: r.vehicle && typeof r.vehicle === 'object'

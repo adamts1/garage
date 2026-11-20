@@ -89,6 +89,20 @@ function paymentBlock(method: string | null, total: number): Record<string, unkn
   return { cash: { sum: total } };
 }
 
+/* iCount's own names for the brands; its example uses "VISA". */
+const ICOUNT_CARD_TYPE: Record<string, string> = {
+  visa: 'VISA', mastercard: 'MASTERCARD', amex: 'AMEX', diners: 'DINERS', isracard: 'ISRACARD',
+};
+
+function ccDetails(p: PaymentPart): Record<string, unknown> {
+  const d: Record<string, unknown> = {};
+  if ((p.installments ?? 1) > 1) d.num_of_payments = p.installments;
+  if (p.cardLast4) d.card_number = p.cardLast4;
+  if (p.cardType && ICOUNT_CARD_TYPE[p.cardType]) d.card_type = ICOUNT_CARD_TYPE[p.cardType];
+  if (p.approvalNumber) d.confirmation_code = p.approvalNumber;
+  return d;
+}
+
 /* Several payments on one document: each part is mapped as above and parts
    landing on the same key are added together. Cheques stay one entry per
    cheque, because a cheque is a piece of paper and iCount lists them. The
@@ -96,6 +110,12 @@ function paymentBlock(method: string | null, total: number): Record<string, unkn
    function checks that before anything reaches here. */
 function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
   const sums: Record<'cash' | 'cc' | 'banktransfer', number> = { cash: 0, cc: 0, banktransfer: 0 };
+  /* A card's details — installments, last four, brand, approval number — are
+     printed only when ONE card paid: iCount's cc block is a single object and
+     is summed here, so two cards have no single set of details to show.
+     Field names are iCount's (help/methods/doc/create, read 2026-11-20). */
+  const cards = parts.filter((p) => paymentBlock(p.method, p.amount).cc);
+  const details = cards.length === 1 ? ccDetails(cards[0]) : {};
   const cheques: Array<{ sum: number }> = [];
   for (const p of parts) {
     const one = paymentBlock(p.method, p.amount);
@@ -106,6 +126,7 @@ function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
   }
   const block: Record<string, unknown> = {};
   for (const [key, sum] of Object.entries(sums)) if (sum > 0) block[key] = { sum };
+  if (block.cc) block.cc = { ...(block.cc as object), ...details };
   if (cheques.length > 0) block.cheques = cheques;
   return block;
 }
