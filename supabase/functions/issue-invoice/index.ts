@@ -22,6 +22,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
 import { NotIssued } from '../_shared/provider.ts';
+import { priceTicket, type LineWork, type Work } from '../_shared/billing.ts';
 import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, PaymentPart, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
@@ -36,98 +37,6 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-
-interface WorkItem { name: string; qty: number; price: number; discount?: number | null; vat_discount?: boolean | null }
-interface Work { name: string; labor: number; labor_discount?: number | null; labor_vat_discount?: boolean | null; work_items: WorkItem[] }
-
-/** A unit price after a percent discount, to the agora. The provider gets the
- *  discounted price and nothing else — no discount field, no list price — so
- *  the document shows what was charged. Must match `discounted` in
- *  packages/shared/src/catalog.ts, which the screens and the print use. */
-function netUnit(price: unknown, pct: unknown): number {
-  const p = Number(price);
-  const d = Math.min(Math.max(Number(pct) || 0, 0), 100);
-  return d ? Math.round(p * (1 - d / 100) * 100) / 100 : p;
-}
-
-/** הנחת מע״מ: a line whose shown price is what the customer pays including
- *  VAT is billed at the pre-VAT price that comes back to it, to the agora.
- *  Must match `netFromGross` / `partUnitCharged` in packages/shared/src/catalog.ts. */
-function chargedUnit(shown: number, vatDiscount: unknown, vatRate: number): number {
-  if (vatDiscount !== true) return shown;
-  if (!Number.isFinite(shown) || shown <= 0) return 0;
-  const start = round2(shown / (1 + vatRate));
-  let best = start;
-  for (let step = -2; step <= 2; step++) {
-    const net = round2(start + step / 100);
-    if (net < 0) continue;
-    const off = Math.abs(round2(net * (1 + vatRate)) - shown);
-    if (off < Math.abs(round2(best * (1 + vatRate)) - shown) - 1e-9) best = net;
-  }
-  return best;
-}
-
-/** Which work a line was billed under: its position among the ticket's works
- *  and its name. Stored on every line, so the grouping a document is printed
- *  with is frozen with it rather than worked out later from a ticket that may
- *  have changed since. */
-interface LineWork { group: number; work: string; kind: 'work' | 'part' }
-
-/** Build invoice lines from the ticket's OWN works: one line per work's labour,
- *  one per part, each after its discount. Prices are pre-VAT (as stored).
- *  Returns lines + pre-VAT subtotal, and for each line the work it came from. */
-function linesFromWorks(works: Work[], vatRate: number): { items: InvoiceItem[]; subtotal: number; owners: LineWork[] } {
-  const items: InvoiceItem[] = [];
-  const owners: LineWork[] = [];
-  (works ?? []).forEach((w, group) => {
-    const work = w.name || 'עבודה';
-    const labour = chargedUnit(netUnit(w.labor, w.labor_discount), w.labor_vat_discount, vatRate);
-    if (labour > 0) {
-      items.push({ description: work, unitprice: labour, quantity: 1 });
-      owners.push({ group, work, kind: 'work' });
-    }
-    for (const p of w.work_items ?? []) {
-      const unit = chargedUnit(netUnit(p.price, p.discount), p.vat_discount, vatRate);
-      if (unit !== 0) {
-        items.push({ description: p.name || 'חלק', unitprice: unit, quantity: Number(p.qty) || 1, indent: true });
-        owners.push({ group, work, kind: 'part' });
-      }
-    }
-  });
-  const subtotal = items.reduce((s, i) => s + i.unitprice * i.quantity, 0);
-  return { items, subtotal, owners };
-}
-
-/** מחיר סופי לכרטיס: the lines re-priced to add up to exactly `net`, each cut
- *  by the same proportion. What agora rounding leaves over goes on the largest
- *  line of quantity 1; with none, one unit of the largest line is split off to
- *  carry it, and `split` names the line it came from.
- *  Must match `spreadToNet` in packages/shared/src/catalog.ts. */
-function spreadToNet(lines: InvoiceItem[], net: number): { lines: InvoiceItem[]; split: number | null } {
-  const before = lines.reduce((s, l) => s + l.unitprice * l.quantity, 0);
-  if (!(before > 0) || net >= before) return { lines: [...lines], split: null };
-  const ratio = net / before;
-  const out = lines.map((l) => ({ ...l, unitprice: round2(l.unitprice * ratio) }));
-  const left = round2(net - out.reduce((s, l) => s + l.unitprice * l.quantity, 0));
-  if (left === 0) return { lines: out, split: null };
-
-  let best = -1;
-  out.forEach((l, i) => {
-    if (l.quantity === 1 && round2(l.unitprice + left) > 0
-        && (best < 0 || l.unitprice > out[best].unitprice)) best = i;
-  });
-  if (best >= 0) {
-    out[best] = { ...out[best], unitprice: round2(out[best].unitprice + left) };
-    return { lines: out, split: null };
-  }
-
-  let big = 0;
-  out.forEach((l, i) => { if (l.unitprice * l.quantity > out[big].unitprice * out[big].quantity) big = i; });
-  const from = out[big];
-  const unit = { ...from, quantity: 1, unitprice: round2(from.unitprice + left) };
-  out.splice(big, 1, { ...from, quantity: from.quantity - 1 }, unit);
-  return { lines: out, split: big };
-}
 
 /** The car, as the ticket had it when the document was issued. */
 interface VehicleSnapshot {
@@ -177,6 +86,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
    the package, so the list is repeated; a code outside it is refused rather
    than stored, because the column it lands in is read back as a code. */
 const PAY_METHODS = ['cash', 'card', 'bit', 'bank_transfer', 'cheque', 'other'];
+/* Mirrors CARD_TYPES in packages/shared/src/payment.ts. */
+const CARD_TYPES = ['visa', 'mastercard', 'amex', 'diners', 'isracard'];
 
 /** The `payments` a request carries, checked: absent → null, malformed → a
  *  message to refuse with. Each part a known method and a positive sum. */
@@ -190,19 +101,109 @@ function readPayments(raw: unknown): PaymentPart[] | null | string {
     if (!PAY_METHODS.includes(method)) return `unknown payment method: "${method}"`;
     if (!Number.isFinite(amount) || amount <= 0) return 'every payment needs a positive amount';
     const reference = p?.reference == null ? null : String(p.reference).trim() || null;
-    parts.push({ method, amount, reference });
+    /* Regular installments on a card. Any other method, or 1, is a single
+       payment and carries nothing. */
+    const n = p?.installments == null ? 1 : Number(p.installments);
+    if (!Number.isInteger(n) || n < 1 || n > 36) return 'installments must be a whole number from 1 to 36';
+    if (n > 1 && method !== 'card') return 'only a card payment can be in installments';
+    /* A card's details for the receipt. Each is optional and checked for
+       shape only — a malformed one is refused, not printed. */
+    const card: Partial<PaymentPart> = {};
+    if (p?.card_last4 != null || p?.card_type != null || p?.approval_number != null) {
+      if (method !== 'card') return 'card details belong on a card payment';
+      if (p.card_last4 != null) {
+        if (!/^\d{4}$/.test(String(p.card_last4))) return 'card_last4 must be four digits';
+        card.cardLast4 = String(p.card_last4);
+      }
+      if (p.card_type != null) {
+        if (!CARD_TYPES.includes(String(p.card_type))) return `unknown card type: "${p.card_type}"`;
+        card.cardType = String(p.card_type);
+      }
+      if (p.approval_number != null) {
+        if (!/^[0-9A-Za-z-]{1,20}$/.test(String(p.approval_number))) return 'approval_number must be up to 20 letters or digits';
+        card.approvalNumber = String(p.approval_number);
+      }
+    }
+    /* A card the clearing provider charged: its card_payments row. The row,
+       not anything else in this part, is then the evidence — see bindCards. */
+    if (p?.card_payment_id != null) {
+      if (method !== 'card') return 'card_payment_id belongs on a card payment';
+      if (!/^[0-9a-f-]{36}$/i.test(String(p.card_payment_id))) return 'card_payment_id is not an id';
+      card.cardPaymentId = String(p.card_payment_id);
+    }
+    parts.push({ method, amount, reference, ...(n > 1 ? { installments: n } : {}), ...card });
   }
   return parts;
 }
 
-/** How a list of payments is stored: one part is an ordinary single-method
- *  document, written exactly as before; several go into `payments`, and no one
- *  method names the document. */
+/** A part as `invoices.payments` stores it: snake_case, like every other
+ *  column, and as packages/shared/src/invoices.ts reads it back. */
+const storedPart = (p: PaymentPart) => ({
+  method: p.method,
+  amount: p.amount,
+  reference: p.reference ?? null,
+  ...(p.installments && p.installments > 1 ? { installments: p.installments } : {}),
+  ...(p.cardLast4 ? { card_last4: p.cardLast4 } : {}),
+  ...(p.cardType ? { card_type: p.cardType } : {}),
+  ...(p.approvalNumber ? { approval_number: p.approvalNumber } : {}),
+  ...(p.cardPaymentId ? { card_payment_id: p.cardPaymentId } : {}),
+});
+
+const hasCardDetails = (p: PaymentPart) =>
+  !!(p.installments && p.installments > 1) || !!p.cardLast4 || !!p.cardType || !!p.approvalNumber || !!p.cardPaymentId;
+
+/** How a list of payments is stored. One part still names the document in
+ *  pay_method / pay_reference, exactly as before — the screens and the print
+ *  read the reference from there. Card details have no column of their own,
+ *  so a part that carries any is ALSO kept in `payments`. Several parts go
+ *  into `payments`, and no one method names the document. */
 function paymentColumns(parts: PaymentPart[]) {
   if (parts.length === 1) {
-    return { pay_method: parts[0].method, pay_reference: parts[0].reference ?? null, payments: null };
+    return {
+      pay_method: parts[0].method,
+      pay_reference: parts[0].reference ?? null,
+      payments: hasCardDetails(parts[0]) ? parts.map(storedPart) : null,
+    };
   }
-  return { pay_method: null, pay_reference: null, payments: parts };
+  return { pay_method: null, pay_reference: null, payments: parts.map(storedPart) };
+}
+
+/** Card payments the clearing provider charged, checked against their rows:
+ *  this garage's, this ticket's, paid, on no document yet, and for exactly the
+ *  part's sum. The row's details replace whatever the request said — the
+ *  provider's record is the evidence, not the browser. A message when any
+ *  fails; null when all hold (or there are none). */
+// deno-lint-ignore no-explicit-any
+async function bindCards(admin: any, parts: PaymentPart[], garageId: string, ticketId: string | null): Promise<string | null> {
+  const ids = parts.map((p) => p.cardPaymentId).filter(Boolean) as string[];
+  if (ids.length === 0) return null;
+  if (new Set(ids).size !== ids.length) return 'the same card payment is listed twice';
+  const { data: rows, error } = await admin.from('card_payments').select('*').in('id', ids);
+  if (error) return error.message;
+  for (const p of parts) {
+    if (!p.cardPaymentId) continue;
+    // deno-lint-ignore no-explicit-any
+    const r = (rows ?? []).find((x: any) => x.id === p.cardPaymentId);
+    if (!r || r.garage_id !== garageId || (ticketId && r.ticket_id !== ticketId)) return 'card payment not found for this ticket';
+    if (r.status !== 'paid') return 'card payment is not paid';
+    if (r.invoice_id) return 'card payment is already on a document';
+    if (round2(Number(r.amount)) !== round2(p.amount)) return `card payment was ${r.amount}, not ${p.amount}`;
+    p.installments = Number(r.installments) > 1 ? Number(r.installments) : undefined;
+    p.cardLast4 = r.card_last4 ?? undefined;
+    p.cardType = r.card_type ?? undefined;
+    p.approvalNumber = r.approval_number ?? undefined;
+  }
+  return null;
+}
+
+/** Ties each charged card to the document that records it. After the document
+ *  is stored; a failure here is logged, never thrown — the document exists. */
+// deno-lint-ignore no-explicit-any
+async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: string | null) {
+  const ids = (parts ?? []).map((p) => p.cardPaymentId).filter(Boolean) as string[];
+  if (!ids.length || !invoiceId) return;
+  const { error } = await admin.from('card_payments').update({ invoice_id: invoiceId }).in('id', ids).is('invoice_id', null);
+  if (error) console.error(`card payments ${ids.join(',')} not linked to ${invoiceId}`, error.message);
 }
 
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
@@ -394,6 +395,8 @@ Deno.serve(async (req) => {
          the bill is priced, below. */
       const payments = readPayments(body.payments);
       if (typeof payments === 'string') return json({ error: payments }, 400);
+      const unbound = payments && await bindCards(admin, payments, ticket.garage_id, ticket.id);
+      if (unbound) return json({ error: unbound }, 400);
 
       const { provider, adapter, credentials, vatRate, defaultDocType } = await billing(ticket.garage_id);
 
@@ -422,38 +425,17 @@ Deno.serve(async (req) => {
         return json({ error: `a ticket can be billed with an invoice-receipt or a tax invoice, not ${docType}` }, 400);
       }
 
-      let { items, subtotal, owners } = linesFromWorks(ticket.works as unknown as Work[], vatRate);
-      const vehicle = vehicleOf(ticket);
-      if (items.length === 0) {
+      const priced = priceTicket(ticket.works as unknown as Work[], ticket.final_price, vatRate);
+      if (priced === 'no priced works') {
         await release('no priced works');
         return json({ error: 'nothing to invoice — the ticket has no priced works' }, 400);
       }
-
-      /* מחיר סופי לכרטיס. Below the lines, the difference is spread over them
-         so the document itemises the work and comes to exactly this price.
-         Above them it is refused, not quietly ignored: the customer was told a
-         figure, and billing a different one is for a person to decide. */
-      const finalPrice = ticket.final_price == null ? null : Number(ticket.final_price);
-      if (finalPrice != null && finalPrice > 0) {
-        const linesNet = round2(subtotal);
-        if (finalPrice > round2(linesNet + round2(linesNet * vatRate))) {
-          await release('final price above the works');
-          return json({ error: 'the ticket\'s final price is above what its works come to; change or remove it first' }, 400);
-        }
-        /* The pre-VAT price that comes back to it — or, where VAT's agora
-           rounding cannot reach it, the one an agora below: never more than
-           the customer was told. Must match `finalNet` in catalog.ts. */
-        let target = chargedUnit(finalPrice, true, vatRate);
-        while (target > 0 && round2(target + round2(target * vatRate)) > finalPrice) target = round2(target - 0.01);
-        if (target < linesNet) {
-          const spread = spreadToNet(items, target);
-          items = spread.lines;
-          if (spread.split != null) owners = [...owners.slice(0, spread.split + 1), owners[spread.split], ...owners.slice(spread.split + 1)];
-          subtotal = round2(items.reduce((s, i) => s + i.unitprice * i.quantity, 0));
-        }
+      if (priced === 'final price above the works') {
+        await release('final price above the works');
+        return json({ error: 'the ticket\'s final price is above what its works come to; change or remove it first' }, 400);
       }
-      const vat = round2(subtotal * vatRate);
-      const total = round2(subtotal + vat);
+      const { items, owners, subtotal, vat, total } = priced;
+      const vehicle = vehicleOf(ticket);
 
       /* A tax invoice records no payment, so a list of them is a mistake in the
          caller. An invoice-receipt says the bill was paid — all of it — so the
@@ -470,12 +452,17 @@ Deno.serve(async (req) => {
          total in the same way. Anything larger is a real disagreement. */
       if (payments) {
         const diff = round2(total - sumOf(payments));
-        const last = payments[payments.length - 1];
-        if (Math.abs(diff) > 0.02 || round2(last.amount + diff) <= 0) {
+        /* Never a card the provider charged: its sum is what left the card,
+           and a receipt saying otherwise disagrees with the clearing
+           statement. card-payment charges the bill's own figure when a card
+           pays the rest, so with only charged cards there is nothing to
+           absorb; if there is, it is a real disagreement. */
+        const absorbing = [...payments].reverse().find((p) => !p.cardPaymentId);
+        if (Math.abs(diff) > 0.02 || (diff !== 0 && (!absorbing || round2(absorbing.amount + diff) <= 0))) {
           await release('payments do not add up');
           return json({ error: `the payments add up to ${sumOf(payments)}, the bill is ${total}`, total }, 400);
         }
-        last.amount = round2(last.amount + diff);
+        if (absorbing) absorbing.amount = round2(absorbing.amount + diff);
       }
 
       const doc = await provide(() => adapter.issue({
@@ -527,6 +514,7 @@ Deno.serve(async (req) => {
       const { data: inserted, error: iErr } = await admin.from('invoices').insert(row).select().single();
       await stored(inserted?.id ?? null, iErr?.message);
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
+      await linkCards(admin, payments, inserted.id);
       return json({ invoice: inserted });
     }
 
@@ -699,6 +687,8 @@ Deno.serve(async (req) => {
         return json({ error: `amount ${body.amount} does not match the payments (${sumOf(payments)})` }, 400);
       }
       const asked = payments ? sumOf(payments) : body.amount == null ? null : round2(Number(body.amount));
+      const unbound = payments && await bindCards(admin, payments, inv.garage_id, inv.ticket_id);
+      if (unbound) return json({ error: unbound }, 400);
 
       const { provider, adapter, credentials } = await billing(inv.garage_id);
 
@@ -778,6 +768,7 @@ Deno.serve(async (req) => {
       }).select().single();
       await stored(receipt?.id ?? null, nErr?.message);
       if (nErr) return json({ error: `receipt issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
+      await linkCards(admin, payments, receipt.id);
 
       return json({ receipt, collected: requested, owed: round2(owed - requested) });
     }

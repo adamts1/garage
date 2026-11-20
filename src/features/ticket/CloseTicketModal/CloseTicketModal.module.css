@@ -104,6 +104,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 20px;
+  margin: 10px;
 }
 .card h4 { margin: 0 0 4px; font-size: 18px; font-weight: 800; text-align: center; }
 .hint { margin: 0 0 18px; font-size: 14.5px; color: var(--ink); text-align: center; }
@@ -316,3 +317,27 @@
 .success h3 { margin: 0 0 8px; font-size: 24px; font-weight: 800; }
 .amount { margin: 0 0 6px; font-size: 32px; font-weight: 800; color: var(--navy); }
 .docLine { margin: 0; font-size: 15px; color: var(--ink); }
+
+/* the provider's hosted payment page, inside the drawer */
+.cardFrame { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.payFrame { width: 100%; flex: 1; min-height: 560px; border: 1px solid var(--line, #e3e6ec); border-radius: 12px; background: #fff; }
+.info.bad { background: #fdecec; border-color: #f2c4c4; }
+
+/* the card's approval, on the success screen */
+/* Scoped under .success on purpose: the global .kv sets margin: 0 and is
+   loaded after this module, so a lone .approval lost the margin to it. */
+.success .approval {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 380px;
+  margin: 18px 0 28px;
+  padding: 12px 16px;
+  border: 1px solid #cfe0d2;
+  border-radius: 12px;
+  background: var(--ok-soft);
+  text-align: start;
+}
+/* Nothing on the success screen may be wider than the drawer: a long line used
+   to push the column past both edges, and the drawer clipped it. */
+.success > * { max-width: 100%; }
+.success .docLine { overflow-wrap: anywhere; }

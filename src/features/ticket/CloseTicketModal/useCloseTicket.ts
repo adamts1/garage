@@ -5,6 +5,7 @@ import type { CloseResult } from './CloseTicketModal';
 
 /** The ticket's own details, which both openings show and neither varies. */
 const identity = (ticket: Ticket) => ({
+  ticketKey: ticket.k,
   ticketNumber: ticket.k.split('-')[1] ?? ticket.k,
   customer: ticket.customer,
   car: ticket.car,
@@ -37,9 +38,11 @@ export function useCollectPayment() {
 
   /* `soFar` is what this visit has already taken, in earlier rounds of the
      same drawer, and not yet put on a receipt. */
+  /* `claimed`: card payments the earlier rounds charged through the provider,
+     held for this visit's one receipt — see CloseTicketModal's `claimed`. */
   return useCallback(
-    (ticket: Ticket, owed: number, docnum: string, soFar = 0) =>
-      open('closeTicket', { ...identity(ticket), total: owed, docnum, mode: 'collect', soFar }),
+    (ticket: Ticket, owed: number, docnum: string, soFar = 0, claimed: readonly string[] = []) =>
+      open('closeTicket', { ...identity(ticket), total: owed, docnum, mode: 'collect', soFar, claimed: claimed.join(',') }),
     [open],
   );
 }

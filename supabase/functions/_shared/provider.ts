@@ -46,6 +46,16 @@ export interface PaymentPart {
   /** VAT-inclusive. */
   amount: number;
   reference?: string | null;
+  /** Regular installments on a card; absent or 1 is a single payment. */
+  installments?: number;
+  /** A card's details for the document, when known. Card only. */
+  cardLast4?: string;
+  /** visa | mastercard | amex | diners | isracard */
+  cardType?: string;
+  approvalNumber?: string;
+  /** The card_payments row of a card the clearing provider charged. Never
+   *  sent to the invoicing provider; issue-invoice checks it and links it. */
+  cardPaymentId?: string;
 }
 
 export interface IssueInput {

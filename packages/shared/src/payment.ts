@@ -106,7 +106,32 @@ export interface PaymentPart {
   /** Last four digits, cheque number, transfer reference — whatever the
    *  method asks for, if anything was typed. */
   reference?: string;
+  /** A card paid in regular installments (תשלומים, no interest): how many.
+   *  Absent or 1 is a single payment. Only ever set on `card`. */
+  installments?: number;
+  /** A card's details for the receipt, when known: from the clearing provider
+   *  for a card charged through the system, typed for one charged elsewhere.
+   *  Only ever set on `card`. */
+  cardLast4?: string;
+  cardType?: CardType;
+  approvalNumber?: string;
+  /** A card the clearing provider charged: its card_payments row. The server
+   *  takes the card's details from that row, and ties the row to the
+   *  document so it is never charged or recorded twice. */
+  cardPaymentId?: string;
 }
+
+export const CARD_TYPES = ['visa', 'mastercard', 'amex', 'diners', 'isracard'] as const;
+export type CardType = (typeof CARD_TYPES)[number];
+
+/** Does a part carry anything the ticket's own columns cannot hold? Then it is
+ *  sent to the server as a part even when it is the visit's only payment. */
+export const partHasCardDetails = (p: PaymentPart): boolean =>
+  p.method === 'card' && (partInstallments(p) > 1 || !!p.cardLast4 || !!p.cardType || !!p.approvalNumber || !!p.cardPaymentId);
+
+/** The installments a part names, or 1. */
+export const partInstallments = (p: Pick<PaymentPart, 'method' | 'installments'>): number =>
+  p.method === 'card' && Number.isInteger(p.installments) && (p.installments ?? 1) > 1 ? p.installments! : 1;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
