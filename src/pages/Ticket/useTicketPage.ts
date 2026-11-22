@@ -1,5 +1,5 @@
 import {
-  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -89,6 +89,11 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   const confirm = useConfirm();
   const prompt = usePrompt();
   const openModal = useModalResult<boolean>();
+  const openRefundDone = useCallback(
+    (r: CardRefundDone & { docnum: string; noteTotal: number }) =>
+      openModal('refundDone', { ...r, approvalNumber: r.approvalNumber ?? '', providerRefundId: r.providerRefundId ?? '', originalRef: r.originalRef ?? '', cardLast4: r.cardLast4 ?? '', cardBrand: r.cardBrand ?? '' }),
+    [openModal],
+  );
   const openCloseDrawer = useCloseTicket();
   const openCollectDrawer = useCollectPayment();
 
@@ -581,6 +586,16 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   const credit = useCallback(async () => {
     if (!invoice || creditable <= 0) return;
 
+    /* Whether the card that paid it can take money back — see the invoices
+       page, which asks the same. A failed read is reported, not guessed. */
+    let card: Awaited<ReturnType<typeof cardRefundable>>;
+    try {
+      card = await cardRefundable(invoice.id);
+    } catch (e) {
+      dispatch(showError(e));
+      return;
+    }
+
     const answer = await openModal('creditNote', {
       remaining: creditable,
       invoiceTotal: invoice.total,
@@ -589,13 +604,14 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       /* The rate this document was issued at, not today's — a credit is priced
          by the invoice it corrects. */
       vatRate: invoice.vatRate,
-    }) as { amount: number; reason: string } | null;
+      ...(card ? { cardRefundable: card.amount, cardLast4: card.last4 ?? '', cardUnresolved: card.unresolved } : {}),
+    }) as { amount: number; reason: string; refundToCard: boolean } | null;
     if (!answer) return;
 
     setBusy(true);
     try {
-      const { cancelled, note } = await run('busy.crediting',
-        () => creditInvoice(invoice.id, answer.amount, answer.reason));
+      const { cancelled, note, refunded } = await run('busy.crediting',
+        () => creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard));
       setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 
       if (cancelled) {
@@ -603,16 +619,22 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
            board, and it is the same write any other status change makes. */
         await save({ st: 'done', paid: false });
       }
-      dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
-        docnum: note.docnum,
-        amount: money(note.total),
-      }));
+      /* Money that went back to a card gets the same confirmation a payment
+         does — the approval is what the customer will ask for. */
+      if (refunded) {
+        void openRefundDone({ ...refunded, docnum: note.docnum, noteTotal: note.total });
+      } else {
+        dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
+          docnum: note.docnum,
+          amount: money(note.total),
+        }));
+      }
     } catch (e) {
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
-  }, [creditable, dispatch, invoice, openModal, run, save, ticket.customer, ticket.k]);
+  }, [creditable, dispatch, invoice, openModal, openRefundDone, run, save, ticket.customer, ticket.k]);
 
   /* Off the board or back onto it, from inside the ticket. Applied at once
      rather than held in the draft: it is a view choice, not an edit to the

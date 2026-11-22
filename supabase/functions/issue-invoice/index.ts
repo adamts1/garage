@@ -23,6 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
 import { NotIssued } from '../_shared/provider.ts';
 import { priceTicket, type LineWork, type Work } from '../_shared/billing.ts';
+import { garageProvider } from '../_shared/payments/registry.ts';
 import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, PaymentPart, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
@@ -783,6 +784,133 @@ Deno.serve(async (req) => {
        the invoice, it does not void it — and several may be issued against one
        invoice over time. A credit that takes the last of what is still owed
        back voids it, which is the case 'cancel' always was. */
+    /* What the advisor and the credit note are told about money that went back
+       to a card: the same facts in both places. */
+    // deno-lint-ignore no-explicit-any
+    async function refundDetails(refund: any) {
+      const { data: card } = await admin.from('card_payments')
+        .select('card_last4, card_brand, provider_ref, raw').eq('id', refund.card_payment_id).maybeSingle();
+      const r = refund.raw?.ResultData ?? {};
+      return {
+        amount: Number(refund.amount),
+        kind: refund.kind as 'cancel' | 'refund',
+        approvalNumber: String(r.DebitApproveNumber ?? r.AuthManpikNo ?? '').trim() || null,
+        providerRefundId: refund.provider_refund_id ?? null,
+        originalRef: card?.provider_ref ?? card?.raw?.ResultData?.TransactionPelecardId ?? null,
+        cardLast4: card?.card_last4 ?? null,
+        cardBrand: card?.card_brand ?? null,
+        at: refund.updated_at ?? refund.created_at ?? null,
+      };
+    }
+    type RefundInfo = Awaited<ReturnType<typeof refundDetails>>;
+    const refundNote = (d: RefundInfo) => [
+      `${d.kind === 'cancel' ? 'בוטלה עסקת האשראי' : 'הוחזר לכרטיס האשראי'}: ₪${d.amount.toFixed(2)}`,
+      [d.cardBrand, d.cardLast4 ? `המסתיים ב-${d.cardLast4}` : null].filter(Boolean).join(' '),
+      d.approvalNumber && `מס. אישור: ${d.approvalNumber}`,
+      d.providerRefundId && `אסמכתא: ${d.providerRefundId}`,
+    ].filter(Boolean).join(' · ');
+
+    /* Returns up to `total` of this bill to the card that paid it, through the
+       garage's clearing provider. The refund row, or a Response to send back
+       (the billing reservation released). See the credit action. */
+    // deno-lint-ignore no-explicit-any
+    async function refundToCard(inv: any, total: number): Promise<any> {
+      const refuse = async (status: number, error: string, code?: string) => {
+        await release(error);
+        return json({ error, ...(code ? { code } : {}) }, status);
+      };
+
+      /* The cards on this bill: on the invoice itself (a מס-קבלה), or on the
+         receipts that settled it (a חשבונית מס). */
+      const { data: receipts } = await admin.from('invoices').select('id').eq('pays_invoice_id', inv.id);
+      const docs = [inv.id, ...(receipts ?? []).map((r: { id: string }) => r.id)];
+      const { data: cards, error: cErr } = await admin.from('card_payments').select('*')
+        .in('invoice_id', docs).eq('status', 'paid');
+      if (cErr) return refuse(500, cErr.message);
+      if (!cards?.length) return refuse(400, 'this bill was not paid by a card charged through the system', 'no_card');
+
+      const ids = cards.map((c: { id: string }) => c.id);
+      const { data: earlier, error: rErr } = await admin.from('card_refunds').select('*').in('card_payment_id', ids);
+      if (rErr) return refuse(500, rErr.message);
+      // deno-lint-ignore no-explicit-any
+      if ((earlier ?? []).some((r: any) => r.status === 'pending' || r.status === 'unknown')) {
+        return refuse(409, 'a refund to this card has no clear answer yet — check it with the provider first', 'refund_unresolved');
+      }
+
+      /* Money already returned for this bill that no document shows yet — a
+         credit whose document failed after its refund. That refund is this
+         credit's; returning the money again would pay the customer twice. */
+      // deno-lint-ignore no-explicit-any
+      const orphan = (earlier ?? []).find((r: any) => r.status === 'refunded' && !r.credit_note_id && r.invoice_id === inv.id);
+      if (orphan) {
+        /* Exactly that much: a credit note for more would say the card got
+           back money it did not, and one for less would leave returned money
+           no document shows. */
+        if (round2(Number(orphan.amount)) !== total) {
+          return refuse(409, `${orphan.amount} was already returned to the card for this bill without a credit note — issue the credit note for exactly ${orphan.amount} first`, 'refund_orphan');
+        }
+        return orphan;
+      }
+
+      /* What each card can still take back: what it was charged, less what
+         has been returned from it. Pelecard does not keep this limit — it
+         accepted refunds adding up to more than the charge — so it is kept
+         here. The card with the most left pays the refund. */
+      // deno-lint-ignore no-explicit-any
+      const back = (id: string) => round2((earlier ?? []).filter((r: any) => r.card_payment_id === id && r.status === 'refunded')
+        .reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0));
+      // deno-lint-ignore no-explicit-any
+      const card = cards.map((c: any) => ({ ...c, left: round2(Number(c.amount) - back(c.id)) }))
+        .sort((a: { left: number }, b: { left: number }) => b.left - a.left)[0];
+      const amount = round2(Math.min(total, card.left));
+      if (amount <= 0) return refuse(409, 'everything charged to this card has already been returned', 'refunded_in_full');
+
+      const providerRef = card.provider_ref || card.raw?.ResultData?.TransactionPelecardId;
+      if (!providerRef) return refuse(500, 'the card payment carries no provider reference to refund');
+
+      let provider;
+      try {
+        // A garage that has stopped taking cards may still owe a refund.
+        provider = await garageProvider(admin, inv.garage_id, false);
+      } catch (e) {
+        return refuse(400, (e as Error).message);
+      }
+
+      const { data: me } = await userClient.auth.getUser();
+      const { data: row, error: iErr } = await admin.from('card_refunds').insert({
+        garage_id: inv.garage_id,
+        card_payment_id: card.id,
+        invoice_id: inv.id,
+        amount,
+        created_by: me?.user?.id ?? null,
+      }).select('*').single();
+      if (iErr) {
+        // The unique index: another refund on this card is under way.
+        return refuse(409, 'a refund to this card is already under way', 'refund_unresolved');
+      }
+
+      const result = await provider.adapter.refund({
+        credentials: provider.credentials,
+        paymentId: card.id,
+        providerRef: String(providerRef),
+        chargedAmount: Number(card.amount),
+        amount,
+        whole: amount === round2(Number(card.amount)) && back(card.id) === 0,
+      });
+
+      const patch = result.status === 'refunded'
+        ? { status: 'refunded', kind: result.kind, provider_refund_id: result.providerRefundId, raw: result.raw, message: null }
+        : { status: result.status, message: result.message, raw: result.raw };
+      const { data: saved, error: uErr } = await admin.from('card_refunds').update(patch).eq('id', row.id).select('*').single();
+      if (uErr) console.error(`card refund ${row.id} answer not stored`, patch, uErr.message);
+
+      if (result.status === 'failed') return refuse(502, `the card refund was refused: ${result.message}`, 'refund_failed');
+      if (result.status === 'unknown') {
+        return refuse(502, `no clear answer from the provider about the card refund (${result.message}) — money may have been returned; check before trying again`, 'refund_needs_check');
+      }
+      return saved ?? { ...row, ...patch };
+    }
+
     if (action === 'cancel' || action === 'credit') {
       const invoiceId = body.invoice_id as string;
       const reason = (body.reason as string) || 'ביטול חשבונית';
@@ -862,18 +990,35 @@ Deno.serve(async (req) => {
       }
       const { subtotal, vat, total } = priced;
 
+      /* ---- money back to the card, BEFORE the document ----
+         Asked for by the dialog when the bill was paid by a card the
+         clearing provider charged. The money goes first: a credit note that
+         says the customer was refunded, over a refund that failed, is the
+         worse of the two orders. If the provider refuses, nothing is issued.
+         If the document then fails, the refund stays recorded without one,
+         and the next credit on this bill uses it rather than refunding again. */
+      // deno-lint-ignore no-explicit-any
+      let refund: any = null;
+      if (body.refund_to_card === true) {
+        const r = await refundToCard(inv, total);
+        if (r instanceof Response) return r;
+        refund = r;
+      }
+
       const items: InvoiceItem[] = untouched
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
             description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
         : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
 
+      const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({
         credentials,
         customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
         items,
         reason,
         basedOnDocnum: inv.provider_docnum,
+        note: refundInfo ? refundNote(refundInfo) : undefined,
       }));
       if (doc instanceof Response) return doc;
 
@@ -910,9 +1055,15 @@ Deno.serve(async (req) => {
          what the customer keeps owing us, or kept paying. Only a credit that
          takes the last of it voids the document — and that is the one update
          the immutability trigger permits. */
+      if (refund) {
+        const { error: lErr } = await admin.from('card_refunds').update({ credit_note_id: note.id }).eq('id', refund.id);
+        if (lErr) console.error(`card refund ${refund.id} not linked to credit note ${note.id}`, lErr.message);
+      }
+      const refunded = refundInfo;
+
       if (!full) {
         await stored(note.id);
-        return json({ credit_note: note, credited: total, remaining: round2(remaining - total) });
+        return json({ credit_note: note, credited: total, remaining: round2(remaining - total), refunded });
       }
 
       const { data: cancelled, error: uErr } = await admin.from('invoices')
@@ -924,7 +1075,7 @@ Deno.serve(async (req) => {
       }
       await stored(note.id);
 
-      return json({ credit_note: note, cancelled, credited: total, remaining: 0 });
+      return json({ credit_note: note, cancelled, credited: total, remaining: 0, refunded });
     }
 
     return json({ error: `unknown action: ${action}` }, 400);

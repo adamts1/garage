@@ -96,6 +96,10 @@ export interface CancelInput {
   items: InvoiceItem[];
   reason: string;
   basedOnDocnum: string; // the document being cancelled
+  /** Free text printed on the credit note — how the money went back, when it
+   *  went back to a card. Optional, as on issue: a provider that cannot print
+   *  it issues the document without it. */
+  note?: string;
 }
 
 /** The normalized result of issuing or cancelling — the legal identity of the

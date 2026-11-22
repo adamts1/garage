@@ -26,8 +26,10 @@
  *
  * Like the other scripts it loads .env.local (staging) and is pointed at
  * production with `npm run connect-payments:prod`. Pelecard's public TEST
- * terminal is refused on production, and a non-test terminal on anything else
- * needs --real, so a sandbox and a live account cannot be swapped by accident.
+ * terminal is refused on production (unless --allow-test-terminal, for a
+ * garage that exists only to test production), and a non-test terminal on
+ * anything else needs --real, so a sandbox and a live account cannot be
+ * swapped by accident.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -85,7 +87,13 @@ const projectRef = url.replace(/^https?:\/\//, '').split('.')[0];
 const isProd = projectRef === PRODUCTION_PROJECT_REF;
 const isTest = terminal === TEST_TERMINAL;
 
-if (isProd && isTest) die('Refusing to connect Pelecard\'s TEST terminal on production.');
+/* The test terminal approves cards and moves no money. On a real garage that
+   is "paid" for jobs nobody paid for, so production refuses it — unless it is
+   said out loud, for a garage that exists only to test the production deploy
+   (prod-test). */
+if (isProd && isTest && !args.has('allow-test-terminal')) {
+  die('Refusing to connect Pelecard\'s TEST terminal on production. For a test garage only: --allow-test-terminal.');
+}
 if (!isProd && !isTest && !args.has('real')) {
   die('That is not Pelecard\'s test terminal, and this is not production. Pass --real if you mean it.');
 }
@@ -106,6 +114,7 @@ const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 console.log(`\nProject   ${projectRef}${isProd ? '  \x1b[33m(PRODUCTION)\x1b[0m' : ''}`);
 console.log(`Garage    ${garageId}`);
 console.log(`Provider  ${provider}  terminal ••••${terminal.slice(-4)}${isTest ? ' (test)' : ''}`);
+if (isProd && isTest) console.log('\x1b[33m          TEST terminal on PRODUCTION — cards are approved, no money moves.\x1b[0m');
 console.log(`Shop no   ${shopNo === undefined ? '(unchanged)' : shopNo ?? '(removed — card entry only)'}`);
 console.log(`Payments  ${active ? 'ON' : 'off (credentials stored, payments disabled)'}\n`);
 

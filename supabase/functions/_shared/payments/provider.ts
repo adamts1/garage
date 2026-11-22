@@ -71,12 +71,47 @@ export type Verdict =
       cardLast4: string | null;
       cardBrand: string | null;
       cardType: CardType | null;
+      /** The provider's own id for the charge, which a refund names. */
+      providerRef: string | null;
       raw: unknown;
     }
   | { status: 'declined'; message: string; raw: unknown }
   | { status: 'pending'; message: string | null; raw: unknown };
 
+export interface RefundInput {
+  credentials: PaymentCredentials;
+  /** The charge being refunded: our id, the provider's, and what it took. */
+  paymentId: string;
+  providerRef: string;
+  chargedAmount: number;
+  /** VAT-inclusive shekels to return. */
+  amount: number;
+  /** All of the charge, with nothing returned from it before — the case a
+   *  provider may be able to void outright instead of crediting. */
+  whole: boolean;
+}
+
+/** The provider's answer to a refund, normalized.
+ *
+ *  'failed' only when the provider certainly returned nothing — it answered,
+ *  and the answer was no. Anything else (a timeout, a reply that is not the
+ *  provider's) is 'unknown': the money MAY have gone back, and the caller must
+ *  not try again on its own. */
+export type RefundResult =
+  | {
+      status: 'refunded';
+      kind: 'cancel' | 'refund';
+      /** The provider's id for the void / credit transaction. */
+      providerRefundId: string | null;
+      /** The card company's approval number for it, when the provider gives one. */
+      approvalNumber: string | null;
+      raw: unknown;
+    }
+  | { status: 'failed'; message: string; raw: unknown }
+  | { status: 'unknown'; message: string; raw: unknown };
+
 export interface PaymentProvider {
   start(input: StartInput): Promise<StartedPayment>;
   verify(input: VerifyInput): Promise<Verdict>;
+  refund(input: RefundInput): Promise<RefundResult>;
 }
