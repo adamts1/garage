@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "admin": "vite --config admin/vite.config.mjs",
     "build": "tsc && vite build && node scripts/prerender-landing.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
