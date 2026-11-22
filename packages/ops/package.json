@@ -1,0 +1,14 @@
+{
+  "name": "@garage/ops",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Operator logic shared by scripts/ and the local admin console. Node only — never imported by the app.",
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2"
+  }
+}
