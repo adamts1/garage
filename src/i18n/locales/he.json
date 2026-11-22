@@ -472,7 +472,13 @@
     "confirm": "הפק חשבונית זיכוי",
     "doneFull": "הופקה חשבונית זיכוי {{docnum}} על {{amount}} · החשבונית בוטלה",
     "donePartial": "הופקה חשבונית זיכוי {{docnum}} על {{amount}}",
-    "alreadyOnInvoice": "זוכו {{credited}} · נותרו {{remaining}}"
+    "alreadyOnInvoice": "זוכו {{credited}} · נותרו {{remaining}}",
+    "toCard": "החזר לכרטיס האשראי {{last4}}",
+    "willRefund": "יוחזרו {{amount}} לכרטיס, לפני הפקת חשבונית הזיכוי.",
+    "restOtherwise": "את היתרה, {{rest}}, יש להחזיר בדרך אחרת.",
+    "cardUnresolved": "החזר קודם לכרטיס הזה עדיין לא אושר מול חברת הסליקה. יש לבדוק אותו לפני החזר נוסף.",
+    "confirmRefund": "החזר לכרטיס והפק חשבונית זיכוי",
+    "doneRefunded": "הוחזרו {{refunded}} לכרטיס · הופקה חשבונית זיכוי {{docnum}} על {{amount}}"
   },
   "ticket": {
     "title": "כרטיס עבודה #{{number}}",

@@ -144,6 +144,35 @@ export const verifyCardPayment = async (paymentId: string): Promise<CardPayment>
   return rowToPayment(data.payment);
 };
 
+/** The card a bill was paid by, and how much of it can still go back to it —
+ *  for the credit dialog. Null when the bill was not paid by a card the
+ *  provider charged, or nothing is left to return. The card with the most
+ *  left is the one a refund uses (issue-invoice decides the same way).
+ *  `unresolved`: a refund on it has no clear answer yet, so none can start. */
+export const cardRefundable = async (
+  invoiceId: string,
+): Promise<{ amount: number; last4: string | null; unresolved: boolean } | null> => {
+  const db = getClient();
+  const { data: receipts, error: e1 } = await db.from('invoices').select('id').eq('pays_invoice_id', invoiceId);
+  if (e1) throw e1;
+  const docs = [invoiceId, ...(receipts ?? []).map((r) => r.id as string)];
+  const { data: cards, error: e2 } = await db.from('card_payments')
+    .select('id, amount, card_last4').in('invoice_id', docs).eq('status', 'paid');
+  if (e2) throw e2;
+  if (!cards?.length) return null;
+  const { data: refunds, error: e3 } = await db.from('card_refunds')
+    .select('card_payment_id, amount, status').in('card_payment_id', cards.map((c) => c.id));
+  if (e3) throw e3;
+  const unresolved = (refunds ?? []).some((r) => r.status === 'pending' || r.status === 'unknown');
+  const left = cards.map((c) => ({
+    last4: (c.card_last4 as string | null) ?? null,
+    amount: Math.round((Number(c.amount) - (refunds ?? [])
+      .filter((r) => r.card_payment_id === c.id && r.status === 'refunded')
+      .reduce((s, r) => s + Number(r.amount), 0)) * 100) / 100,
+  })).sort((a, b) => b.amount - a.amount)[0];
+  return left.amount > 0 ? { ...left, unresolved } : null;
+};
+
 /** What goes in the receipt's reference field for a card the provider charged. */
 export const cardPaymentReference = (p: CardPayment): string =>
   [p.cardLast4 ? `****${p.cardLast4}` : null, p.approvalNumber ? `אישור ${p.approvalNumber}` : null]

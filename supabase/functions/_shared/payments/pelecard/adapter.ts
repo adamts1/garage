@@ -24,7 +24,8 @@
 // Amounts are agorot. Currency "1" is ILS. ActionType "J4" is an ordinary debit.
 
 import type {
-  CardType, PaymentCredentials, PaymentProvider, StartInput, StartedPayment, Verdict, VerifyInput,
+  CardType, PaymentCredentials, PaymentProvider, RefundInput, RefundResult, StartInput, StartedPayment, Verdict,
+  VerifyInput,
 } from '../provider.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -33,10 +34,19 @@ const env = (k: string): string | undefined => (globalThis as any).Deno?.env.get
 /* Overridable only so a local test can point it at a stand-in. Sandbox and
    production are the same host; a test terminal is what makes a sandbox. */
 const BASE = () => env('PELECARD_BASE_URL') ?? 'https://gateway21.pelecard.biz/PaymentGW';
+/* The server-to-server services (cancel, refund). Same host, another path,
+   and its own spelling of the credentials: terminalNumber, not terminal. */
+const SERVICES = () => env('PELECARD_SERVICES_URL') ?? 'https://gateway21.pelecard.biz/services';
 
 /* Well inside the function's own wall clock, so a slow Pelecard turns into a
    'pending' we can record rather than the platform killing us mid-call. */
 const TIMEOUT_MS = 20_000;
+
+/* Cancel and refund are slower: the sandbox took 54 s to answer a refund on
+   2026-11-22. Giving up early does not undo the refund — it only turns a clear
+   answer into 'unknown', which then needs a person — so these wait longer,
+   still inside the function's own wall clock. */
+const SERVICE_TIMEOUT_MS = 100_000;
 
 interface Creds { terminal: string; user: string; password: string }
 
@@ -198,8 +208,50 @@ export function readTransaction(
     cardLast4: last4(r?.CreditCardNumber),
     cardBrand: String(r?.CardHebrewName ?? '').trim() || null,
     cardType: cardTypeOf(r),
+    providerRef: String(r?.TransactionPelecardId ?? '').trim() || null,
     raw,
   };
+}
+
+// ---------------------------------------------------------------- refund
+//
+// Checked against the sandbox, 2026-11-20:
+//   CancelTransaction  000 → voided (same day, before the broadcast);
+//                      510 "Record not found" → already broadcast: refund it;
+//                      519 "עסקת ביטול קיימת" → it was already voided.
+//   RefundByID         000 with ShvaResult 000 → returned, partial or whole;
+//                      173 "double transaction" → refused (a whole refund the
+//                      same day — that is what cancel is for).
+//   Pelecard does NOT refuse refunds that add up to more than was charged.
+
+export type CancelAnswer =
+  | { outcome: 'cancelled'; id: string | null }
+  | { outcome: 'already' }
+  | { outcome: 'broadcast' }
+  | { outcome: 'refused'; message: string };
+
+export function readCancel(data: unknown): CancelAnswer {
+  // deno-lint-ignore no-explicit-any
+  const d = data as any;
+  const code = String(d?.StatusCode ?? '');
+  if (code === '000' && String(d?.ResultData?.ShvaResult ?? '000') === '000') {
+    return { outcome: 'cancelled', id: String(d?.DebitTrxId ?? d?.ResultData?.PelecardTransactionId ?? '') || null };
+  }
+  if (code === '519') return { outcome: 'already' };
+  if (code === '510') return { outcome: 'broadcast' };
+  return { outcome: 'refused', message: `${d?.ErrorMessage || 'cancel refused'} (${code || '?'})` };
+}
+
+export function readRefund(data: unknown): { ok: true; id: string | null } | { ok: false; message: string } {
+  // deno-lint-ignore no-explicit-any
+  const d = data as any;
+  const r = d?.ResultData;
+  const code = String(d?.StatusCode ?? '');
+  if (code === '000' && String(r?.ShvaResult ?? '') === '000') {
+    return { ok: true, id: String(r?.PelecardTransactionId ?? '') || null };
+  }
+  const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
+  return { ok: false, message: `${bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused'} (${code || '?'})` };
 }
 
 // ---------------------------------------------------------------- transport
@@ -213,6 +265,23 @@ async function post(path: string, body: Record<string, unknown>): Promise<string
   });
   if (!res.ok) throw new Error(`Pelecard ${path}: HTTP ${res.status}`);
   return await res.text();
+}
+
+/** One services call. Null when no answer we can read came back — the call
+ *  may have been acted on, so the caller reports 'unknown', never 'failed'. */
+async function service(c: Creds, method: string, body: Record<string, unknown>): Promise<unknown | null> {
+  try {
+    const res = await fetch(`${SERVICES()}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terminalNumber: c.terminal, user: c.user, password: c.password, ...body }),
+      signal: AbortSignal.timeout(SERVICE_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    return JSON.parse(await res.text());
+  } catch {
+    return null;
+  }
 }
 
 export const pelecardAdapter: PaymentProvider = {
@@ -250,5 +319,32 @@ export const pelecardAdapter: PaymentProvider = {
     }
     if (valid !== '1') return { status: 'pending', message: 'Pelecard did not confirm the transaction', raw: verdict.raw };
     return verdict;
+  },
+
+  async refund(input: RefundInput): Promise<RefundResult> {
+    const c = readCreds(input.credentials);
+
+    /* The whole charge, the same day: void it, so it never reaches the card.
+       Once broadcast it can only be refunded, which is the path below. */
+    if (input.whole) {
+      const answer = await service(c, 'CancelTransaction', { DebitTrxId: input.providerRef });
+      if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the cancel', raw: null };
+      const cancel = readCancel(answer);
+      const raw = scrub(answer);
+      if (cancel.outcome === 'cancelled') return { status: 'refunded', kind: 'cancel', providerRefundId: cancel.id, raw };
+      if (cancel.outcome === 'already') return { status: 'refunded', kind: 'cancel', providerRefundId: null, raw };
+      if (cancel.outcome === 'refused') return { status: 'failed', message: cancel.message, raw };
+    }
+
+    const answer = await service(c, 'RefundByID', {
+      debitTrxId: input.providerRef,
+      NewAmount: String(agorot(input.amount)),
+    });
+    if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
+    const refund = readRefund(answer);
+    const raw = scrub(answer);
+    return refund.ok
+      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, raw }
+      : { status: 'failed', message: refund.message, raw };
   },
 };
