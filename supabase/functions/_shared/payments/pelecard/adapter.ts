@@ -151,7 +151,11 @@ export function scrub(data: unknown): unknown {
   const d = JSON.parse(JSON.stringify(data ?? null)) as any;
   const r = d?.ResultData;
   if (r && typeof r === 'object') {
-    for (const k of ['CreditCardNumber', 'Token', 'ShvaOutput', 'CardHolderID']) if (k in r) r[k] = r[k] ? '[removed]' : '';
+    /* By name, any case: the refund answers spell it shvaOutput, and it
+       carries the masked card number. */
+    for (const k of Object.keys(r)) {
+      if (/^(creditcardnumber|token|shvaoutput|cardholderid)$/i.test(k)) r[k] = r[k] ? '[removed]' : '';
+    }
   }
   return d;
 }
@@ -225,7 +229,7 @@ export function readTransaction(
 //   Pelecard does NOT refuse refunds that add up to more than was charged.
 
 export type CancelAnswer =
-  | { outcome: 'cancelled'; id: string | null }
+  | { outcome: 'cancelled'; id: string | null; approval: string | null }
   | { outcome: 'already' }
   | { outcome: 'broadcast' }
   | { outcome: 'refused'; message: string };
@@ -235,23 +239,39 @@ export function readCancel(data: unknown): CancelAnswer {
   const d = data as any;
   const code = String(d?.StatusCode ?? '');
   if (code === '000' && String(d?.ResultData?.ShvaResult ?? '000') === '000') {
-    return { outcome: 'cancelled', id: String(d?.DebitTrxId ?? d?.ResultData?.PelecardTransactionId ?? '') || null };
+    return {
+      outcome: 'cancelled',
+      id: String(d?.DebitTrxId ?? d?.ResultData?.PelecardTransactionId ?? '') || null,
+      approval: approvalOf(d?.ResultData),
+    };
   }
   if (code === '519') return { outcome: 'already' };
   if (code === '510') return { outcome: 'broadcast' };
   return { outcome: 'refused', message: `${d?.ErrorMessage || 'cancel refused'} (${code || '?'})` };
 }
 
-export function readRefund(data: unknown): { ok: true; id: string | null } | { ok: false; message: string } {
+// deno-lint-ignore no-explicit-any
+const approvalOf = (r: any): string | null =>
+  String(r?.DebitApproveNumber ?? r?.AuthManpikNo ?? '').trim() || null;
+
+/* What the advisor is told when Pelecard says no — in Hebrew, for the ones
+   that have happened. The code stays on the end for whoever calls Pelecard. */
+const REFUND_REFUSALS: Record<string, string> = {
+  '173': 'פלאקארד דחו החזר זהה להחזר קודם באותו יום (עסקה כפולה). אפשר להחזיר סכום אחר, או לנסות שוב מחר',
+};
+
+export function readRefund(data: unknown):
+  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string } {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
   const r = d?.ResultData;
   const code = String(d?.StatusCode ?? '');
   if (code === '000' && String(r?.ShvaResult ?? '') === '000') {
-    return { ok: true, id: String(r?.PelecardTransactionId ?? '') || null };
+    return { ok: true, id: String(r?.PelecardTransactionId ?? '') || null, approval: approvalOf(r) };
   }
   const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
-  return { ok: false, message: `${bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused'} (${code || '?'})` };
+  const said = REFUND_REFUSALS[code] ?? (bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused');
+  return { ok: false, message: `${said} (${code || '?'})` };
 }
 
 // ---------------------------------------------------------------- transport
@@ -331,8 +351,10 @@ export const pelecardAdapter: PaymentProvider = {
       if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the cancel', raw: null };
       const cancel = readCancel(answer);
       const raw = scrub(answer);
-      if (cancel.outcome === 'cancelled') return { status: 'refunded', kind: 'cancel', providerRefundId: cancel.id, raw };
-      if (cancel.outcome === 'already') return { status: 'refunded', kind: 'cancel', providerRefundId: null, raw };
+      if (cancel.outcome === 'cancelled') {
+        return { status: 'refunded', kind: 'cancel', providerRefundId: cancel.id, approvalNumber: cancel.approval, raw };
+      }
+      if (cancel.outcome === 'already') return { status: 'refunded', kind: 'cancel', providerRefundId: null, approvalNumber: null, raw };
       if (cancel.outcome === 'refused') return { status: 'failed', message: cancel.message, raw };
     }
 
@@ -344,7 +366,7 @@ export const pelecardAdapter: PaymentProvider = {
     const refund = readRefund(answer);
     const raw = scrub(answer);
     return refund.ok
-      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, raw }
+      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw }
       : { status: 'failed', message: refund.message, raw };
   },
 };

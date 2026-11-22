@@ -1,5 +1,5 @@
 import {
-  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -89,6 +89,11 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   const confirm = useConfirm();
   const prompt = usePrompt();
   const openModal = useModalResult<boolean>();
+  const openRefundDone = useCallback(
+    (r: CardRefundDone & { docnum: string; noteTotal: number }) =>
+      openModal('refundDone', { ...r, approvalNumber: r.approvalNumber ?? '', providerRefundId: r.providerRefundId ?? '', originalRef: r.originalRef ?? '', cardLast4: r.cardLast4 ?? '', cardBrand: r.cardBrand ?? '' }),
+    [openModal],
+  );
   const openCloseDrawer = useCloseTicket();
   const openCollectDrawer = useCollectPayment();
 
@@ -614,17 +619,22 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
            board, and it is the same write any other status change makes. */
         await save({ st: 'done', paid: false });
       }
-      dispatch(showSuccess(refunded ? 'credit.doneRefunded' : cancelled ? 'credit.doneFull' : 'credit.donePartial', {
-        docnum: note.docnum,
-        amount: money(note.total),
-        refunded: money(refunded?.amount ?? 0),
-      }));
+      /* Money that went back to a card gets the same confirmation a payment
+         does — the approval is what the customer will ask for. */
+      if (refunded) {
+        void openRefundDone({ ...refunded, docnum: note.docnum, noteTotal: note.total });
+      } else {
+        dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
+          docnum: note.docnum,
+          amount: money(note.total),
+        }));
+      }
     } catch (e) {
       dispatch(showError(e));
     } finally {
       setBusy(false);
     }
-  }, [creditable, dispatch, invoice, openModal, run, save, ticket.customer, ticket.k]);
+  }, [creditable, dispatch, invoice, openModal, openRefundDone, run, save, ticket.customer, ticket.k]);
 
   /* Off the board or back onto it, from inside the ticket. Applied at once
      rather than held in the draft: it is a view choice, not an edit to the

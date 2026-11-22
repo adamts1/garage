@@ -1,6 +1,6 @@
 import {
   cardRefundable, creditInvoice, creditableRemainder, isGarageAdmin, listInvoices, money,
-  subscribeToInvoices, type Invoice,
+  subscribeToInvoices, type CardRefundDone, type Invoice,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { showError, showSuccess, useAppDispatch, useModalResult } from '../../store';
@@ -13,6 +13,12 @@ export function useInvoices() {
   const dispatch = useAppDispatch();
   const openModal = useModalResult<{ amount: number; reason: string; refundToCard: boolean } | null>();
   const openCounterSale = useModalResult<Invoice>();
+  const openRefundDoneModal = useModalResult<boolean>();
+  const openRefundDone = useCallback(
+    (r: CardRefundDone & { docnum: string; noteTotal: number }) =>
+      openRefundDoneModal('refundDone', { ...r, approvalNumber: r.approvalNumber ?? '', providerRefundId: r.providerRefundId ?? '', originalRef: r.originalRef ?? '', cardLast4: r.cardLast4 ?? '', cardBrand: r.cardBrand ?? '' }),
+    [openRefundDoneModal],
+  );
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [crediting, setCrediting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -77,18 +83,23 @@ export function useInvoices() {
       try {
         const { cancelled, note, refunded } = await creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard);
         setInvoices(await listInvoices());
-        dispatch(showSuccess(refunded ? 'credit.doneRefunded' : cancelled ? 'credit.doneFull' : 'credit.donePartial', {
-          docnum: note.docnum,
-          amount: money(note.total),
-          refunded: money(refunded?.amount ?? 0),
-        }));
+        /* Money that went back to a card gets the same confirmation a payment
+           does — the approval is what the customer will ask for. */
+        if (refunded) {
+          void openRefundDone({ ...refunded, docnum: note.docnum, noteTotal: note.total });
+        } else {
+          dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
+            docnum: note.docnum,
+            amount: money(note.total),
+          }));
+        }
       } catch (e) {
         dispatch(showError(e));
       } finally {
         setCrediting(false);
       }
     },
-    [dispatch, invoices, openModal],
+    [dispatch, invoices, openModal, openRefundDone],
   );
 
   const shown = useMemo(() => {

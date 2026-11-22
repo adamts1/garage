@@ -353,6 +353,19 @@ export const collectInvoice = async (
  * Admin only, refused with 403 at the function itself and not merely hidden in
  * the UI: money going back to a customer is the same call as repricing a work.
  */
+/** Money that went back to a card with a credit, as the provider answered. */
+export interface CardRefundDone {
+  amount: number;
+  /** cancel: voided before the broadcast. refund: credited to the card. */
+  kind: 'cancel' | 'refund';
+  approvalNumber: string | null;
+  providerRefundId: string | null;
+  /** The charge it went back from. */
+  originalRef: string | null;
+  cardLast4: string | null;
+  cardBrand: string | null;
+}
+
 /** `refundToCard`: return the credited sum (up to what the card can still
  *  take back) to the card the clearing provider charged for this bill, BEFORE
  *  the credit note is issued. If the provider refuses, nothing is issued and
@@ -366,7 +379,7 @@ export const creditInvoice = async (
   note: Invoice;
   cancelled: boolean;
   remaining: number;
-  refunded: { amount: number; kind: 'cancel' | 'refund' } | null;
+  refunded: CardRefundDone | null;
 }> => {
   const { data, error } = await getClient().functions.invoke('issue-invoice', {
     body: { action: 'credit', invoice_id: invoiceId, amount, reason, ...(refundToCard ? { refund_to_card: true } : {}) },
@@ -376,7 +389,15 @@ export const creditInvoice = async (
     note: rowToInvoice(data.credit_note),
     cancelled: Boolean(data.cancelled),
     remaining: Number(data.remaining ?? 0),
-    refunded: data.refunded ? { amount: Number(data.refunded.amount), kind: data.refunded.kind } : null,
+    refunded: data.refunded ? {
+      amount: Number(data.refunded.amount),
+      kind: data.refunded.kind,
+      approvalNumber: data.refunded.approvalNumber ?? null,
+      providerRefundId: data.refunded.providerRefundId ?? null,
+      originalRef: data.refunded.originalRef ?? null,
+      cardLast4: data.refunded.cardLast4 ?? null,
+      cardBrand: data.refunded.cardBrand ?? null,
+    } : null,
   };
 };
 
