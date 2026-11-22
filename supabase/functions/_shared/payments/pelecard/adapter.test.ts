@@ -4,7 +4,8 @@
  * 2026-11-19, trimmed to the fields that matter. Where they disagree with the
  * programmer's manual the sandbox is right — see the header of adapter.ts. */
 import { describe, expect, it } from 'vitest';
-import { agorot, cardTypeOf, initBody, paramX, readCancel, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
+import { agorot, cardTypeOf, entryOf, guardAuth, initBody, paramX, readCancel, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
+import { ProviderAuthError } from '../provider.ts';
 
 const PAYMENT = '6b1f3c1e-2d4a-4c55-9b0e-0f3a3e7c9a11';
 
@@ -44,7 +45,7 @@ describe('init', () => {
 
   it('sends agorot, a valid ParamX, and the terminal only with a shop number', () => {
     const creds = { terminal: 't', user: 'u', password: 'p' };
-    const base = { credentials: {}, paymentId: PAYMENT, amount: 350.5, installments: 1, label: 'Ticket ABC-123', returnUrl: 'https://x/pay-return.html', posShopNo: null };
+    const base = { credentials: {}, paymentId: PAYMENT, amount: 350.5, installments: 1, purpose: 'charge' as const, label: 'Ticket ABC-123', returnUrl: 'https://x/pay-return.html', posShopNo: null };
     const plain = initBody(creds, base);
     expect(plain.Total).toBe(35050);
     expect(plain.ParamX).toBe('ticketabc123');
@@ -156,5 +157,37 @@ describe('cancel and refund', () => {
   it('the verified charge carries the id a refund needs', () => {
     const v = readTransaction({ ...approved, ResultData: { ...approved.ResultData, TransactionPelecardId: '3200755632' } }, { paymentId: PAYMENT, amount: 1, installments: 1 });
     expect(v).toMatchObject({ status: 'paid', providerRef: '3200755632' });
+  });
+});
+
+describe('the breaker', () => {
+  it('every credential answer, from any call, is a ProviderAuthError', () => {
+    for (const c of ['404', '501', '502', '503', '505', '507', '509', 501]) expect(() => guardAuth(c)).toThrow(ProviderAuthError);
+    expect(() => readInit({ Error: { ErrCode: 501, ErrMsg: 'User name and/or password not correct' } })).toThrow(ProviderAuthError);
+    expect(() => readTransaction({ StatusCode: '503' }, { paymentId: PAYMENT, amount: 1, installments: 1 })).toThrow(ProviderAuthError);
+    expect(() => readCancel({ StatusCode: '501' })).toThrow(ProviderAuthError);
+    expect(() => readRefund({ StatusCode: '507' })).toThrow(ProviderAuthError);
+  });
+
+  it('nothing else trips it', () => {
+    for (const c of ['000', '004', '510', '519', '173', '', undefined]) expect(() => guardAuth(c)).not.toThrow();
+  });
+});
+
+describe('the terminal', () => {
+  it('a check is J2 — nothing charged — and only that is sent to the terminal', () => {
+    const creds = { terminal: 't', user: 'u', password: 'p' };
+    const check = initBody(creds, { credentials: {}, paymentId: PAYMENT, amount: 1, installments: 1, purpose: 'check', label: 'terminal check', returnUrl: 'https://x/r', posShopNo: '7' });
+    expect(check).toMatchObject({ ActionType: 'J2', EmvPinpad: 'True', ShopNo: '7' });
+  });
+
+  it('a check succeeds on the card answering, with no amount to match', () => {
+    const v = readTransaction({ StatusCode: '000', ResultData: { ShvaResult: '000', DebitTotal: '0' } }, { paymentId: PAYMENT, amount: 1, installments: 1, purpose: 'check' });
+    expect(v.status).toBe('paid');
+  });
+
+  it('a typed card is "page"; a chip read is "terminal"', () => {
+    expect(entryOf(approved.ResultData as never)).toBe('page');
+    expect(entryOf({ Aid: 'A0000000041010', CardSeqNumber: '01' })).toBe('terminal');
   });
 });

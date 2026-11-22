@@ -3,6 +3,7 @@ import { CloseTicketModal } from '../../features/ticket/CloseTicketModal';
 import CreditNoteModal from '../../features/ticket/CreditNoteModal';
 import RefundDoneModal from '../../features/ticket/RefundDoneModal';
 import CounterSaleModal from '../../features/invoices/CounterSaleModal';
+import TerminalCheckModal from '../../features/invoices/TerminalCheckModal';
 import IssueInvoiceModal from '../../features/ticket/IssueInvoiceModal';
 import ItemPickerModal from '../../features/works/ItemPickerModal';
 import WorkPickerModal from '../../features/works/WorkPickerModal';
@@ -24,6 +25,8 @@ export const MODAL_REGISTRY: Record<string, ComponentType<ModalComponentProps>> 
   confirm: ConfirmModal,
   prompt: PromptModal,
   counterSale: CounterSaleModal,
+  /* Admin: prove the card terminal set-up without charging anything. */
+  terminalCheck: TerminalCheckModal,
   issueInvoice: IssueInvoiceModal,
   creditNote: CreditNoteModal,
   /* Money went back to a card — the confirmation after a credit that refunded. */

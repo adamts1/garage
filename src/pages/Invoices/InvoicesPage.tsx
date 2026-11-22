@@ -139,12 +139,16 @@ export default function InvoicesPage({ onOpenTicket, tickets }: InvoicesPageProp
         title="invoices.title"
         subtitle="invoices.subtitle"
         actions={inv.canIssue && (
-          /* A document with no ticket behind it. Offered here rather than on
-             the board because that is what it is: a sale that never became a
-             job. Admin only — the Edge Function refuses a member either way. */
-          <Button variant="primary" onClick={() => void inv.counterSale()} disabled={inv.issuing}>
-            <IconDoc /> {inv.issuing ? t('counterSale.issuing') : t('counterSale.open')}
-          </Button>
+          <>
+            {/* Admin: prove the card terminal set-up, charging nothing. */}
+            <Button onClick={() => void inv.checkTerminal()}>{t('terminalCheck.open')}</Button>
+            {/* A document with no ticket behind it. Offered here rather than on
+                the board because that is what it is: a sale that never became a
+                job. Admin only — the Edge Function refuses a member either way. */}
+            <Button variant="primary" onClick={() => void inv.counterSale()} disabled={inv.issuing}>
+              <IconDoc /> {inv.issuing ? t('counterSale.issuing') : t('counterSale.open')}
+            </Button>
+          </>
         )}
       />
 

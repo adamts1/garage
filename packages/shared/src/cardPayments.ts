@@ -45,6 +45,9 @@ export interface CardSettings {
   active: boolean;
   /** A physical terminal is connected to the provider. */
   terminal: boolean;
+  /** The provider rejected the credentials and card payments were switched
+   *  off by the server. Says why; null when not suspended. */
+  suspended: string | null;
   /** Regular installments offered in the drawer: 1..maxInstallments, only on a
    *  payment of at least installmentsMinAmount. They apply whether or not the
    *  provider is connected — a card on a separate terminal can be split too. */
@@ -54,7 +57,7 @@ export interface CardSettings {
 
 /** The column defaults, for a garage with no row yet. */
 export const DEFAULT_CARD_SETTINGS: CardSettings = {
-  active: false, terminal: false, maxInstallments: 12, installmentsMinAmount: 0,
+  active: false, terminal: false, suspended: null, maxInstallments: 12, installmentsMinAmount: 0,
 };
 
 /** This garage's card settings — one cheap read under RLS. No row is an
@@ -64,13 +67,14 @@ export const DEFAULT_CARD_SETTINGS: CardSettings = {
 export const cardPaymentsActive = async (): Promise<CardSettings> => {
   const { data, error } = await getClient()
     .from('garage_payments')
-    .select('active, pos_shop_no, max_installments, installments_min_amount')
+    .select('active, pos_shop_no, max_installments, installments_min_amount, auth_failed_at, auth_error')
     .maybeSingle();
   if (error) throw error;
   if (!data) return DEFAULT_CARD_SETTINGS;
   return {
     active: Boolean(data.active),
     terminal: Boolean(data.active && data.pos_shop_no),
+    suspended: data.auth_failed_at ? String(data.auth_error ?? 'credentials rejected') : null,
     maxInstallments: Number(data.max_installments ?? 1),
     installmentsMinAmount: Number(data.installments_min_amount ?? 0),
   };
@@ -82,7 +86,12 @@ export const installmentsAllowed = (s: Pick<CardSettings, 'maxInstallments' | 'i
 
 /** Why the server would not open a page, when it is something the screen
  *  acts on rather than only shows. */
-export type CardStartRefusal = 'payment_open' | 'over_owed' | 'already_paid' | 'nothing_owed';
+export type CardStartRefusal =
+  | 'payment_open' | 'over_owed' | 'already_paid' | 'nothing_owed'
+  /** The provider rejected the garage's credentials; card payments are off
+   *  until an admin reconnects them. */
+  | 'payments_suspended'
+  | 'terminal_failed' | 'no_terminal';
 
 export class CardStartError extends Error {
   constructor(message: string, readonly code: CardStartRefusal | null, readonly payment: CardPayment | null) {
@@ -111,7 +120,7 @@ export const startCardPayment = async (
   amount: number,
   installments: number,
   returnOrigin: string,
-  opts: { claimed?: readonly string[]; force?: boolean } = {},
+  opts: { claimed?: readonly string[]; force?: boolean; terminal?: boolean } = {},
 ): Promise<CardStart> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
@@ -120,6 +129,7 @@ export const startCardPayment = async (
     body: {
       action: 'start', ticket_id: t.id, amount, installments, return_origin: returnOrigin,
       claimed: opts.claimed ?? [], force: opts.force === true,
+      mode: opts.terminal ? 'terminal' : 'page',
     },
   });
   if (error) {
@@ -177,3 +187,24 @@ export const cardRefundable = async (
 export const cardPaymentReference = (p: CardPayment): string =>
   [p.cardLast4 ? `****${p.cardLast4}` : null, p.approvalNumber ? `אישור ${p.approvalNumber}` : null]
     .filter(Boolean).join(' · ');
+
+/** The terminal check (admin). `credentials`: one call that only asks the
+ *  provider whether it accepts the garage's credentials. `card`: a card check
+ *  (nothing charged) sent to the terminal — show the page, then verify the
+ *  payment as for a charge. Either can switch card payments off (the breaker),
+ *  so it is pressed once, on purpose. */
+export const checkTerminal = async (
+  mode: 'credentials' | 'card',
+  returnOrigin: string,
+): Promise<{ ok: true } | { payment: CardPayment; url: string }> => {
+  const { data, error } = await getClient().functions.invoke('card-payment', {
+    body: { action: 'check', mode, return_origin: returnOrigin },
+  });
+  if (error) {
+     
+    const body: any = await (error as any)?.context?.json?.().catch(() => null);
+    if (body?.error) throw new CardStartError(body.error, body.code ?? null, null);
+    throw await invokeError(error);
+  }
+  return data.ok ? { ok: true } : { payment: rowToPayment(data.payment), url: data.url };
+};
