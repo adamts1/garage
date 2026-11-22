@@ -1,5 +1,5 @@
 import {
-  creditInvoice, creditableRemainder, isGarageAdmin, listInvoices, money,
+  cardRefundable, creditInvoice, creditableRemainder, isGarageAdmin, listInvoices, money,
   subscribeToInvoices, type Invoice,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -11,7 +11,7 @@ export type DocTypeFilter = 'all' | Invoice['docType'];
 
 export function useInvoices() {
   const dispatch = useAppDispatch();
-  const openModal = useModalResult<{ amount: number; reason: string } | null>();
+  const openModal = useModalResult<{ amount: number; reason: string; refundToCard: boolean } | null>();
   const openCounterSale = useModalResult<Invoice>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [crediting, setCrediting] = useState(false);
@@ -50,6 +50,17 @@ export function useInvoices() {
       const remaining = creditableRemainder(invoice, invoices);
       if (remaining <= 0) return;
 
+      /* Whether the card that paid it can take money back. Asked before the
+         dialog, and a failed read is reported rather than taken to mean "no
+         card" — that would quietly leave a refund to be done by hand. */
+      let card: Awaited<ReturnType<typeof cardRefundable>>;
+      try {
+        card = await cardRefundable(invoice.id);
+      } catch (e) {
+        dispatch(showError(e));
+        return;
+      }
+
       const answer = await openModal('creditNote', {
         remaining,
         invoiceTotal: invoice.total,
@@ -58,16 +69,18 @@ export function useInvoices() {
         /* The rate this document was issued at, not today's — a credit is
            priced by the invoice it corrects. */
         vatRate: invoice.vatRate,
+        ...(card ? { cardRefundable: card.amount, cardLast4: card.last4 ?? '', cardUnresolved: card.unresolved } : {}),
       });
       if (!answer) return;
 
       setCrediting(true);
       try {
-        const { cancelled, note } = await creditInvoice(invoice.id, answer.amount, answer.reason);
+        const { cancelled, note, refunded } = await creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard);
         setInvoices(await listInvoices());
-        dispatch(showSuccess(cancelled ? 'credit.doneFull' : 'credit.donePartial', {
+        dispatch(showSuccess(refunded ? 'credit.doneRefunded' : cancelled ? 'credit.doneFull' : 'credit.donePartial', {
           docnum: note.docnum,
           amount: money(note.total),
+          refunded: money(refunded?.amount ?? 0),
         }));
       } catch (e) {
         dispatch(showError(e));

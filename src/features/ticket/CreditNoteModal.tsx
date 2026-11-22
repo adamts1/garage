@@ -2,7 +2,7 @@ import { issuableCredit, money } from '@garage/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
-import { TextField } from '../../components/Field';
+import { CheckboxField, TextField } from '../../components/Field';
 import Modal from '../../components/Modal/Modal';
 import type { ModalComponentProps } from '../../components/Modal/types';
 import { IconDoc } from '../../icons';
@@ -26,11 +26,18 @@ import { settleModal } from '../../store/useModalResult';
  * the dialog says which of the two is about to happen — a full credit voids the
  * invoice, a partial one leaves it standing.
  *
- * Resolves { amount, reason } or null when dismissed.
+ * When the bill was paid by a card the clearing provider charged, it also
+ * offers to return the money to that card — ticked, since a customer credited
+ * for a card payment is usually refunded to the card. Up to what the card can
+ * still take back; anything above that is returned some other way, and the
+ * dialog says how much.
+ *
+ * Resolves { amount, reason, refundToCard } or null when dismissed.
  */
 export interface CreditNoteAnswer {
   amount: number;
   reason: string;
+  refundToCard: boolean;
 }
 
 export default function CreditNoteModal({ props, isTop, stacked, onClose }: ModalComponentProps) {
@@ -45,6 +52,14 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
   const alreadyCredited = round2(invoiceTotal - remaining);
 
   const vatRate = Number(props.vatRate ?? 0);
+
+  /** What the card that paid this bill can still take back — 0 when it was
+   *  not paid by a card the provider charged. */
+  const cardLeft = Number(props.cardRefundable ?? 0);
+  const cardLast4 = props.cardLast4 ? String(props.cardLast4) : '';
+  /** A refund on that card has no clear answer yet: none can start. */
+  const cardUnresolved = props.cardUnresolved === true;
+  const [toCard, setToCard] = useState(cardLeft > 0 && !cardUnresolved);
 
   const [amount, setAmount] = useState(String(remaining));
   const [reason, setReason] = useState('');
@@ -73,7 +88,7 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
     /* The snapped figure, not the typed one, so the amount confirmed on screen
        is the amount sent. The server snaps again — it does not trust this — and
        snapping a reachable amount returns it unchanged. */
-    if (valid) answer({ amount: credited, reason: reason.trim() });
+    if (valid) answer({ amount: credited, reason: reason.trim(), refundToCard: toCard && cardLeft > 0 });
   };
 
   return (
@@ -89,7 +104,7 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
               hand a customer money by itself. */}
           <Button data-autofocus onClick={() => answer(null)}>{t('common.cancel')}</Button>
           <Button variant="primary" disabled={!valid} onClick={submit}>
-            <IconDoc /> {t('credit.confirm')}
+            <IconDoc /> {t(toCard && cardLeft > 0 ? 'credit.confirmRefund' : 'credit.confirm')}
           </Button>
         </>
       }
@@ -118,6 +133,26 @@ export default function CreditNoteModal({ props, isTop, stacked, onClose }: Moda
         onChange={(e) => setReason(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
       />
+
+      {/* Money back to the card, before the document. */}
+      {cardLeft > 0 && (
+        <>
+          <CheckboxField
+            label="credit.toCard"
+            labelValues={{ last4: cardLast4 ? `****${cardLast4}` : '' }}
+            checked={toCard}
+            disabled={cardUnresolved}
+            onChange={(e) => setToCard(e.target.checked)}
+          />
+          {cardUnresolved && <p>{t('credit.cardUnresolved')}</p>}
+          {toCard && valid && (
+            <p>
+              {t('credit.willRefund', { amount: money(Math.min(credited, cardLeft)) })}
+              {credited > cardLeft && ` ${t('credit.restOtherwise', { rest: money(round2(credited - cardLeft)) })}`}
+            </p>
+          )}
+        </>
+      )}
 
       {/* The typed amount cannot be put on a document, so this is what will be.
           Said before the button, not in a toast afterwards. */}

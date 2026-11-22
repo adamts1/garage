@@ -30,14 +30,11 @@
 // provider's page, or taps the provider's terminal.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { pelecardAdapter } from '../_shared/payments/pelecard/adapter.ts';
-import type { PaymentCredentials, PaymentProvider } from '../_shared/payments/provider.ts';
+import { garageProvider } from '../_shared/payments/registry.ts';
 import { priceTicket, round2, type Work } from '../_shared/billing.ts';
 
-// The provider registry. One entry per supported clearing service.
-const PAYMENT_ADAPTERS: Record<string, PaymentProvider> = {
-  pelecard: pelecardAdapter,
-};
+// The provider registry lives in _shared/payments/registry.ts, shared with
+// issue-invoice (which refunds through it when it credits).
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -95,22 +92,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = body.action as string;
 
-    async function provider(garageId: string) {
-      const { data: cfg } = await admin.from('garage_payments').select('*').eq('garage_id', garageId).maybeSingle();
-      if (!cfg || !cfg.active) throw new Error('card payments are not configured for this garage');
-      const adapter = PAYMENT_ADAPTERS[cfg.provider];
-      if (!adapter) throw new Error(`unknown payment provider: ${cfg.provider}`);
-      const { data: sec } = await admin.from('garage_payment_secrets').select('credentials').eq('garage_id', garageId).maybeSingle();
-      if (!sec?.credentials) throw new Error('payment credentials missing for this garage');
-      return {
-        name: cfg.provider as string,
-        adapter,
-        credentials: sec.credentials as PaymentCredentials,
-        posShopNo: (cfg.pos_shop_no as string | null) || null,
-        maxInstallments: Number(cfg.max_installments ?? 1),
-        installmentsMinAmount: Number(cfg.installments_min_amount ?? 0),
-      };
-    }
+    const provider = (garageId: string) => garageProvider(admin, garageId);
 
     type Provider = Awaited<ReturnType<typeof provider>>;
 
@@ -135,6 +117,7 @@ Deno.serve(async (req) => {
           card_last4: verdict.cardLast4,
           card_brand: verdict.cardBrand,
           card_type: verdict.cardType,
+          provider_ref: verdict.providerRef,
           message: null,
           settled_at: new Date().toISOString(),
         });

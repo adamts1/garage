@@ -36,6 +36,8 @@ vi.mock('@garage/shared', async (importActual) => {
     listInvoices: (...a: unknown[]) => listInvoices(...a),
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
     creditInvoice: (...a: unknown[]) => creditInvoice(...a),
+    /* Not paid by a card the clearing provider charged: no refund to offer. */
+    cardRefundable: vi.fn(async () => null),
     isGarageAdmin: () => isGarageAdmin(),
     subscribeToInvoices: vi.fn(() => () => {}),
     // The page reads the ticket's customer record to show (and warn about) the ת״ז.
@@ -219,7 +221,7 @@ describe('crediting a customer', () => {
     await act(async () => { type(/סכום לזיכוי/, '1180'); });
     await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
 
-    expect(creditInvoice).toHaveBeenCalledWith('inv1', 1180, '');
+    expect(creditInvoice).toHaveBeenCalledWith('inv1', 1180, '', false);
   });
 
   it('credits part of the bill, with the reason typed on it', async () => {
@@ -230,7 +232,7 @@ describe('crediting a customer', () => {
     });
     await act(async () => { screen.getByText(/הפק חשבונית זיכוי/).click(); });
 
-    expect(creditInvoice).toHaveBeenCalledWith('inv1', 300, 'החלק הוחזר');
+    expect(creditInvoice).toHaveBeenCalledWith('inv1', 300, 'החלק הוחזר', false);
   });
 
   /* The server refuses this too — it is the only place the answer is

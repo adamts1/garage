@@ -4,7 +4,7 @@
  * 2026-11-19, trimmed to the fields that matter. Where they disagree with the
  * programmer's manual the sandbox is right — see the header of adapter.ts. */
 import { describe, expect, it } from 'vitest';
-import { agorot, cardTypeOf, initBody, paramX, readInit, readTransaction, scrub } from './adapter.ts';
+import { agorot, cardTypeOf, initBody, paramX, readCancel, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
 
 const PAYMENT = '6b1f3c1e-2d4a-4c55-9b0e-0f3a3e7c9a11';
 
@@ -119,5 +119,36 @@ describe('GetTransaction', () => {
     expect(r.CreditCardNumber).toBe('[removed]');
     expect(r.ShvaOutput).toBe('[removed]');
     expect(JSON.stringify(scrub(approved))).not.toContain('532610');
+  });
+});
+
+/* Captured from the sandbox on 2026-11-20 against the transactions above. */
+describe('cancel and refund', () => {
+  it('a same-day cancel voids the charge', () => {
+    expect(readCancel({ StatusCode: '000', ErrorMessage: 'תקין', DebitTrxId: '3203313138', ResultData: { OriginaTrxId: '3202934843', ShvaResult: '000' } }))
+      .toEqual({ outcome: 'cancelled', id: '3203313138' });
+  });
+
+  it('a broadcast charge cannot be cancelled — it is refunded instead', () => {
+    expect(readCancel({ StatusCode: '510', ErrorMessage: 'Record not found' })).toEqual({ outcome: 'broadcast' });
+  });
+
+  it('cancelling twice is "already cancelled", not a failure', () => {
+    expect(readCancel({ StatusCode: '519', ErrorMessage: 'עסקת ביטול קיימת בקובץ תנועות' })).toEqual({ outcome: 'already' });
+  });
+
+  it('a refund that went through names its own transaction', () => {
+    expect(readRefund({ StatusCode: '000', ErrorMessage: 'operation success', ResultData: { ShvaResult: '000', PelecardTransactionId: '3203315491', DebitTotal: '1000' } }))
+      .toEqual({ ok: true, id: '3203315491' });
+  });
+
+  it('a refused refund is a definite no', () => {
+    expect(readRefund({ StatusCode: '173', ErrorMessage: 'double transaction.' }))
+      .toEqual({ ok: false, message: 'double transaction. (173)' });
+  });
+
+  it('the verified charge carries the id a refund needs', () => {
+    const v = readTransaction({ ...approved, ResultData: { ...approved.ResultData, TransactionPelecardId: '3200755632' } }, { paymentId: PAYMENT, amount: 1, installments: 1 });
+    expect(v).toMatchObject({ status: 'paid', providerRef: '3200755632' });
   });
 });

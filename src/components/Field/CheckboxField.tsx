@@ -9,6 +9,8 @@ export type CheckboxFieldProps = Omit<
 > & {
   /** i18n key. */
   label: string;
+  /** Interpolation values for the label, as Field's labelValues. */
+  labelValues?: Record<string, string | number>;
   hint?: string;
   /** Final text, not a key — same contract as Field's. A checkbox can be a
    *  required answer too: the intake form will not open a ticket until the key
@@ -23,7 +25,7 @@ export type CheckboxFieldProps = Omit<
  * click target; stacking it above would leave the box captioned by nothing.
  */
 export function CheckboxField({
-  label, hint, error, required, disabled, ...input
+  label, labelValues, hint, error, required, disabled, ...input
 }: CheckboxFieldProps) {
   const { t } = useTranslation();
   const field = useField({ hint, error, required, disabled });
@@ -32,7 +34,7 @@ export function CheckboxField({
     <div className={styles.wrap}>
       <label className={`${styles.row}${error ? ` ${styles.invalid}` : ''}`} htmlFor={field.id}>
         <input type="checkbox" {...field.controlProps} {...input} className={styles.box} />
-        <span>{t(label)}{required && <span aria-hidden="true"> *</span>}</span>
+        <span>{t(label, labelValues)}{required && <span aria-hidden="true"> *</span>}</span>
       </label>
       {/* The error replaces the hint rather than stacking under it — same rule
           as Field, for the same reason: two lines of small text is where people
