@@ -15,7 +15,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['src/**/*.{ts,tsx}', 'packages/shared/src/**/*.ts', 'mobile/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'admin/src/**/*.{ts,tsx}', 'packages/shared/src/**/*.ts', 'mobile/**/*.{ts,tsx}'],
     extends: [tseslint.configs.base],
     plugins: { 'react-hooks': reactHooks },
     languageOptions: {
