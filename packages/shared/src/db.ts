@@ -6,6 +6,7 @@ import { getClient, getProjectUrl, invokeError } from './client';
 import type { Ticket, Worker } from './types';
 import { clampDiscount, type PartRow, type TicketWork, type WorkDef } from './catalog';
 import { fetchAll, pageRange, PAGE_SIZE, type Page } from './paging';
+import type { LearnedVehicleModel } from './vehicleCatalog';
 
 /* ---------------- a code that is already taken ----------------
 
@@ -190,6 +191,14 @@ export const vehiclesForPlate = async (plate: string): Promise<Vehicle[]> => {
     .from('cars').select('vehicles(*)').eq('plate_key', key).maybeSingle();
   if (error) throw error;
   return ((data as { vehicles?: Vehicle[] } | null)?.vehicles ?? []);
+};
+
+/** Every make and model already saved on this garage's cars, with how many
+ *  carry each — what the intake form learns from. See mergeVehicleCatalog. */
+export const listLearnedVehicleModels = async (): Promise<LearnedVehicleModel[]> => {
+  const { data, error } = await getClient().rpc('garage_vehicle_models');
+  if (error) throw error;
+  return (data ?? []) as LearnedVehicleModel[];
 };
 
 /** A customer linked to a car, with the link itself. */

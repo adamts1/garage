@@ -1,11 +1,13 @@
 /* Which car. Make and model come from the catalog through a combo field — pick
    from the list or type your own, the same bargain the web form's <datalist>
    makes. The models follow the make above, and a make the catalog does not carry
-   simply offers none. */
+   simply offers none. Both lists also carry what this garage has already saved
+   on its cars — see useVehicleSuggestions. */
 
 import { Pressable, TextInput, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { VEHICLE_MAKES, modelsFor, type PlateOwner } from '@garage/shared';
+import { type PlateOwner } from '@garage/shared';
+import { useVehicleSuggestions } from '../../lib/useVehicleSuggestions';
 import { C, rtl, s } from '../../lib/theme';
 import { Button, Checkbox, ComboField, Field } from '../ui';
 import type { TicketForm } from './newTicket';
@@ -32,6 +34,7 @@ export function VehicleSection({
   onGoToOpenTicket?: (key: string) => void;
 }) {
   const { t } = useTranslation();
+  const vehicles = useVehicleSuggestions();
 
   return (
     <View style={[s.card, { gap: 10 }]}>
@@ -92,14 +95,14 @@ export function VehicleSection({
       <ComboField
         label={t('create.fields.manufacturer')}
         value={form.manufacturer}
-        options={VEHICLE_MAKES}
+        options={vehicles.makes}
         onChange={(v) => onSet('manufacturer', v)}
         placeholder={t('create.comboPlaceholder')}
       />
       <ComboField
         label={t('create.fields.model')}
         value={form.model}
-        options={modelsFor(form.manufacturer)}
+        options={vehicles.modelsFor(form.manufacturer)}
         onChange={(v) => onSet('model', v)}
         placeholder={form.manufacturer ? t('create.comboPlaceholder') : t('create.modelPlaceholder')}
       />
