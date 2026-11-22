@@ -1,5 +1,5 @@
 import {
-  assignableWorkers, isBusinessCustomer, modelsFor, shekel, VEHICLE_MAKES, type Ticket, type Worker,
+  assignableWorkers, isBusinessCustomer, shekel, type Ticket, type Worker,
 } from '@garage/shared';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { CheckboxField, SelectField, TextAreaField, TextField } from '../../comp
 import Modal from '../../components/Modal/Modal';
 import { WorksStep } from '../../features/works';
 import { IconCar, IconCustomers, IconDoc } from '../../icons';
+import { useVehicleSuggestions } from '../../lib/useVehicleSuggestions';
 import styles from './NewTicketPage.module.css';
 import { useNewTicket, YEARS, type RequiredField } from './useNewTicket';
 
@@ -59,7 +60,8 @@ export default function NewTicketPage({
     error: form.invalid(key) ? t(`newTicket.invalid.${key}`) : undefined,
   });
 
-  const models = modelsFor(form.form.manufacturer);
+  const vehicles = useVehicleSuggestions();
+  const models = vehicles.modelsFor(form.form.manufacturer);
 
   const goTo = (n: 1 | 2, id: string) => {
     setTab(n);
@@ -256,7 +258,8 @@ export default function NewTicketPage({
             />
             {/* A list, not a menu: `list` offers the known makes while the input
                 stays free text, so a grey import or a thirty-year-old model is
-                typed straight into the same field. See VEHICLE_CATALOG. */}
+                typed straight into the same field — and is offered from then on.
+                See useVehicleSuggestions. */}
             <TextField
               dense
               label="newTicket.fields.manufacturer"
@@ -267,7 +270,7 @@ export default function NewTicketPage({
               {...required('manufacturer')}
             />
             <datalist id="vehicle-makes">
-              {VEHICLE_MAKES.map((m) => <option key={m} value={m} />)}
+              {vehicles.makes.map((m) => <option key={m} value={m} />)}
             </datalist>
           </div>
           {/* A known plate several customers drive, typed while the customer
@@ -306,7 +309,7 @@ export default function NewTicketPage({
 
           <div className={styles.row2}>
             {/* The models of whichever make was typed above — nothing at all for
-                a make the list does not know, which is not an error. */}
+                a make neither the list nor this garage knows, which is not an error. */}
             <TextField
               dense
               label="newTicket.fields.model"

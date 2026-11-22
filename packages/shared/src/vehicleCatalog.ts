@@ -65,3 +65,99 @@ export function modelsFor(make: string | null | undefined): readonly string[] {
   const hit = VEHICLE_MAKES.find((m) => m.toLowerCase() === q.toLowerCase());
   return hit ? VEHICLE_CATALOG[hit] : [];
 }
+
+/* ---------------------------------------------------------------------------
+ * What this garage has already typed.
+ *
+ * The list above cannot know every grey import, so the suggestions also carry
+ * every make and model already saved on one of the garage's cars
+ * (garage_vehicle_models). Typed once, offered the next time (2026-11-22).
+ * Nothing extra is stored: the cars are the list, so a typo leaves the
+ * suggestions as soon as the car is corrected.
+ */
+
+/** One (make, model) pair as saved on the garage's cars, and on how many. */
+export interface LearnedVehicleModel {
+  manufacturer: string;
+  model: string | null;
+  uses: number;
+}
+
+export interface VehicleSuggestions {
+  /** Makes to offer: the garage's most used first, then the rest of the list. */
+  makes: readonly string[];
+  /** Models to offer for whatever was typed as the make, the same order. */
+  modelsFor: (make: string | null | undefined) => readonly string[];
+}
+
+/** Spellings that are the same word: case, spacing, and the three ways a
+ *  keyboard writes a geresh or gershayim. "ג'יפ" and "ג׳יפ" are one make. */
+export function vehicleNameKey(s: string | null | undefined): string {
+  return (s ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/['’`׳]/g, '׳')
+    .replace(/["”״]/g, '״')
+    .toLowerCase();
+}
+
+interface Entry {
+  label: string;
+  /** How many cars carry the spelling shown — a learned name shows its most
+   *  common spelling; a listed one always keeps the list's. */
+  labelUses: number;
+  listed: boolean;
+  uses: number;
+  order: number;
+}
+
+const bump = (map: Map<string, Entry>, key: string, spelling: string, uses: number) => {
+  const e = map.get(key);
+  if (!e) {
+    map.set(key, { label: spelling, labelUses: uses, listed: false, uses, order: Infinity });
+    return;
+  }
+  e.uses += uses;
+  if (!e.listed && uses > e.labelUses) { e.label = spelling; e.labelUses = uses; }
+};
+
+const ranked = (map: Map<string, Entry>): string[] =>
+  [...map.values()]
+    .sort((a, b) => b.uses - a.uses || a.order - b.order || a.label.localeCompare(b.label, 'he'))
+    .map((e) => e.label);
+
+const NO_MODELS: readonly string[] = [];
+
+/** The list above and what the garage has typed, as one set of suggestions. */
+export function mergeVehicleCatalog(learned: readonly LearnedVehicleModel[] = []): VehicleSuggestions {
+  const makes = new Map<string, Entry>();
+  const models = new Map<string, Map<string, Entry>>();
+
+  VEHICLE_MAKES.forEach((make, i) => {
+    const key = vehicleNameKey(make);
+    makes.set(key, { label: make, labelUses: 0, listed: true, uses: 0, order: i });
+    models.set(key, new Map(VEHICLE_CATALOG[make].map((m, j) => [
+      vehicleNameKey(m), { label: m, labelUses: 0, listed: true, uses: 0, order: j },
+    ])));
+  });
+
+  for (const row of learned) {
+    const make = (row.manufacturer ?? '').trim().replace(/\s+/g, ' ');
+    const makeKey = vehicleNameKey(make);
+    if (!makeKey) continue;
+    const uses = Math.max(1, row.uses || 0);
+    bump(makes, makeKey, make, uses);
+    const model = (row.model ?? '').trim().replace(/\s+/g, ' ');
+    const modelKey = vehicleNameKey(model);
+    if (!modelKey) continue;
+    if (!models.has(makeKey)) models.set(makeKey, new Map());
+    bump(models.get(makeKey)!, modelKey, model, uses);
+  }
+
+  const makeList = ranked(makes);
+  const modelLists = new Map([...models].map(([k, m]) => [k, ranked(m)]));
+  return {
+    makes: makeList,
+    modelsFor: (make) => modelLists.get(vehicleNameKey(make)) ?? NO_MODELS,
+  };
+}
