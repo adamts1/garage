@@ -14,6 +14,21 @@
  *  (Pelecard: { terminal, user, password }). */
 export type PaymentCredentials = Record<string, unknown>;
 
+/** The provider said the credentials are wrong (or the user is locked, the
+ *  terminal blocked…). Thrown by an adapter from ANY call, so the caller can
+ *  switch the garage's card payments off before anything is sent again —
+ *  a few more failed logins is how an account gets locked. */
+export class ProviderAuthError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = 'ProviderAuthError';
+  }
+}
+
+/** How a card was presented: typed on the provider's page, or on the
+ *  garage's physical terminal. Null when the provider's answer does not say. */
+export type CardEntry = 'page' | 'terminal';
+
 /** A card brand as a code, whatever the provider calls it. Null when the
  *  provider's answer names none we know. */
 export type CardType = 'visa' | 'mastercard' | 'amex' | 'diners' | 'isracard';
@@ -33,10 +48,13 @@ export interface StartInput {
   /** Where the hosted page sends the browser when it is done. Carries no
    *  result we trust — it only tells the screen to go and ask. */
   returnUrl: string;
-  /** The garage's physical terminal, when the payment is taken at the counter.
+  /** The garage's physical terminal, when the advisor chose to charge on it.
    *  Null → card entry on the page only. Never set for a customer link: a
    *  customer at home must not be able to wake the garage's terminal. */
   posShopNo: string | null;
+  /** charge: take the money. check: only check the card — nothing is
+   *  charged — to prove the terminal (or the credentials) work. */
+  purpose: 'charge' | 'check';
 }
 
 export interface StartedPayment {
@@ -52,6 +70,7 @@ export interface VerifyInput {
   paymentId: string;
   amount: number;
   installments: number;
+  purpose: 'charge' | 'check';
   providerTxId: string;
   confirmationKey: string | null;
 }
@@ -73,6 +92,7 @@ export type Verdict =
       cardType: CardType | null;
       /** The provider's own id for the charge, which a refund names. */
       providerRef: string | null;
+      entry: CardEntry | null;
       raw: unknown;
     }
   | { status: 'declined'; message: string; raw: unknown }
@@ -89,6 +109,9 @@ export interface RefundInput {
   /** All of the charge, with nothing returned from it before — the case a
    *  provider may be able to void outright instead of crediting. */
   whole: boolean;
+  /** How the charge was taken: a terminal charge is voided and refunded with
+   *  the provider's terminal operations. */
+  entry: CardEntry | null;
 }
 
 /** The provider's answer to a refund, normalized.

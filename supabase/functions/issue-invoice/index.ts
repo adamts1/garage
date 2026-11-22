@@ -23,7 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { icountAdapter } from '../_shared/icount.ts';
 import { NotIssued } from '../_shared/provider.ts';
 import { priceTicket, type LineWork, type Work } from '../_shared/billing.ts';
-import { garageProvider } from '../_shared/payments/registry.ts';
+import { garageProvider, PaymentsSuspended, tripOnAuth } from '../_shared/payments/registry.ts';
 import type { BillDocType, InvoiceProvider, InvoiceItem, IssuedDoc, PaymentPart, ProviderCredentials } from '../_shared/provider.ts';
 
 // The provider registry. One entry per supported accounting service.
@@ -186,6 +186,7 @@ async function bindCards(admin: any, parts: PaymentPart[], garageId: string, tic
     // deno-lint-ignore no-explicit-any
     const r = (rows ?? []).find((x: any) => x.id === p.cardPaymentId);
     if (!r || r.garage_id !== garageId || (ticketId && r.ticket_id !== ticketId)) return 'card payment not found for this ticket';
+    if (r.purpose === 'check') return 'a terminal check is not a payment';
     if (r.status !== 'paid') return 'card payment is not paid';
     if (r.invoice_id) return 'card payment is already on a document';
     if (round2(Number(r.amount)) !== round2(p.amount)) return `card payment was ${r.amount}, not ${p.amount}`;
@@ -873,6 +874,7 @@ Deno.serve(async (req) => {
         // A garage that has stopped taking cards may still owe a refund.
         provider = await garageProvider(admin, inv.garage_id, false);
       } catch (e) {
+        if (e instanceof PaymentsSuspended) return refuse(423, e.message, 'payments_suspended');
         return refuse(400, (e as Error).message);
       }
 
@@ -889,14 +891,25 @@ Deno.serve(async (req) => {
         return refuse(409, 'a refund to this card is already under way', 'refund_unresolved');
       }
 
-      const result = await provider.adapter.refund({
-        credentials: provider.credentials,
-        paymentId: card.id,
-        providerRef: String(providerRef),
-        chargedAmount: Number(card.amount),
-        amount,
-        whole: amount === round2(Number(card.amount)) && back(card.id) === 0,
-      });
+      let result;
+      try {
+        result = await provider.adapter.refund({
+          credentials: provider.credentials,
+          paymentId: card.id,
+          providerRef: String(providerRef),
+          chargedAmount: Number(card.amount),
+          amount,
+          whole: amount === round2(Number(card.amount)) && back(card.id) === 0,
+          entry: card.entry ?? null,
+        });
+      } catch (e) {
+        /* Only a credential rejection is thrown — and then nothing was
+           refunded: the provider refused to talk to us at all. */
+        const err = await tripOnAuth(admin, inv.garage_id, e);
+        const message = err instanceof Error ? err.message : String(err);
+        await admin.from('card_refunds').update({ status: 'failed', message }).eq('id', row.id);
+        return refuse(err instanceof PaymentsSuspended ? 423 : 502, message, err instanceof PaymentsSuspended ? 'payments_suspended' : 'refund_failed');
+      }
 
       const patch = result.status === 'refunded'
         ? { status: 'refunded', kind: result.kind, provider_refund_id: result.providerRefundId, raw: result.raw, message: null }

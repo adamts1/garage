@@ -173,4 +173,40 @@ describe('card payments through the provider', () => {
     expect(screen.queryByTitle('דף תשלום מאובטח')).toBeNull();
     expect(screen.getByText(/התשלום בוטל בדף התשלום/)).toBeTruthy();
   });
+
+  it('a garage with a terminal chooses: on the terminal (the default) or typed', async () => {
+    cardPaymentsActive.mockResolvedValue({ ...ACTIVE, terminal: true });
+    startCardPayment.mockResolvedValue({ payment: payment({ status: 'pending' }), url: 'https://pay.example/p', recovered: false });
+    open();
+    fireEvent.click(screen.getByText('כרטיס אשראי'));
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+    expect(screen.getByRole('radio', { name: /במסוף/ }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /חייב באשראי/ })); });
+    expect(startCardPayment.mock.calls[0][4]).toMatchObject({ terminal: true });
+  });
+
+  it('typed sends nothing to the terminal', async () => {
+    cardPaymentsActive.mockResolvedValue({ ...ACTIVE, terminal: true });
+    startCardPayment.mockResolvedValue({ payment: payment({ status: 'pending' }), url: 'https://pay.example/p', recovered: false });
+    open();
+    fireEvent.click(screen.getByText('כרטיס אשראי'));
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+    fireEvent.click(screen.getByRole('radio', { name: /הקלדת כרטיס/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /חייב באשראי/ })); });
+    expect(startCardPayment.mock.calls[0][4]).toMatchObject({ terminal: false });
+  });
+
+  it('suspended payments say why and take no card', async () => {
+    cardPaymentsActive.mockResolvedValue({ ...ACTIVE, active: false, suspended: 'שם המשתמש או הסיסמה של פלאקארד שגויים (501)' });
+    open();
+    fireEvent.click(screen.getByText('כרטיס אשראי'));
+    await act(async () => {});
+    expect(screen.getByRole('alert').textContent).toContain('הסליקה הושבתה');
+    expect((screen.getByRole('button', { name: 'המשך' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });
+

@@ -20,6 +20,10 @@
  *   * garage_payments         — provider, active, pos_shop_no. Members read it.
  *   * garage_payment_secrets  — { terminal, user, password }. service_role only.
  *
+ * Re-running it also clears a suspension: when Pelecard rejected the
+ * credentials, the card-payment function switched the garage's payments off
+ * (migration 20261123090000); fix the credentials, then run this again.
+ *
  * It does NOT call Pelecard. A wrong password tried against Pelecard counts
  * toward locking the account — it happened to the pilot garage once — so the
  * first real call is a deliberate payment from the app, made once.
@@ -135,7 +139,10 @@ console.log(`Payments  ${active ? 'ON' : 'off (credentials stored, payments disa
 }
 
 {
-  const row = { garage_id: garageId, provider, active, updated_at: new Date().toISOString() };
+  /* Connecting (again) is also how card payments come back after the breaker
+     switched them off: whoever runs this has just put in credentials they
+     checked. Cleared here and nowhere else. */
+  const row = { garage_id: garageId, provider, active, auth_failed_at: null, auth_error: null, updated_at: new Date().toISOString() };
   if (shopNo !== undefined) row.pos_shop_no = shopNo;
   if (maxInstallments !== undefined) row.max_installments = maxInstallments;
   if (installmentsMin !== undefined) row.installments_min_amount = installmentsMin;

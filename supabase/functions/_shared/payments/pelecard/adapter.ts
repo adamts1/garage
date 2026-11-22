@@ -23,8 +23,9 @@
 //
 // Amounts are agorot. Currency "1" is ILS. ActionType "J4" is an ordinary debit.
 
+import { ProviderAuthError } from '../provider.ts';
 import type {
-  CardType, PaymentCredentials, PaymentProvider, RefundInput, RefundResult, StartInput, StartedPayment, Verdict,
+  CardEntry, CardType, PaymentCredentials, PaymentProvider, RefundInput, RefundResult, StartInput, StartedPayment, Verdict,
   VerifyInput,
 } from '../provider.ts';
 
@@ -60,6 +61,29 @@ function readCreds(c: PaymentCredentials): Creds {
 
 export const agorot = (shekels: number) => Math.round(shekels * 100);
 
+/* The answers that mean "these credentials will not do" (manual, Appendix B):
+   404 no such terminal, 501 wrong user or password, 502 password expired,
+   503 user locked, 505 terminal blocked, 507 user not allowed on the terminal,
+   509 access blocked. Any of them, from any call, stops everything — see
+   ProviderAuthError. */
+export const AUTH_CODES = new Set(['404', '501', '502', '503', '505', '507', '509']);
+
+const AUTH_MESSAGES: Record<string, string> = {
+  '404': 'מספר המסוף לא קיים אצל פלאקארד',
+  '501': 'שם המשתמש או הסיסמה של פלאקארד שגויים',
+  '502': 'הסיסמה של פלאקארד פגה',
+  '503': 'המשתמש נעול אצל פלאקארד',
+  '505': 'המסוף חסום אצל פלאקארד',
+  '507': 'המשתמש לא מורשה במסוף הזה',
+  '509': 'הגישה נחסמה אצל פלאקארד',
+};
+
+/** Throws ProviderAuthError when `code` is one of the credential answers. */
+export function guardAuth(code: unknown): void {
+  const c = String(code ?? '').trim().padStart(3, '0');
+  if (AUTH_CODES.has(c)) throw new ProviderAuthError(c, `${AUTH_MESSAGES[c]} (${c})`);
+}
+
 /* ParamX shows up in Pelecard's reports beside the transaction. Their limit is
    19 characters of lowercase letters and digits; anything else is refused. */
 export const paramX = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 19);
@@ -76,7 +100,8 @@ export function initBody(c: Creds, input: StartInput): Record<string, unknown> {
     ErrorURL: back('error'),
     CancelURL: back('cancel'),
     FeedbackDataTransferMethod: 'GET',
-    ActionType: 'J4',
+    /* J2 checks the card and charges nothing — the terminal check. */
+    ActionType: input.purpose === 'check' ? 'J2' : 'J4',
     Currency: '1',
     Total: agorot(input.amount),
     UserKey: input.paymentId,
@@ -100,6 +125,7 @@ export function readInit(data: unknown): StartedPayment {
   const d = data as any;
   const code = d?.Error?.ErrCode;
   if (code !== 0 && code !== '0') {
+    guardAuth(code);
     const msg = d?.Error?.ErrMsg ?? d?.ErrorMessage ?? 'unrecognised reply';
     throw new Error(`Pelecard init failed (${code ?? '?'}): ${msg}`);
   }
@@ -114,11 +140,26 @@ export function readInit(data: unknown): StartedPayment {
 
 // ---------------------------------------------------------------- verify
 
-/* Used only when the bank sent no sentence of its own. */
+/* Used only when the bank sent no sentence of its own. The terminal ones are
+   the manual's (Appendix B); none has been seen from the N6 yet. */
 const DECLINES: Record<string, string> = {
   '004': 'העסקה סורבה על ידי חברת האשראי',
   '555': 'הלקוח ביטל את התשלום',
+  '009': 'אין תקשורת עם המסוף. בדוק שהוא דלוק ומחובר, ונסה שוב',
+  '010': 'הפעולה בוטלה במסוף',
+  '070': 'המסוף לא מוגדר אצל פלאקארד',
+  '075': 'המסוף לא קיבל כרטיס בזמן',
+  '500': 'המסוף באמצע שידור או עדכון. נסה שוב בעוד כמה דקות',
+  '600': 'שגיאה במסוף. פנה לתמיכה של פלאקארד',
 };
+
+/* Was the card read by the terminal? A chip read carries the EMV application
+   id (Aid) and a card sequence number; a card typed on the page has neither
+   (seen on the sandbox, 2026-11-19). NOT yet seen on a terminal payment —
+   check on the first one, and fix here if the N6 answers otherwise. */
+export function entryOf(r: { Aid?: unknown; CardSeqNumber?: unknown } | null | undefined): CardEntry {
+  return String(r?.Aid ?? '').trim() || String(r?.CardSeqNumber ?? '').trim() ? 'terminal' : 'page';
+}
 
 /* The brand, from the issuer's own Hebrew name first (it is what the bank
    says), then Pelecard's brand code. Code 4 was American Express on the
@@ -164,10 +205,11 @@ export function scrub(data: unknown): unknown {
  *  needs ValidateByUniqueKey before it is believed — see verify(). */
 export function readTransaction(
   data: unknown,
-  expected: { paymentId: string; amount: number; installments: number },
+  expected: { paymentId: string; amount: number; installments: number; purpose?: 'charge' | 'check' },
 ): Verdict {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
+  guardAuth(d?.StatusCode);
   const r = d?.ResultData;
   const raw = scrub(data);
   const shva = String(r?.ShvaResult ?? '').trim();
@@ -192,6 +234,17 @@ export function readTransaction(
     };
   }
 
+  /* A check moves no money: the card answered, and that is all it asks. */
+  if (expected.purpose === 'check') {
+    return {
+      status: 'paid', amount: 0, installments: 1,
+      approvalNumber: String(r?.DebitApproveNumber ?? '').trim() || null,
+      cardLast4: last4(r?.CreditCardNumber), cardBrand: String(r?.CardHebrewName ?? '').trim() || null,
+      cardType: cardTypeOf(r), providerRef: String(r?.TransactionPelecardId ?? '').trim() || null,
+      entry: entryOf(r), raw,
+    };
+  }
+
   const userKey = String(r?.UserKey ?? '').trim();
   if (userKey && userKey !== expected.paymentId) {
     return { status: 'pending', message: 'Pelecard transaction belongs to another payment', raw };
@@ -213,6 +266,7 @@ export function readTransaction(
     cardBrand: String(r?.CardHebrewName ?? '').trim() || null,
     cardType: cardTypeOf(r),
     providerRef: String(r?.TransactionPelecardId ?? '').trim() || null,
+    entry: entryOf(r),
     raw,
   };
 }
@@ -237,6 +291,7 @@ export type CancelAnswer =
 export function readCancel(data: unknown): CancelAnswer {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
+  guardAuth(d?.StatusCode);
   const code = String(d?.StatusCode ?? '');
   if (code === '000' && String(d?.ResultData?.ShvaResult ?? '000') === '000') {
     return {
@@ -264,6 +319,7 @@ export function readRefund(data: unknown):
   { ok: true; id: string | null; approval: string | null } | { ok: false; message: string } {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
+  guardAuth(d?.StatusCode);
   const r = d?.ResultData;
   const code = String(d?.StatusCode ?? '');
   if (code === '000' && String(r?.ShvaResult ?? '') === '000') {
@@ -321,8 +377,10 @@ export const pelecardAdapter: PaymentProvider = {
       return { status: 'pending', message: `lookup failed: ${(e as Error).message}`, raw: null };
     }
 
-    const verdict = readTransaction(tx, { paymentId: input.paymentId, amount: input.amount, installments: input.installments });
-    if (verdict.status !== 'paid') return verdict;
+    const verdict = readTransaction(tx, {
+      paymentId: input.paymentId, amount: input.amount, installments: input.installments, purpose: input.purpose,
+    });
+    if (verdict.status !== 'paid' || input.purpose === 'check') return verdict;
 
     /* The second, independent confirmation (manual §5): Pelecard answers "1"
        only if this key, this payment and this amount belong together. */
@@ -346,8 +404,14 @@ export const pelecardAdapter: PaymentProvider = {
 
     /* The whole charge, the same day: void it, so it never reaches the card.
        Once broadcast it can only be refunded, which is the path below. */
+    /* A charge taken on the terminal is voided and refunded with the terminal
+       (EMV) operations — same fields, other names (sandbox tool, 2026-11-23).
+       NOT yet run against a terminal payment. */
+    const emv = input.entry === 'terminal';
+
     if (input.whole) {
-      const answer = await service(c, 'CancelTransaction', { DebitTrxId: input.providerRef });
+      const answer = await service(c, emv ? 'EmvReversal' : 'CancelTransaction',
+        emv ? { debitTrxId: input.providerRef } : { DebitTrxId: input.providerRef });
       if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the cancel', raw: null };
       const cancel = readCancel(answer);
       const raw = scrub(answer);
@@ -358,7 +422,7 @@ export const pelecardAdapter: PaymentProvider = {
       if (cancel.outcome === 'refused') return { status: 'failed', message: cancel.message, raw };
     }
 
-    const answer = await service(c, 'RefundByID', {
+    const answer = await service(c, emv ? 'RefundByIdEmv' : 'RefundByID', {
       debitTrxId: input.providerRef,
       NewAmount: String(agorot(input.amount)),
     });
