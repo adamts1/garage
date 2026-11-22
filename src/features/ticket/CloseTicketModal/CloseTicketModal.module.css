@@ -341,3 +341,6 @@
    to push the column past both edges, and the drawer clipped it. */
 .success > * { max-width: 100%; }
 .success .docLine { overflow-wrap: anywhere; }
+
+/* terminal or typed, for a garage with a terminal */
+.entryChoice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }

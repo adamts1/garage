@@ -155,7 +155,10 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
     return () => { live = false; };
   }, []);
   useEffect(loadSettings, [loadSettings]);
-  const [card, setCard] = useState<{ url: string; payment: CardPayment; since: number } | null>(null);
+  const [card, setCard] = useState<{ url: string; payment: CardPayment; since: number; terminal: boolean } | null>(null);
+  /* A garage with a terminal: charge on it (the default — the customer is at
+     the counter), or type the card on the page (a payment by phone). */
+  const [onTerminal, setOnTerminal] = useState(true);
   const [cardError, setCardError] = useState<string | null>(null);
   const [cardNote, setCardNote] = useState<string | null>(null);
   /* Opens on the whole outstanding amount, because paying a bill in full is what
@@ -263,6 +266,12 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
 
   /** This round charges a card through the provider, not just records one. */
   const charging = method?.code === 'card' && cardOnline.active && !!ticketKey;
+  /** …and on the garage's terminal. */
+  const terminalRound = charging && cardOnline.terminal && onTerminal;
+  /* Card payments switched off by the server because the provider rejected
+     the credentials. A garage with a provider records no card by hand, so the
+     card cannot be taken here until an admin reconnects. */
+  const suspended = method?.code === 'card' && !!settings?.suspended;
 
   /* The customer has paid — on this page or, found by the server, on an
      earlier one. Either way the drawer moves on with the provider's record. */
@@ -280,17 +289,18 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
     setCardError(null);
     setCardNote(null);
     try {
-      const started = await startCardPayment(ticketKey, asked, plan, window.location.origin, { claimed, force });
+      const started = await startCardPayment(ticketKey, asked, plan, window.location.origin, { claimed, force, terminal: terminalRound });
       if (started.recovered) {
         // Money already taken on an earlier attempt: that is this payment.
         setCardNote(t('close.cardOnline.recovered'));
         paidWith(started.payment);
         return;
       }
-      setCard({ url: started.url, payment: started.payment, since: Date.now() });
+      setCard({ url: started.url, payment: started.payment, since: Date.now(), terminal: terminalRound });
       setState('card');
     } catch (e) {
       setState('form');
+      if (e instanceof CardStartError && e.code === 'payments_suspended') loadSettings();
       if (e instanceof CardStartError && e.code === 'payment_open') {
         /* An earlier page on this ticket may still be completed. Opening a
            second one is how a customer pays twice, so it is asked, not done. */
@@ -380,6 +390,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
      amount that is not a sum of money this bill can still take. */
   const blocked = (step === 1 && !method)
     || (method?.code === 'card' && !settings)
+    || suspended
     || (step === 2 && !amountValid)
     || state === 'charging';
 
@@ -483,7 +494,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           {state === 'card' && card && (
             <div className={`${styles.card} ${styles.cardFrame}`}>
               <h4>{t('close.cardOnline.title', { amount: money(amount) })}</h4>
-              <p className={styles.hint}>{t('close.cardOnline.waiting')}</p>
+              <p className={styles.hint}>{t(card.terminal ? 'close.cardOnline.waitingTerminal' : 'close.cardOnline.waitingTyped')}</p>
               <iframe
                 className={styles.payFrame}
                 src={card.url}
@@ -542,6 +553,15 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                     </button>
                   ))}
                 </div>
+                {suspended && (
+                  <div className={`${styles.info} ${styles.bad}`} role="alert">
+                    <span className={styles.infoIcon}>!</span>
+                    <div>
+                      <b>{t('close.cardOnline.suspended')}</b>
+                      <p>{settings?.suspended}</p>
+                    </div>
+                  </div>
+                )}
                 {method?.code === 'card' && settingsFailed && (
                   <div className={`${styles.info} ${styles.bad}`} role="alert">
                     <span className={styles.infoIcon}>!</span>
@@ -588,6 +608,27 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                   <b>{money(total)}</b>
                 </div>
               ) : null}
+
+              {/* Where the card is: at the terminal, or read out over the phone. */}
+              {charging && cardOnline.terminal && (
+                <div className={styles.entryChoice} role="radiogroup" aria-label={t('close.cardOnline.entry')}>
+                  {[true, false].map((term) => (
+                    <button
+                      type="button"
+                      key={String(term)}
+                      role="radio"
+                      aria-checked={onTerminal === term}
+                      className={`${styles.payCard}${onTerminal === term ? ` ${styles.on}` : ''}`}
+                      onClick={() => setOnTerminal(term)}
+                    >
+                      <span className={styles.payIcon}>{term ? '📟' : '⌨️'}</span>
+                      <b>{t(term ? 'close.cardOnline.onTerminal' : 'close.cardOnline.typed')}</b>
+                      <span className={styles.sub}>{t(term ? 'close.cardOnline.onTerminalHint' : 'close.cardOnline.typedHint')}</span>
+                      <span className={styles.radio} />
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Regular installments, chosen here for a card however it is taken.
                   The provider is then told exactly this number. */}
@@ -653,7 +694,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                 <dt>{t('close.customer')}</dt><dd>{customer}</dd>
                 <dt>{t('close.vehicle')}</dt><dd>{car} · {plate}</dd>
                 {collecting && docnum && (<><dt>{t('close.docCollect')}</dt><dd>#{docnum}</dd></>)}
-                <dt>{t('close.method')}</dt><dd>{method.icon} {t(method.label)}</dd>
+                <dt>{t('close.method')}</dt><dd>{method.icon} {t(method.label)}{charging && cardOnline.terminal ? ` · ${t(onTerminal ? 'close.cardOnline.onTerminal' : 'close.cardOnline.typed')}` : ''}</dd>
                 {plan > 1 && (<><dt>{t('close.installments.label')}</dt><dd>{t('close.installments.summary', { count: plan })}</dd></>)}
                 {reference && method.ref && (<><dt>{t(method.ref)}</dt><dd>{reference}</dd></>)}
                 {approval && method.code === 'card' && !charging && (<><dt>{t('close.methods.cardApproval')}</dt><dd>{approval}</dd></>)}

@@ -14,6 +14,8 @@ export function useInvoices() {
   const openModal = useModalResult<{ amount: number; reason: string; refundToCard: boolean } | null>();
   const openCounterSale = useModalResult<Invoice>();
   const openRefundDoneModal = useModalResult<boolean>();
+  const openTerminalCheckModal = useModalResult<boolean>();
+  const checkTerminal = useCallback(() => openTerminalCheckModal('terminalCheck', {}), [openTerminalCheckModal]);
   const openRefundDone = useCallback(
     (r: CardRefundDone & { docnum: string; noteTotal: number }) =>
       openRefundDoneModal('refundDone', { ...r, approvalNumber: r.approvalNumber ?? '', providerRefundId: r.providerRefundId ?? '', originalRef: r.originalRef ?? '', cardLast4: r.cardLast4 ?? '', cardBrand: r.cardBrand ?? '' }),
@@ -168,6 +170,7 @@ export function useInvoices() {
        not offered to one. Typing a price into a document is the admin's act
        that pricing a work already was. */
     canIssue: isGarageAdmin(),
+    checkTerminal,
     /* What is left on the open document, and whether this user may hand it
        back. A member sees the ledger and not the button — the function refuses
        them anyway, and a button that always fails is worse than none. */

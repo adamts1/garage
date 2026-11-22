@@ -30,7 +30,7 @@
 // provider's page, or taps the provider's terminal.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { garageProvider } from '../_shared/payments/registry.ts';
+import { garageProvider, PaymentsSuspended, tripOnAuth } from '../_shared/payments/registry.ts';
 import { priceTicket, round2, type Work } from '../_shared/billing.ts';
 
 // The provider registry lives in _shared/payments/registry.ts, shared with
@@ -46,7 +46,7 @@ const json = (body: unknown, status = 200) =>
 
 /* What a client may see of a payment — the same columns its grant allows. */
 const PUBLIC_COLUMNS =
-  'id, garage_id, ticket_id, invoice_id, provider, mode, amount, installments, status, provider_tx_id, approval_number, card_last4, card_brand, card_type, message, created_at, updated_at, settled_at';
+  'id, garage_id, ticket_id, invoice_id, provider, mode, purpose, entry, amount, installments, status, provider_tx_id, approval_number, card_last4, card_brand, card_type, message, created_at, updated_at, settled_at';
 
 /* A sanity bound, not a business rule: no garage bill is a million shekels,
    and a typo that adds three zeros should be refused before a card sees it. */
@@ -101,14 +101,20 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     async function settle(p: Provider, pay: any) {
       if (pay.status === 'paid' || !pay.provider_tx_id) return pay;
-      const verdict = await p.adapter.verify({
-        credentials: p.credentials,
-        paymentId: pay.id,
-        amount: Number(pay.amount),
-        installments: Number(pay.installments),
-        providerTxId: pay.provider_tx_id,
-        confirmationKey: pay.confirmation_key,
-      });
+      let verdict;
+      try {
+        verdict = await p.adapter.verify({
+          credentials: p.credentials,
+          paymentId: pay.id,
+          amount: Number(pay.amount),
+          installments: Number(pay.installments),
+          purpose: pay.purpose === 'check' ? 'check' : 'charge',
+          providerTxId: pay.provider_tx_id,
+          confirmationKey: pay.confirmation_key,
+        });
+      } catch (e) {
+        throw await tripOnAuth(admin, pay.garage_id, e);
+      }
       const patch: Record<string, unknown> = { raw: verdict.raw };
       if (verdict.status === 'paid') {
         Object.assign(patch, {
@@ -118,6 +124,7 @@ Deno.serve(async (req) => {
           card_brand: verdict.cardBrand,
           card_type: verdict.cardType,
           provider_ref: verdict.providerRef,
+          entry: verdict.entry,
           message: null,
           settled_at: new Date().toISOString(),
         });
@@ -147,6 +154,9 @@ Deno.serve(async (req) => {
         return json({ error: 'amount must be a positive sum' }, 400);
       }
       const back = returnUrl(body.return_origin);
+      /* At the counter the advisor chooses: the garage's terminal, or the card
+         typed on the page. The terminal is offered only where one is set up. */
+      const onTerminal = body.mode === 'terminal';
       /* Card payments this visit has already taken and the screen is holding
          for its receipt. Not "lost": they are not handed back below. */
       const claimed = new Set(Array.isArray(body.claimed) ? body.claimed.map(String) : []);
@@ -249,7 +259,8 @@ Deno.serve(async (req) => {
           installments,
           label: ticket.key,
           returnUrl: back,
-          posShopNo: p.posShopNo,
+          posShopNo: onTerminal ? p.posShopNo : null,
+          purpose: 'charge',
         });
         const { data: saved, error: uErr } = await admin.from('card_payments')
           .update({ provider_tx_id: started.providerTxId, confirmation_key: started.confirmationKey })
@@ -259,8 +270,65 @@ Deno.serve(async (req) => {
       } catch (e) {
         /* No page was opened (or we cannot hand it out), so nothing can have
            been charged on it: the attempt is closed as declined, with why. */
-        const message = e instanceof Error ? e.message : String(e);
+        const err = await tripOnAuth(admin, ticket.garage_id, e);
+        const message = err instanceof Error ? err.message : String(err);
         await admin.from('card_payments').update({ status: 'declined', message }).eq('id', row.id);
+        if (err instanceof PaymentsSuspended) return json({ error: message, code: 'payments_suspended' }, 423);
+        return json({ error: message, ...(onTerminal ? { code: 'terminal_failed' } : {}) }, 502);
+      }
+    }
+
+    // ============================ CHECK ============================
+    /* Proves the set-up without moving money. Admin only, and each press is
+       ONE call to the provider:
+         credentials — opens a page and nothing else: the provider's answer
+                       says whether it accepts the credentials;
+         card        — a page that sends a card check (J2) to the terminal; the
+                       customer's card is read and nothing is charged. Then
+                       verify as for a payment.
+       Either can trip the breaker, which is the point of trying it once,
+       carefully, before a real customer is in front of the terminal. */
+    if (action === 'check') {
+      const { data: isAdmin, error: roleErr } = await userClient.rpc('is_garage_admin');
+      if (roleErr) return json({ error: roleErr.message }, 400);
+      if (!isAdmin) return json({ error: 'only a garage admin may check the terminal' }, 403);
+      const { data: garageId, error: gErr } = await userClient.rpc('current_garage_id');
+      if (gErr || !garageId) return json({ error: gErr?.message ?? 'no garage' }, 400);
+
+      const onCard = body.mode === 'card';
+      const back = returnUrl(body.return_origin);
+      const p = await provider(garageId);
+      if (onCard && !p.posShopNo) return json({ error: 'no terminal is set up for this garage', code: 'no_terminal' }, 400);
+
+      const { data: me } = await userClient.auth.getUser();
+      const { data: row, error: iErr } = await admin.from('card_payments').insert({
+        garage_id: garageId, ticket_id: null, provider: p.name, mode: 'counter',
+        purpose: 'check', amount: 1, installments: 1, created_by: me?.user?.id ?? null,
+      }).select('id').single();
+      if (iErr) return json({ error: iErr.message }, 500);
+
+      try {
+        const started = await p.adapter.start({
+          credentials: p.credentials, paymentId: row.id, amount: 1, installments: 1,
+          label: 'terminal check', returnUrl: back, posShopNo: onCard ? p.posShopNo : null, purpose: 'check',
+        });
+        if (!onCard) {
+          // The page is never shown; it expires by itself. The answer was the point.
+          await admin.from('card_payments').update({
+            provider_tx_id: started.providerTxId, status: 'declined', message: 'credentials check only — no page shown',
+          }).eq('id', row.id);
+          return json({ ok: true });
+        }
+        const { data: saved, error: uErr } = await admin.from('card_payments')
+          .update({ provider_tx_id: started.providerTxId, confirmation_key: started.confirmationKey })
+          .eq('id', row.id).select(PUBLIC_COLUMNS).single();
+        if (uErr) throw new Error(uErr.message);
+        return json({ payment: saved, url: started.url });
+      } catch (e) {
+        const err = await tripOnAuth(admin, garageId, e);
+        const message = err instanceof Error ? err.message : String(err);
+        await admin.from('card_payments').update({ status: 'declined', message }).eq('id', row.id);
+        if (err instanceof PaymentsSuspended) return json({ error: message, code: 'payments_suspended' }, 423);
         return json({ error: message }, 502);
       }
     }
@@ -284,6 +352,7 @@ Deno.serve(async (req) => {
 
     return json({ error: `unknown action: ${action}` }, 400);
   } catch (e) {
+    if (e instanceof PaymentsSuspended) return json({ error: e.message, code: 'payments_suspended' }, 423);
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });

@@ -4,6 +4,17 @@
  *   npm run connect-payments -- --garage-id <uuid> [--shop-no <n> | --no-shop-no] [--inactive]
  *                               [--max-installments <1-36>] [--installments-min <₪>]
  *
+ *   npm run connect-payments -- --garage-id <uuid> --settings-only
+ *                               [--shop-no <n> | --no-shop-no] [--max-installments <n>]
+ *                               [--installments-min <₪>] [--activate | --inactive]
+ *
+ * --settings-only changes the settings and nothing else: no credentials are
+ * read or written, so no password is typed again to move a shop number. It
+ * also gives installments limits to a garage with NO provider (a card taken
+ * on its own terminal, recorded by hand). On/off changes only when said
+ * (--activate / --inactive), and --activate needs stored credentials and no
+ * suspension — a suspension is lifted only by reconnecting with credentials.
+ *
  * Installments default to the columns' own (up to 12, no minimum) and are kept
  * as they are when the flags are omitted on a re-run. --max-installments 1
  * turns them off.
@@ -19,6 +30,10 @@
  *
  *   * garage_payments         — provider, active, pos_shop_no. Members read it.
  *   * garage_payment_secrets  — { terminal, user, password }. service_role only.
+ *
+ * Re-running it also clears a suspension: when Pelecard rejected the
+ * credentials, the card-payment function switched the garage's payments off
+ * (migration 20261123090000); fix the credentials, then run this again.
  *
  * It does NOT call Pelecard. A wrong password tried against Pelecard counts
  * toward locking the account — it happened to the pilot garage once — so the
@@ -53,7 +68,16 @@ const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL)?.trim();
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const garageId = args.get('garage-id');
 const provider = String(args.get('provider') ?? 'pelecard');
-const active = !args.has('inactive');
+const settingsOnly = args.has('settings-only');
+/* Connecting turns payments on unless --inactive. Settings-only leaves them
+   as they are unless --activate or --inactive says otherwise. */
+const active = settingsOnly
+  ? (args.has('activate') ? true : args.has('inactive') ? false : undefined)
+  : !args.has('inactive');
+if (args.has('activate') && args.has('inactive')) {
+  console.error('\x1b[31m✗\x1b[0m --activate and --inactive together?');
+  process.exit(1);
+}
 /* The terminal is changed only when said: --shop-no <n> sets it,
    --no-shop-no removes it, and neither leaves it as it is — so a re-run to
    change installments does not disconnect the terminal. PELECARD_SHOP_NO
@@ -81,11 +105,13 @@ const password = process.env.PELECARD_PASSWORD;
 if (!url || !serviceKey) die('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
 if (!garageId || garageId === true) die('Missing --garage-id.');
 if (provider !== 'pelecard') die(`Unknown provider "${provider}".`);
-if (!terminal || !user || !password) die('Set PELECARD_TERMINAL, PELECARD_USER and PELECARD_PASSWORD.');
+if (!settingsOnly && (!terminal || !user || !password)) die('Set PELECARD_TERMINAL, PELECARD_USER and PELECARD_PASSWORD (or --settings-only).');
+/* PELECARD_* may well be set — `npm run connect-payments` loads .env.local,
+   which holds the sandbox ones. Settings-only simply does not read them. */
 
 const projectRef = url.replace(/^https?:\/\//, '').split('.')[0];
 const isProd = projectRef === PRODUCTION_PROJECT_REF;
-const isTest = terminal === TEST_TERMINAL;
+const isTest = !settingsOnly && terminal === TEST_TERMINAL;
 
 /* The test terminal approves cards and moves no money. On a real garage that
    is "paid" for jobs nobody paid for, so production refuses it — unless it is
@@ -94,7 +120,7 @@ const isTest = terminal === TEST_TERMINAL;
 if (isProd && isTest && !args.has('allow-test-terminal')) {
   die('Refusing to connect Pelecard\'s TEST terminal on production. For a test garage only: --allow-test-terminal.');
 }
-if (!isProd && !isTest && !args.has('real')) {
+if (!settingsOnly && !isProd && !isTest && !args.has('real')) {
   die('That is not Pelecard\'s test terminal, and this is not production. Pass --real if you mean it.');
 }
 
@@ -113,16 +139,42 @@ const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
 console.log(`\nProject   ${projectRef}${isProd ? '  \x1b[33m(PRODUCTION)\x1b[0m' : ''}`);
 console.log(`Garage    ${garageId}`);
-console.log(`Provider  ${provider}  terminal ••••${terminal.slice(-4)}${isTest ? ' (test)' : ''}`);
+console.log(settingsOnly
+  ? `Provider  ${provider}  (settings only — credentials untouched)`
+  : `Provider  ${provider}  terminal ••••${terminal.slice(-4)}${isTest ? ' (test)' : ''}`);
 if (isProd && isTest) console.log('\x1b[33m          TEST terminal on PRODUCTION — cards are approved, no money moves.\x1b[0m');
 console.log(`Shop no   ${shopNo === undefined ? '(unchanged)' : shopNo ?? '(removed — card entry only)'}`);
-console.log(`Payments  ${active ? 'ON' : 'off (credentials stored, payments disabled)'}\n`);
+if (maxInstallments !== undefined || installmentsMin !== undefined) {
+  console.log(`Installm. ${maxInstallments ?? '(unchanged)'} max, from ₪${installmentsMin ?? '(unchanged)'}`);
+}
+console.log(`Payments  ${active === undefined ? '(unchanged)' : active ? 'ON' : 'off (payments disabled)'}\n`);
 
 {
   const { data, error } = await db.from('garages').select('id,name').eq('id', garageId).maybeSingle();
   if (error) die(`Could not look up the garage: ${error.message}`);
   if (!data) die(`No garage with id ${garageId} in ${projectRef}.`);
   console.log(`\x1b[32m✓\x1b[0m garage found      ${data.name}`);
+}
+
+if (settingsOnly) {
+  const { data: cur } = await db.from('garage_payments').select('active, auth_failed_at').eq('garage_id', garageId).maybeSingle();
+  const { data: sec } = await db.from('garage_payment_secrets').select('garage_id').eq('garage_id', garageId).maybeSingle();
+  if (active === true && !sec) die('No credentials stored for this garage — connect it first (without --settings-only).');
+  if (active === true && cur?.auth_failed_at) {
+    die('Card payments were suspended because Pelecard rejected the credentials. Reconnect with checked credentials (without --settings-only) — that lifts it.');
+  }
+  const row = { garage_id: garageId, provider, updated_at: new Date().toISOString() };
+  if (active !== undefined) row.active = active;
+  else if (!cur) row.active = false; // a new row: settings, payments off
+  if (shopNo !== undefined) row.pos_shop_no = shopNo;
+  if (maxInstallments !== undefined) row.max_installments = maxInstallments;
+  if (installmentsMin !== undefined) row.installments_min_amount = installmentsMin;
+  const { error } = await db.from('garage_payments').upsert(row, { onConflict: 'garage_id' });
+  if (error) die(`Could not write the payment settings: ${error.message}`);
+  const { data: cfg } = await db.from('garage_payments')
+    .select('provider, active, pos_shop_no, max_installments, installments_min_amount, auth_failed_at').eq('garage_id', garageId).single();
+  console.log(`\x1b[32m✓\x1b[0m settings written   ${cfg.provider} · active ${cfg.active} · shop ${cfg.pos_shop_no ?? '-'} · installments up to ${cfg.max_installments}, from ₪${cfg.installments_min_amount}${cfg.auth_failed_at ? ' · SUSPENDED' : ''}\n`);
+  process.exit(0);
 }
 
 {
@@ -135,7 +187,10 @@ console.log(`Payments  ${active ? 'ON' : 'off (credentials stored, payments disa
 }
 
 {
-  const row = { garage_id: garageId, provider, active, updated_at: new Date().toISOString() };
+  /* Connecting (again) is also how card payments come back after the breaker
+     switched them off: whoever runs this has just put in credentials they
+     checked. Cleared here and nowhere else. */
+  const row = { garage_id: garageId, provider, active, auth_failed_at: null, auth_error: null, updated_at: new Date().toISOString() };
   if (shopNo !== undefined) row.pos_shop_no = shopNo;
   if (maxInstallments !== undefined) row.max_installments = maxInstallments;
   if (installmentsMin !== undefined) row.installments_min_amount = installmentsMin;
