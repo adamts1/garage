@@ -286,6 +286,90 @@ npm run import:ricbi -- --garage 'richbi-test' --data <out dir>/import.json --ye
 
 אפשר להריץ שוב: מה שכבר יובא מדולג. על ייצור הסקריפט מסרב בלי `--production`.
 
+### 5.7 סליקה באשראי (פלאקארד) — `connect-payments`
+
+מחבר מוסך לספק סליקה, כדי שאשראי במגירת הסגירה יחויב דרך המערכת: הקלדת כרטיס בדף של פלאקארד, או חיוב במסוף פיזי.
+מוסך בלי ספק ממשיך ברישום ידני של אשראי, כמו היום.
+
+**פרטי ההתחברות לא נכתבים בפקודה.** מקלידים אותם בטרמינל, והם נשמרים רק בטבלה סודית שאף משתמש לא יכול לקרוא:
+
+```bash
+read "PELECARD_TERMINAL?מספר מסוף: "; export PELECARD_TERMINAL
+read "PELECARD_USER?שם משתמש: ";      export PELECARD_USER
+read -s "PELECARD_PASSWORD?סיסמה: "; echo; export PELECARD_PASSWORD
+
+npm run connect-payments:prod -- --garage-id <uuid> --shop-no <מספר עמדה> --inactive
+
+unset PELECARD_TERMINAL PELECARD_USER PELECARD_PASSWORD
+```
+
+| דגל | משמעות |
+|---|---|
+| `--shop-no <n>` | מספר העמדה (`ShopNo`) של המסוף הפיזי. בלי הדגל: נשאר כמו שהיה |
+| `--no-shop-no` | מוחק את המסוף. נשארת רק הקלדת כרטיס |
+| `--max-installments <1-36>` | מקסימום תשלומים. ברירת מחדל 12. הערך 1 מבטל תשלומים |
+| `--installments-min <₪>` | הסכום הנמוך ביותר שבו מוצעים תשלומים. ברירת מחדל 0 |
+| `--inactive` | שומר בלי להפעיל. המוסך ממשיך ברישום ידני עד ההפעלה |
+| `--settings-only` | משנה רק הגדרות, בלי פרטי התחברות. ראה למטה |
+| `--activate` | עם `--settings-only`: מפעיל סליקה למוסך שכבר מחובר |
+| `--real` | חובה כדי לחבר **מסוף אמיתי** לבדיקות או למקומי. בייצור לא צריך |
+| `--allow-test-terminal` | מאפשר את **מסוף הבדיקה** בייצור, רק למוסך בדיקה כמו prod-test |
+
+**שינוי הגדרות בלי להקליד שוב סיסמה:**
+
+```bash
+npm run connect-payments:prod -- --garage-id <uuid> --settings-only --shop-no 3
+npm run connect-payments:prod -- --garage-id <uuid> --settings-only --max-installments 6 --installments-min 500
+npm run connect-payments:prod -- --garage-id <uuid> --settings-only --activate
+npm run connect-payments:prod -- --garage-id <uuid> --settings-only --inactive
+```
+
+`--settings-only` עובד גם על מוסך **בלי ספק**, כדי לקבוע לו גבולות תשלומים לרישום ידני.
+
+**הסקריפט לא פונה לפלאקארד.** טעות בסיסמה לא נספרת אצלם כניסיון כושל. הפנייה הראשונה היא "בדיקת סליקה" במסך החשבוניות, או תשלום ראשון.
+
+**המפסק נגד נעילה.** אם פלאקארד דוחים את פרטי ההתחברות, בכל פעולה שהיא, הסליקה במוסך מושבתת מיד, ושום בקשה לא יוצאת עד חיבור מחדש. כדי להחזיר:
+1. בודקים את הפרטים מול פלאקארד. **לא מנסים שוב "לראות אם עובד".**
+2. מריצים את הסקריפט שוב **עם** פרטי ההתחברות. זה מה שמסיר את ההשבתה. `--settings-only --activate` לא מסיר אותה.
+
+**ההגנות של הסקריפט:**
+- **מסוף הבדיקה בייצור:** נחסם, אלא אם מוסיפים `--allow-test-terminal`.
+- **מסוף אמיתי בבדיקות או מקומית:** נחסם, אלא אם מוסיפים `--real`.
+- **לפני כתיבה:** הסקריפט מדפיס את הפרויקט ואת שם המוסך. בייצור מופיע `(PRODUCTION)`.
+
+**מה צריך בסביבה לפני הקליטה הראשונה בה** (פעם אחת):
+
+```bash
+# כתובות שאליהן פלאקארד מחזירים את הדפדפן בסוף תשלום
+npx supabase secrets set "PAYMENT_RETURN_ORIGINS=https://garagiox.com" --project-ref farpgkljbmlaeiocrore
+npx supabase secrets set "PAYMENT_RETURN_ORIGINS=https://garage-staging.netlify.app,http://localhost:5173" --project-ref poksqsdklnhaumozriqd
+
+# ואחרי כל מיזוג שנוגע בסליקה: הפונקציות, לא רק המיגרציות
+npx supabase functions deploy card-payment issue-invoice --project-ref <ref>
+```
+
+#### בדיקת סליקה (במסך החשבוניות, למנהל)
+
+| שלב | מה הוא עושה | כסף זז? |
+|---|---|---|
+| 1. בדוק פרטי התחברות | פנייה אחת לפלאקארד. רק בודק שהפרטים מתקבלים | לא |
+| 2. בדיקת כרטיס במסוף | בדיקת כרטיס (`J2`) במסוף: הכרטיס נקרא ולא מחויב | לא |
+
+כל שלב שואל לפני שהוא רץ, ולא חוזר על עצמו לבד.
+
+#### החזר לכרטיס שאין לו תשובה ברורה — `resolve-card-refund`
+
+החזר לכרטיס, מדיאלוג הזיכוי, שלא קיבל תשובה מפלאקארד (למשל בניתוק), נשמר במצב "לא ידוע", וחוסם החזר נוסף מאותו כרטיס.
+בודקים באתר של פלאקארד אם הכסף הוחזר, ואז רושמים את מה שמצאתם:
+
+```bash
+npm run resolve-card-refund:prod -- --refund-id <uuid>                  # רק להציג
+npm run resolve-card-refund:prod -- --refund-id <uuid> --as refunded    # הכסף הוחזר
+npm run resolve-card-refund:prod -- --refund-id <uuid> --as failed      # לא הוחזר
+```
+
+`refunded`: הזיכוי הבא על החשבונית, בדיוק בסכום הזה, מפיק את חשבונית הזיכוי בלי להחזיר שוב.
+
 ### סדר הקמה של מוסך חדש
 
 1. `onboard:prod`: מוסך + מנהל.
@@ -294,6 +378,7 @@ npm run import:ricbi -- --garage 'richbi-test' --data <out dir>/import.json --ye
 4. `connect-billing:prod`: חשבוניות.
 5. `bookkeeping-software:prod`: ייצוא לרואה חשבון.
 6. אופציונלי: `seed:catalog:prod` למחירון התחלתי.
+7. אופציונלי: `connect-payments:prod --inactive`: סליקה. אחר כך "בדיקת סליקה" במסך החשבוניות, ורק אז `--settings-only --activate`.
 
 ---
 
