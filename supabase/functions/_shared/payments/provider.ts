@@ -98,7 +98,15 @@ export interface RefundInput {
  *  provider's) is 'unknown': the money MAY have gone back, and the caller must
  *  not try again on its own. */
 export type RefundResult =
-  | { status: 'refunded'; kind: 'cancel' | 'refund'; providerRefundId: string | null; raw: unknown }
+  | {
+      status: 'refunded';
+      kind: 'cancel' | 'refund';
+      /** The provider's id for the void / credit transaction. */
+      providerRefundId: string | null;
+      /** The card company's approval number for it, when the provider gives one. */
+      approvalNumber: string | null;
+      raw: unknown;
+    }
   | { status: 'failed'; message: string; raw: unknown }
   | { status: 'unknown'; message: string; raw: unknown };
 

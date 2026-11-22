@@ -240,9 +240,13 @@ export const icountAdapter: InvoiceProvider = {
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
   },
 
+  /* A credit note takes no payment block (iCount: payments are only for
+     receipts and invoice-receipts), so how the money went back — the card,
+     the approval — goes in the remark, with the same fallback as issue(). */
   async cancel(input: CancelInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
-    const data = await call(c, 'doc/create', {
+    const create = (note?: string) => call(c, 'doc/create', {
+      ...(note ? { [NOTE_FIELD]: note } : {}),
       doctype: DOCTYPE.credit_note,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
@@ -252,6 +256,14 @@ export const icountAdapter: InvoiceProvider = {
       refundreason: input.reason,
       based_on: [{ doctype: DOCTYPE.invoice_receipt, docnum: input.basedOnDocnum }],
     });
+    let data;
+    try {
+      data = await create(input.note);
+    } catch (e) {
+      if (!(input.note && e instanceof NotIssued)) throw e;
+      console.warn(`iCount refused the credit note with a remark; issuing without it: ${e.message}`);
+      data = await create();
+    }
     const docnum = String(data.docnum);
     const info = await docInfo(c, DOCTYPE.credit_note, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };

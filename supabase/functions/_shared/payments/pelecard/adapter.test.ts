@@ -125,8 +125,8 @@ describe('GetTransaction', () => {
 /* Captured from the sandbox on 2026-11-20 against the transactions above. */
 describe('cancel and refund', () => {
   it('a same-day cancel voids the charge', () => {
-    expect(readCancel({ StatusCode: '000', ErrorMessage: 'תקין', DebitTrxId: '3203313138', ResultData: { OriginaTrxId: '3202934843', ShvaResult: '000' } }))
-      .toEqual({ outcome: 'cancelled', id: '3203313138' });
+    expect(readCancel({ StatusCode: '000', ErrorMessage: 'תקין', DebitTrxId: '3204695092', ResultData: { OriginaTrxId: '3204693659', ShvaResult: '000', AuthManpikNo: '5297834', DebitApproveNumber: '5297834' } }))
+      .toEqual({ outcome: 'cancelled', id: '3204695092', approval: '5297834' });
   });
 
   it('a broadcast charge cannot be cancelled — it is refunded instead', () => {
@@ -138,13 +138,19 @@ describe('cancel and refund', () => {
   });
 
   it('a refund that went through names its own transaction', () => {
-    expect(readRefund({ StatusCode: '000', ErrorMessage: 'operation success', ResultData: { ShvaResult: '000', PelecardTransactionId: '3203315491', DebitTotal: '1000' } }))
-      .toEqual({ ok: true, id: '3203315491' });
+    expect(readRefund({ StatusCode: '000', ErrorMessage: 'operation success', ResultData: { ShvaResult: '000', PelecardTransactionId: '3204685055', DebitTotal: '8441', DebitApproveNumber: '5297828' } }))
+      .toEqual({ ok: true, id: '3204685055', approval: '5297828' });
   });
 
   it('a refused refund is a definite no', () => {
-    expect(readRefund({ StatusCode: '173', ErrorMessage: 'double transaction.' }))
-      .toEqual({ ok: false, message: 'double transaction. (173)' });
+    const r = readRefund({ StatusCode: '173', ErrorMessage: 'double transaction.' });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.message).toMatch(/עסקה כפולה.*\(173\)$/);
+  });
+
+  it('keeps no card number from a refund answer either (it spells it shvaOutput)', () => {
+    const s = JSON.stringify(scrub({ ResultData: { shvaOutput: '0000000531084******9154110004' } }));
+    expect(s).not.toContain('531084');
   });
 
   it('the verified charge carries the id a refund needs', () => {

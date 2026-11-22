@@ -784,6 +784,32 @@ Deno.serve(async (req) => {
        the invoice, it does not void it — and several may be issued against one
        invoice over time. A credit that takes the last of what is still owed
        back voids it, which is the case 'cancel' always was. */
+    /* What the advisor and the credit note are told about money that went back
+       to a card: the same facts in both places. */
+    // deno-lint-ignore no-explicit-any
+    async function refundDetails(refund: any) {
+      const { data: card } = await admin.from('card_payments')
+        .select('card_last4, card_brand, provider_ref, raw').eq('id', refund.card_payment_id).maybeSingle();
+      const r = refund.raw?.ResultData ?? {};
+      return {
+        amount: Number(refund.amount),
+        kind: refund.kind as 'cancel' | 'refund',
+        approvalNumber: String(r.DebitApproveNumber ?? r.AuthManpikNo ?? '').trim() || null,
+        providerRefundId: refund.provider_refund_id ?? null,
+        originalRef: card?.provider_ref ?? card?.raw?.ResultData?.TransactionPelecardId ?? null,
+        cardLast4: card?.card_last4 ?? null,
+        cardBrand: card?.card_brand ?? null,
+        at: refund.updated_at ?? refund.created_at ?? null,
+      };
+    }
+    type RefundInfo = Awaited<ReturnType<typeof refundDetails>>;
+    const refundNote = (d: RefundInfo) => [
+      `${d.kind === 'cancel' ? 'בוטלה עסקת האשראי' : 'הוחזר לכרטיס האשראי'}: ₪${d.amount.toFixed(2)}`,
+      [d.cardBrand, d.cardLast4 ? `המסתיים ב-${d.cardLast4}` : null].filter(Boolean).join(' '),
+      d.approvalNumber && `מס. אישור: ${d.approvalNumber}`,
+      d.providerRefundId && `אסמכתא: ${d.providerRefundId}`,
+    ].filter(Boolean).join(' · ');
+
     /* Returns up to `total` of this bill to the card that paid it, through the
        garage's clearing provider. The refund row, or a Response to send back
        (the billing reservation released). See the credit action. */
@@ -985,12 +1011,14 @@ Deno.serve(async (req) => {
           }))
         : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
 
+      const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({
         credentials,
         customer: { name: inv.customer_name || 'לקוח', idNo: inv.customer_id_number || undefined },
         items,
         reason,
         basedOnDocnum: inv.provider_docnum,
+        note: refundInfo ? refundNote(refundInfo) : undefined,
       }));
       if (doc instanceof Response) return doc;
 
@@ -1031,7 +1059,7 @@ Deno.serve(async (req) => {
         const { error: lErr } = await admin.from('card_refunds').update({ credit_note_id: note.id }).eq('id', refund.id);
         if (lErr) console.error(`card refund ${refund.id} not linked to credit note ${note.id}`, lErr.message);
       }
-      const refunded = refund ? { amount: Number(refund.amount), kind: refund.kind } : null;
+      const refunded = refundInfo;
 
       if (!full) {
         await stored(note.id);
