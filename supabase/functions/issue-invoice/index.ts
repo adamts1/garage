@@ -897,6 +897,7 @@ Deno.serve(async (req) => {
           credentials: provider.credentials,
           paymentId: card.id,
           providerRef: String(providerRef),
+          providerUid: card.raw?.ResultData?.Uid ? String(card.raw.ResultData.Uid) : null,
           chargedAmount: Number(card.amount),
           amount,
           whole: amount === round2(Number(card.amount)) && back(card.id) === 0,
