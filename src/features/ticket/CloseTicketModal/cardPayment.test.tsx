@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const cardPaymentsActive = vi.fn();
 const startCardPayment = vi.fn();
 const verifyCardPayment = vi.fn();
+const abandonCardPayment = vi.fn(async (_id: string) => {});
 
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
@@ -27,6 +28,7 @@ vi.mock('@garage/shared', async (importActual) => {
     cardPaymentsActive: () => cardPaymentsActive(),
     startCardPayment: (...a: unknown[]) => startCardPayment(...a),
     verifyCardPayment: (...a: unknown[]) => verifyCardPayment(...a),
+    abandonCardPayment: (id: string) => abandonCardPayment(id),
   };
 });
 
@@ -74,6 +76,7 @@ beforeEach(() => {
   cardPaymentsActive.mockReset();
   startCardPayment.mockReset();
   verifyCardPayment.mockReset();
+  abandonCardPayment.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -172,6 +175,8 @@ describe('card payments through the provider', () => {
     expect(verifyCardPayment).toHaveBeenCalled();
     expect(screen.queryByTitle('דף תשלום מאובטח')).toBeNull();
     expect(screen.getByText(/התשלום בוטל בדף התשלום/)).toBeTruthy();
+    // Left, not decided: the next attempt need not ask about this one.
+    expect(abandonCardPayment).toHaveBeenCalledWith(payment().id);
   });
 
   it('a garage with a terminal chooses: on the terminal (the default) or typed', async () => {
