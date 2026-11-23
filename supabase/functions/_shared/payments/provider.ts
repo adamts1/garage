@@ -103,6 +103,9 @@ export interface RefundInput {
   /** The charge being refunded: our id, the provider's, and what it took. */
   paymentId: string;
   providerRef: string;
+  /** A second id of the charge, for providers that name it by two (Pelecard:
+   *  its Uid). Null when the charge's answer carried none. */
+  providerUid: string | null;
   chargedAmount: number;
   /** VAT-inclusive shekels to return. */
   amount: number;

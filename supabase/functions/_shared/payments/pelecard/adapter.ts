@@ -273,37 +273,19 @@ export function readTransaction(
 
 // ---------------------------------------------------------------- refund
 //
-// Checked against the sandbox, 2026-11-20:
-//   CancelTransaction  000 → voided (same day, before the broadcast);
-//                      510 "Record not found" → already broadcast: refund it;
-//                      519 "עסקת ביטול קיימת" → it was already voided.
-//   RefundByID         000 with ShvaResult 000 → returned, partial or whole;
-//                      173 "double transaction" → refused (a whole refund the
-//                      same day — that is what cancel is for).
-//   Pelecard does NOT refuse refunds that add up to more than was charged.
-
-export type CancelAnswer =
-  | { outcome: 'cancelled'; id: string | null; approval: string | null }
-  | { outcome: 'already' }
-  | { outcome: 'broadcast' }
-  | { outcome: 'refused'; message: string };
-
-export function readCancel(data: unknown): CancelAnswer {
-  // deno-lint-ignore no-explicit-any
-  const d = data as any;
-  guardAuth(d?.StatusCode);
-  const code = String(d?.StatusCode ?? '');
-  if (code === '000' && String(d?.ResultData?.ShvaResult ?? '000') === '000') {
-    return {
-      outcome: 'cancelled',
-      id: String(d?.DebitTrxId ?? d?.ResultData?.PelecardTransactionId ?? '') || null,
-      approval: approvalOf(d?.ResultData),
-    };
-  }
-  if (code === '519') return { outcome: 'already' };
-  if (code === '510') return { outcome: 'broadcast' };
-  return { outcome: 'refused', message: `${d?.ErrorMessage || 'cancel refused'} (${code || '?'})` };
-}
+// One operation for every return of money: ReverseTransaction. Pelecard's own
+// advice (2026-11-22), for every status — before the nightly broadcast, after
+// it, a charge typed on the page or taken on the terminal, whole or partial.
+// It replaced CancelTransaction / RefundByID and their terminal (EMV) twins,
+// and with them the guesswork about which one a charge needed.
+//
+// Checked on the sandbox, 2026-11-23, against charges already broadcast:
+//   partial (50 of 159.30, 2 installments) → 000, a credit in 2 installments;
+//   whole (118 in 4 installments)          → 000;
+//   the same partial again                 → 173 "double transaction":
+//     Pelecard refuses a second refund with identical values on one card.
+// Pelecard does NOT cap refunds at the charge (it is up to the card company);
+// the cap is ours, in issue-invoice.
 
 // deno-lint-ignore no-explicit-any
 const approvalOf = (r: any): string | null =>
@@ -401,30 +383,14 @@ export const pelecardAdapter: PaymentProvider = {
 
   async refund(input: RefundInput): Promise<RefundResult> {
     const c = readCreds(input.credentials);
-
-    /* The whole charge, the same day: void it, so it never reaches the card.
-       Once broadcast it can only be refunded, which is the path below. */
-    /* A charge taken on the terminal is voided and refunded with the terminal
-       (EMV) operations — same fields, other names (sandbox tool, 2026-11-23).
-       NOT yet run against a terminal payment. */
-    const emv = input.entry === 'terminal';
-
-    if (input.whole) {
-      const answer = await service(c, emv ? 'EmvReversal' : 'CancelTransaction',
-        emv ? { debitTrxId: input.providerRef } : { DebitTrxId: input.providerRef });
-      if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the cancel', raw: null };
-      const cancel = readCancel(answer);
-      const raw = scrub(answer);
-      if (cancel.outcome === 'cancelled') {
-        return { status: 'refunded', kind: 'cancel', providerRefundId: cancel.id, approvalNumber: cancel.approval, raw };
-      }
-      if (cancel.outcome === 'already') return { status: 'refunded', kind: 'cancel', providerRefundId: null, approvalNumber: null, raw };
-      if (cancel.outcome === 'refused') return { status: 'failed', message: cancel.message, raw };
+    if (!input.providerUid) {
+      return { status: 'failed', message: 'the charge carries no Pelecard Uid to reverse', raw: null };
     }
-
-    const answer = await service(c, emv ? 'RefundByIdEmv' : 'RefundByID', {
-      debitTrxId: input.providerRef,
-      NewAmount: String(agorot(input.amount)),
+    const answer = await service(c, 'ReverseTransaction', {
+      uid: input.providerUid,
+      debittrxid: input.providerRef,
+      newamount: String(agorot(input.amount)),
+      newparamx: paramX(`refund${input.paymentId}`),
     });
     if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
     const refund = readRefund(answer);
@@ -434,3 +400,4 @@ export const pelecardAdapter: PaymentProvider = {
       : { status: 'failed', message: refund.message, raw };
   },
 };
+
