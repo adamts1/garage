@@ -231,7 +231,11 @@ describe('straight to the terminal', () => {
   it('one payment: DebitRegularType to the shop number, no card', () => {
     const { method, body } = terminalBody(creds, charge);
     expect(method).toBe('DebitRegularType');
-    expect(body).toMatchObject({ shopNumber: '001', total: '13098', currency: '1', paramX: 'gar1379a04aca5', creditCard: '', cvv2: '' });
+    expect(body).toMatchObject({ shopNumber: '001', total: '13098', currency: '1', paramX: 'gar1379a04aca5' });
+    // Every card field present and empty, as in Pelecard's example request.
+    for (const k of ['creditCard', 'creditCardDateMmYy', 'token', 'cvv2', 'id', 'authorizationNumber', 'QAResultStatus', 'eci', 'xid', 'cavv']) {
+      expect(body[k]).toBe('');
+    }
     expect(body).not.toHaveProperty('paymentsNumber');
   });
 
@@ -266,6 +270,11 @@ describe('straight to the terminal', () => {
 
   it('the report window is Israel time, as dd/MM/yyyy HH:mm', () => {
     expect(reportTime(new Date('2026-11-20T07:50:00Z'))).toBe('20/11/2026 09:50');
+  });
+
+  it('a minute without a card: 075, a definite no — declined, try again', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ StatusCode: '075', ErrorMessage: 'timeout' }))));
+    expect(await pelecardAdapter.chargeOnTerminal!(charge)).toMatchObject({ status: 'declined', message: expect.stringContaining('תוך דקה') });
   });
 
   it('no answer from the terminal call is pending, never declined', async () => {

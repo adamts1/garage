@@ -159,7 +159,7 @@ const DECLINES: Record<string, string> = {
   '009': 'אין תקשורת עם המסוף. בדוק שהוא דלוק ומחובר, ונסה שוב',
   '010': 'הפעולה בוטלה במסוף',
   '070': 'המסוף לא מוגדר אצל פלאקארד',
-  '075': 'המסוף לא קיבל כרטיס בזמן',
+  '075': 'המסוף לא קיבל כרטיס תוך דקה. אפשר לנסות שוב',
   '500': 'המסוף באמצע שידור או עדכון. נסה שוב בעוד כמה דקות',
   '600': 'שגיאה במסוף. פנה לתמיכה של פלאקארד',
 };
@@ -339,7 +339,9 @@ export function readRefund(data: unknown):
 // Pelecard (2026-11-22): a charge sent to the services API with the terminal's
 // shop number and no card values goes to the N6. DebitRegularType for one
 // payment, DebitPaymentsType for regular installments. The call waits for the
-// customer at the terminal and answers with the result.
+// customer at the terminal and answers with the result — for one minute: then
+// it answers 075 (timeout), the N6 shows "not approved" in red and returns to
+// ready (Pelecard, 2026-11-24). 075 is a definite no, so it is 'declined'.
 //
 // NOT yet run against a terminal. On the sandbox (no device behind any shop
 // number) the same call is taken as a typed card and refused for its missing
@@ -367,8 +369,10 @@ export function terminalBody(c: Creds, input: TerminalChargeInput): { method: st
       currency: '1',
       paramX: attemptParamX(input.label, input.paymentId),
       ...(n > 1 ? { paymentsNumber: String(n), firstPayment: String(firstPaymentAgorot(input.amount, n)) } : {}),
-      /* No card: that is what sends it to the terminal. */
-      creditCard: '', creditCardDateMmYy: '', cvv2: '', id: '', token: '', authorizationNumber: '',
+      /* No card: that is what sends it to the terminal. Every card field is
+         sent, empty — Pelecard's own example request (2026-11-24). */
+      creditCard: '', creditCardDateMmYy: '', token: '', cvv2: '', id: '', authorizationNumber: '',
+      QAResultStatus: '', eci: '', xid: '', cavv: '',
     },
   };
 }
