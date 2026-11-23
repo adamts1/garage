@@ -1,0 +1,44 @@
+.table td,
+.table th {
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+.table code,
+.drift code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.muted {
+  color: var(--muted-d);
+}
+
+.drift {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.drift li {
+  padding: 4px 0;
+}
+
+.files {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-size: 13px;
+  color: var(--muted-d);
+}
+
+.cmd {
+  direction: ltr;
+  text-align: left;
+  background: var(--ink);
+  color: var(--sand);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 4px 0 0;
+  font-size: 13px;
+}

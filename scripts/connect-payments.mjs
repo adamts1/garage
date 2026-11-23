@@ -47,10 +47,18 @@
  * swapped by accident.
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const TEST_TERMINAL = '0882577012';
-const PRODUCTION_PROJECT_REF = 'farpgkljbmlaeiocrore';
+/* The writes live in packages/ops (onboarding/payments.ts), shared with the
+   admin console's onboarding form — including the test-terminal rules, which
+   ops checks again before writing. This file is the command line. */
+import {
+  checkedClient,
+  connectPayments,
+  findGarage,
+  PELECARD_TEST_TERMINAL as TEST_TERMINAL,
+  PRODUCTION_PROJECT_REF,
+  projectRefOf,
+  updatePaymentSettings,
+} from '../packages/ops/src/index.ts';
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i++) {
@@ -109,7 +117,7 @@ if (!settingsOnly && (!terminal || !user || !password)) die('Set PELECARD_TERMIN
 /* PELECARD_* may well be set — `npm run connect-payments` loads .env.local,
    which holds the sandbox ones. Settings-only simply does not read them. */
 
-const projectRef = url.replace(/^https?:\/\//, '').split('.')[0];
+const projectRef = projectRefOf(url);
 const isProd = projectRef === PRODUCTION_PROJECT_REF;
 const isTest = !settingsOnly && terminal === TEST_TERMINAL;
 
@@ -124,18 +132,12 @@ if (!settingsOnly && !isProd && !isTest && !args.has('real')) {
   die('That is not Pelecard\'s test terminal, and this is not production. Pass --real if you mean it.');
 }
 
-const looksLikeServiceRole = (key) => {
-  if (key.startsWith('sb_secret_')) return true;
-  if (key.startsWith('sb_publishable_')) return false;
-  try {
-    return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role === 'service_role';
-  } catch {
-    return false;
-  }
-};
-if (!looksLikeServiceRole(serviceKey)) die('SUPABASE_SERVICE_ROLE_KEY is not a service_role key.');
-
-const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+let db;
+try {
+  db = checkedClient({ url, serviceKey });
+} catch (e) {
+  die(e.message);
+}
 
 console.log(`\nProject   ${projectRef}${isProd ? '  \x1b[33m(PRODUCTION)\x1b[0m' : ''}`);
 console.log(`Garage    ${garageId}`);
@@ -149,63 +151,39 @@ if (maxInstallments !== undefined || installmentsMin !== undefined) {
 }
 console.log(`Payments  ${active === undefined ? '(unchanged)' : active ? 'ON' : 'off (payments disabled)'}\n`);
 
-{
-  const { data, error } = await db.from('garages').select('id,name').eq('id', garageId).maybeSingle();
-  if (error) die(`Could not look up the garage: ${error.message}`);
-  if (!data) die(`No garage with id ${garageId} in ${projectRef}.`);
-  console.log(`\x1b[32m✓\x1b[0m garage found      ${data.name}`);
-}
+const attempt = async (work) => {
+  try {
+    return await work();
+  } catch (e) {
+    return die(e.message);
+  }
+};
+
+const garage = await attempt(() => findGarage(db, garageId));
+console.log(`\x1b[32m✓\x1b[0m garage found      ${garage.name}`);
+
+const settings = { shopNo, maxInstallments, installmentsMin };
 
 if (settingsOnly) {
-  const { data: cur } = await db.from('garage_payments').select('active, auth_failed_at').eq('garage_id', garageId).maybeSingle();
-  const { data: sec } = await db.from('garage_payment_secrets').select('garage_id').eq('garage_id', garageId).maybeSingle();
-  if (active === true && !sec) die('No credentials stored for this garage — connect it first (without --settings-only).');
-  if (active === true && cur?.auth_failed_at) {
-    die('Card payments were suspended because Pelecard rejected the credentials. Reconnect with checked credentials (without --settings-only) — that lifts it.');
-  }
-  const row = { garage_id: garageId, provider, updated_at: new Date().toISOString() };
-  if (active !== undefined) row.active = active;
-  else if (!cur) row.active = false; // a new row: settings, payments off
-  if (shopNo !== undefined) row.pos_shop_no = shopNo;
-  if (maxInstallments !== undefined) row.max_installments = maxInstallments;
-  if (installmentsMin !== undefined) row.installments_min_amount = installmentsMin;
-  const { error } = await db.from('garage_payments').upsert(row, { onConflict: 'garage_id' });
-  if (error) die(`Could not write the payment settings: ${error.message}`);
-  const { data: cfg } = await db.from('garage_payments')
-    .select('provider, active, pos_shop_no, max_installments, installments_min_amount, auth_failed_at').eq('garage_id', garageId).single();
-  console.log(`\x1b[32m✓\x1b[0m settings written   ${cfg.provider} · active ${cfg.active} · shop ${cfg.pos_shop_no ?? '-'} · installments up to ${cfg.max_installments}, from ₪${cfg.installments_min_amount}${cfg.auth_failed_at ? ' · SUSPENDED' : ''}\n`);
+  const cfg = await attempt(() => updatePaymentSettings(db, garageId, { ...settings, active }));
+  console.log(`\x1b[32m✓\x1b[0m settings written   ${cfg.provider} · active ${cfg.active} · shop ${cfg.shopNo ?? '-'} · installments up to ${cfg.maxInstallments}, from ₪${cfg.installmentsMin}${cfg.suspended ? ' · SUSPENDED' : ''}\n`);
   process.exit(0);
 }
 
-{
-  const { error } = await db.from('garage_payment_secrets').upsert(
-    { garage_id: garageId, credentials: { terminal, user, password }, updated_at: new Date().toISOString() },
-    { onConflict: 'garage_id' },
-  );
-  if (error) die(`Could not store the credentials: ${error.message}`);
-  console.log('\x1b[32m✓\x1b[0m credentials stored');
-}
-
-{
-  /* Connecting (again) is also how card payments come back after the breaker
-     switched them off: whoever runs this has just put in credentials they
-     checked. Cleared here and nowhere else. */
-  const row = { garage_id: garageId, provider, active, auth_failed_at: null, auth_error: null, updated_at: new Date().toISOString() };
-  if (shopNo !== undefined) row.pos_shop_no = shopNo;
-  if (maxInstallments !== undefined) row.max_installments = maxInstallments;
-  if (installmentsMin !== undefined) row.installments_min_amount = installmentsMin;
-  const { error } = await db.from('garage_payments').upsert(row, { onConflict: 'garage_id' });
-  if (error) die(`Could not write the payment settings: ${error.message}`);
-  console.log('\x1b[32m✓\x1b[0m payment settings written');
-}
-
-{
-  const { data: cfg, error } = await db.from('garage_payments')
-    .select('provider, active, pos_shop_no, max_installments, installments_min_amount').eq('garage_id', garageId).single();
-  if (error) die(`Verification failed: ${error.message}`);
-  const { data: sec } = await db.from('garage_payment_secrets').select('credentials').eq('garage_id', garageId).single();
-  if (!sec?.credentials?.password) die('Stored, but the password came back empty.');
-  console.log(`\n\x1b[32mConnected.\x1b[0m  ${cfg.provider} · active ${cfg.active} · shop ${cfg.pos_shop_no ?? '-'}`);
-  console.log(`  installments up to ${cfg.max_installments}, from ₪${cfg.installments_min_amount}\n`);
-  console.log('  Remember: the card-payment function needs PAYMENT_RETURN_ORIGINS set.\n');
-}
+/* Connecting (again) also lifts a suspension: whoever runs this has just put in
+   credentials they checked. */
+const cfg = await attempt(() => connectPayments(db, {
+  garageId,
+  env: isProd ? 'production' : 'staging',
+  provider,
+  credentials: { terminal, user, password },
+  active,
+  allowTestTerminal: args.has('allow-test-terminal'),
+  realTerminal: args.has('real'),
+  ...settings,
+}));
+console.log('\x1b[32m✓\x1b[0m credentials stored');
+console.log('\x1b[32m✓\x1b[0m payment settings written');
+console.log(`\n\x1b[32mConnected.\x1b[0m  ${cfg.provider} · active ${cfg.active} · shop ${cfg.shopNo ?? '-'}`);
+console.log(`  installments up to ${cfg.maxInstallments}, from ₪${cfg.installmentsMin}\n`);
+console.log('  Remember: the card-payment function needs PAYMENT_RETURN_ORIGINS set.\n');

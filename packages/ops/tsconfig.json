@@ -1,0 +1,22 @@
+{
+  /* Node code, run directly by Node 22's type stripping — no build step. So
+     only erasable syntax (no enums, namespaces or parameter properties), and
+     imports carry their .ts extension the way Node needs them. */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src", "../../admin/server", "../../admin/vite.config.ts"]
+}

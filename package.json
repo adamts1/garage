@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "admin": "vite --config admin/vite.config.mjs",
+    "admin": "vite --config admin/vite.config.ts",
     "build": "tsc && vite build && node scripts/prerender-landing.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p admin && tsc --noEmit -p packages/ops",
     "lint": "eslint .",
     "db:new": "supabase migration new",
     "db:reset": "supabase db reset",
@@ -59,6 +59,7 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.20.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

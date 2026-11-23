@@ -53,11 +53,23 @@
  * anything happens, and checked against the key — see below.
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { randomBytes } from 'node:crypto';
+/* The writes themselves live in packages/ops (onboarding/garage.ts), shared
+   with the admin console's onboarding form. This file is the command line:
+   flags, the checks on them, and what gets printed. */
+import {
+  checkedClient,
+  createGarage,
+  ensureUser,
+  findGarage,
+  generatePassword,
+  linkMember,
+  projectRefOf,
+  seedStarterCatalog,
+  updateLetterhead,
+  verifyMembership,
+} from '../packages/ops/src/index.ts';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
 
 /* Load .env.local ourselves rather than relying on how we were invoked.
 
@@ -137,7 +149,7 @@ const garageName = valued('garage');
 const email = valued('email')?.trim().toLowerCase();
 // Supplying a password is for tests. Leave it out and one is generated, which
 // is what you want for a real garage — it is printed once and not stored.
-const password = valued('password') ?? randomBytes(9).toString('base64url');
+const password = valued('password') ?? generatePassword();
 const existingGarageId = valued('garage-id');
 
 /* The garage's letterhead: what the top of its printed work order says.
@@ -153,22 +165,22 @@ const existingGarageId = valued('garage-id');
  * so updating one does not blank the other five. */
 const LETTERHEAD = {
   // The name on paper, when the garage goes by a shorter one in the app.
-  'print-name': 'print_name',
+  'print-name': 'printName',
   motto: 'motto',
   services: 'services',
   address: 'address',
   phone: 'phone',
   fax: 'fax',
-  'license-no': 'license_no',
+  'license-no': 'licenseNo',
   // Already a column, and until now nothing wrote it or read it.
-  'tax-id': 'tax_id',
+  'tax-id': 'taxId',
 };
 
 const letterhead = {};
-for (const [flag, column] of Object.entries(LETTERHEAD)) {
+for (const [flag, field] of Object.entries(LETTERHEAD)) {
   const v = valued(flag);
   // An explicit empty string clears the field; an absent flag leaves it alone.
-  if (v !== undefined) letterhead[column] = v.trim() || null;
+  if (v !== undefined) letterhead[field] = v;
 }
 
 /* A flag this script does not know is a typo, and until now a typo was silence:
@@ -235,65 +247,17 @@ if (!wantsAdmin && !wantsMember && !letterheadOnly) {
   );
 }
 
-/* A service_role key is a full-access credential, and the anon key is a
-   plausible thing to paste by mistake — both are JWTs from the same dashboard
-   page, differing only in a claim. Running with the anon key would fail later,
-   confusingly, at the first insert.
-
-   The role lives in the JWT payload, so it has to be decoded; the literal
-   string is not present in the encoded token. Newer projects issue opaque
-   sb_secret_ keys instead, which carry no readable claims — those are taken at
-   face value, since the anon equivalent is prefixed sb_publishable_ and cannot
-   be confused with one. */
-const looksLikeServiceRole = (key) => {
-  if (key.startsWith('sb_secret_')) return true;
-  if (key.startsWith('sb_publishable_')) return false;
-  try {
-    const payload = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
-    return payload.role === 'service_role';
-  } catch {
-    return false;
-  }
-};
-
-if (!looksLikeServiceRole(serviceKey)) {
-  die('SUPABASE_SERVICE_ROLE_KEY is not a service_role key — check you did not paste the anon key.');
+/* The key must be a service_role key (the anon key is a plausible paste
+   mistake), and it must belong to the project in the URL (a production key
+   with a staging URL, or the reverse, is the dangerous one). Opaque sb_secret_
+   keys carry no claims; the project printed below is the only guard for those. */
+let db;
+try {
+  db = checkedClient({ url, serviceKey });
+} catch (e) {
+  die(e.message);
 }
-
-/* The URL and the key arrive from different places — the URL often from
-   .env.local, the key exported by hand — so nothing stops them naming different
-   projects. A key from the wrong project simply fails to authenticate, which is
-   survivable. The dangerous direction is subtler: exporting a production key
-   while .env.local still points at staging, or the reverse, then reading the
-   resulting success as confirmation you hit the project you meant.
-
-   A Supabase JWT carries its project in the `ref` claim, so the mismatch is
-   detectable before anything is written rather than after. Opaque sb_secret_
-   keys carry no claims and cannot be checked this way; the printed project ref
-   below is the only guard for those. */
-const projectRef = url.replace(/^https:\/\//, '').split('.')[0];
-
-/** The `ref` claim, or null for opaque keys and anything unparseable. */
-const keyProjectRef = (key) => {
-  if (key.startsWith('sb_secret_')) return null;
-  try {
-    return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).ref ?? null;
-  } catch {
-    // Not a reason to refuse on its own — a genuinely wrong key fails at the
-    // first request anyway.
-    return null;
-  }
-};
-
-const keyRef = keyProjectRef(serviceKey);
-if (keyRef && keyRef !== projectRef) {
-  die(
-    `Key/URL mismatch: the key belongs to "${keyRef}" but the URL points at "${projectRef}". ` +
-      'One of them is from the wrong project.',
-  );
-}
-
-const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+const projectRef = projectRefOf(url);
 
 // Printed before anything is written. For an opaque sb_secret_ key this line is
 // the only indication of which database is about to gain a user.
@@ -301,16 +265,18 @@ console.log(`\nProject  ${projectRef}`);
 console.log(`Garage   ${garageName ?? existingGarageId}`);
 console.log(letterheadOnly ? 'Letterhead only\n' : `User     ${email}\n`);
 
+const attempt = async (work) => {
+  try {
+    return await work();
+  } catch (e) {
+    return die(e.message);
+  }
+};
+
 /* ---------- 1. the garage ---------- */
 let garageId = existingGarageId;
 if (!garageId) {
-  const { data, error } = await db
-    .from('garages')
-    .insert({ name: garageName, ...letterhead })
-    .select('id')
-    .single();
-  if (error) die(`Could not create the garage: ${error.message}`);
-  garageId = data.id;
+  garageId = await attempt(() => createGarage(db, garageName, letterhead));
   console.log(`\x1b[32m✓\x1b[0m garage created   ${garageId}`);
   // Said out loud here as well as on the update path below. A letterhead that
   // was quietly not written looks exactly like one that was.
@@ -318,18 +284,14 @@ if (!garageId) {
     console.log(`\x1b[32m✓\x1b[0m letterhead set   ${Object.keys(letterhead).join(', ')}`);
   }
 } else {
-  const { data, error } = await db.from('garages').select('id,name').eq('id', garageId).single();
-  if (error || !data) die(`No garage with id ${garageId}`);
-  console.log(`\x1b[32m✓\x1b[0m garage found     ${data.name}`);
+  const garage = await attempt(() => findGarage(db, garageId));
+  console.log(`\x1b[32m✓\x1b[0m garage found     ${garage.name}`);
 
   /* Only when something was actually passed. An unconditional update would
      rewrite the letterhead to nothing every time somebody is added to an
      existing garage, which is the common use of --garage-id. */
-  if (Object.keys(letterhead).length) {
-    const { error: lhErr } = await db.from('garages').update(letterhead).eq('id', garageId);
-    if (lhErr) die(`Could not update the letterhead: ${lhErr.message}`);
-    console.log(`\x1b[32m✓\x1b[0m letterhead set   ${Object.keys(letterhead).join(', ')}`);
-  }
+  const written = await attempt(() => updateLetterhead(db, garageId, letterhead));
+  if (written.length) console.log(`\x1b[32m✓\x1b[0m letterhead set   ${written.join(', ')}`);
 }
 
 /* The letterhead was the whole errand. Stop before the account and the
@@ -340,128 +302,32 @@ if (letterheadOnly) {
 }
 
 /* ---------- 2. the user ---------- */
-// email_confirm: true because there is no inbox in this flow — the operator
-// hands over the password directly. Without it the account exists but cannot
-// sign in, which looks exactly like a wrong password.
-let userId;
-const { data: created, error: createErr } = await db.auth.admin.createUser({
-  email,
-  password,
-  email_confirm: true,
-});
-
-if (createErr) {
-  // Already registered is not a failure: this script must be safe to re-run
-  // when it fell over halfway through, which is precisely when a user exists
-  // and a membership does not.
-  if (!/already been registered|already exists/i.test(createErr.message)) {
-    die(`Could not create the user: ${createErr.message}`);
-  }
-  const { data: list, error: listErr } = await db.auth.admin.listUsers();
-  if (listErr) die(`User exists but could not be looked up: ${listErr.message}`);
-  const found = list.users.find((u) => u.email?.toLowerCase() === email);
-  if (!found) die(`User ${email} reported as existing but was not found.`);
-  userId = found.id;
-  console.log(`\x1b[33m!\x1b[0m user exists      ${userId} (password unchanged)`);
-} else {
-  userId = created.user.id;
-  console.log(`\x1b[32m✓\x1b[0m user created     ${userId}`);
-}
+const user = await attempt(() => ensureUser(db, email, password));
+const userId = user.userId;
+console.log(user.existing
+  ? `\x1b[33m!\x1b[0m user exists      ${userId} (password unchanged)`
+  : `\x1b[32m✓\x1b[0m user created     ${userId}`);
 
 /* ---------- 3. the membership ---------- */
-// The step that matters. A user without this row can sign in and then see
-// nothing — the state AuthGate exists to catch.
-//
-// The role rides along, because this is the only place it is ever set: there is
-// no in-app role editor, which is what makes it impossible for the one admin a
-// garage has to demote themselves and lock the prices away from everybody.
-// Which one it is was demanded up front — see the argument checks.
-const { error: memberErr } = await db
-  .from('garage_members')
-  .upsert({ garage_id: garageId, user_id: userId, role }, { onConflict: 'garage_id,user_id' });
-if (memberErr) die(`User and garage exist but could not be linked: ${memberErr.message}`);
+// The role rides along, because this is the only place it is ever set — and it
+// was demanded up front, see the argument checks.
+await attempt(() => linkMember(db, garageId, userId, role));
 console.log(`\x1b[32m✓\x1b[0m membership linked  role ${role}\n`);
 
 /* ---------- 4. a starter catalog, only when asked ----------
-
-   Off by default: a garage starts empty and builds its own catalog. The earlier
-   default was to hand every new garage a copy of the standard ten works and
-   twenty-four parts, on the reasoning that an empty picker cannot write a
-   ticket. In practice that inverted the work — a garage's first job became
-   deleting two dozen parts it does not stock and re-pricing works it does not
-   offer, and a part left behind reads as real stock at a price nobody chose.
-
-   Pass --catalog to seed it anyway, which is useful for demos and smoke tests.
-
-   A copy, not a reference: from here on the two diverge, which is the entire
-   point of making the catalog per-garage. Editing one garage's oil-change price
-   must never touch another's.
-
-   Never seeded when joining someone to a garage that already exists
-   (--garage-id), since that garage has its own catalog and duplicating it would
-   be a mess of conflicting SKUs. */
+   Off by default, and never when joining someone to an existing garage — see
+   seedStarterCatalog() in packages/ops for why. */
 if (!existingGarageId && args.has('catalog')) {
-  const starterPath = join(dirname(fileURLToPath(import.meta.url)), 'starter-catalog.json');
-  let starter = null;
-  try {
-    starter = JSON.parse(readFileSync(starterPath, 'utf8'));
-  } catch {
-    console.log('\x1b[33m!\x1b[0m starter catalog not found — garage created with an empty catalog');
-  }
-
-  if (starter) {
-    // Parts first: they are what a work's items refer to by SKU.
-    const parts = (starter.parts ?? []).map((p) => ({ ...p, stock: 0, garage_id: garageId }));
-    if (parts.length) {
-      const { error } = await db.from('items').upsert(parts, { onConflict: 'garage_id,sku' });
-      if (error) die(`Could not seed the parts catalog: ${error.message}`);
-    }
-
-    for (const w of starter.works ?? []) {
-      const { data: row, error } = await db
-        .from('work_defs')
-        .insert({
-          garage_id: garageId,
-          code: w.code,
-          name: w.name,
-          labor: w.labor,
-          hours: w.hours,
-          position: w.position ?? 0,
-        })
-        .select('id')
-        .single();
-      // A duplicate code means this garage was already seeded; skip rather than
-      // fail, so a half-finished run can be repeated.
-      if (error) {
-        if (/duplicate key/i.test(error.message)) continue;
-        die(`Could not seed work ${w.code}: ${error.message}`);
-      }
-      if (w.items?.length) {
-        const { error: itemErr } = await db.from('work_def_items').insert(
-          w.items.map((p, i) => ({ work_def_id: row.id, ...p, position: i })),
-        );
-        if (itemErr) die(`Could not seed parts for work ${w.code}: ${itemErr.message}`);
-      }
-    }
-    console.log(
-      `\x1b[32m✓\x1b[0m catalog seeded    ${(starter.works ?? []).length} works, ${parts.length} parts`,
-    );
-  }
+  const seeded = await attempt(() => seedStarterCatalog(db, garageId));
+  console.log(`\x1b[32m✓\x1b[0m catalog seeded    ${seeded.works} works, ${seeded.parts} parts`);
 }
 
 /* ---------- 5. verify, rather than assume ---------- */
-// Reading it back through the same path the app uses is the difference between
-// "the inserts returned no error" and "this account can actually sign in".
-const probe = createClient(url, serviceKey, { auth: { persistSession: false } });
-const { data: check, error: checkErr } = await probe
-  .from('garage_members')
-  .select('garage_id, garages(name)')
-  .eq('user_id', userId);
-if (checkErr || !check?.length) die(`Verification failed: ${checkErr?.message ?? 'no membership found'}`);
+await attempt(() => verifyMembership(db, userId, garageId));
 
 console.log('\x1b[32mReady.\x1b[0m Sign in with:');
 console.log(`  email     ${email}`);
-if (!valued('password')) {
+if (!valued('password') && !user.existing) {
   console.log(`  password  ${password}`);
   console.log('\n  Written down nowhere else. Hand it over, and have them change it.');
 }

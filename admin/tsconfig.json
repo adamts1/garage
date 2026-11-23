@@ -1,4 +1,11 @@
 {
+  /* The console's page: the app's own compiler settings, plus .ts extensions
+     in imports — packages/ops is written for Node's type stripping, which needs
+     them, and the page imports two of its files (types.ts, rules.ts). */
   "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client"]
+  },
   "include": ["src"]
 }
