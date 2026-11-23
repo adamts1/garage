@@ -190,10 +190,10 @@ describe('refund call', () => {
   const input = {
     credentials: { terminal: '0882577012', user: 'u', password: 'p' },
     paymentId: PAYMENT, providerRef: '3202622442', providerUid: '26112009500908825771156',
-    chargedAmount: 159.3, amount: 50, whole: false, entry: null,
+    chargedAmount: 159.3, amount: 159.3, whole: true, entry: null,
   };
 
-  it('is one ReverseTransaction, by both ids, in agorot', async () => {
+  it('the whole charge is one ReverseTransaction, by both ids, in agorot', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       StatusCode: '000', ResultData: { ShvaResult: '000', PelecardTransactionId: '3205461248', DebitApproveNumber: '5299678', DebitTotal: '5000' },
     })));
@@ -202,7 +202,7 @@ describe('refund call', () => {
     expect(r).toMatchObject({ status: 'refunded', providerRefundId: '3205461248', approvalNumber: '5299678' });
     const [url, init] = fetch.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toMatch(/\/services\/ReverseTransaction$/);
-    expect(JSON.parse(init.body)).toMatchObject({ uid: '26112009500908825771156', debittrxid: '3202622442', newamount: '5000' });
+    expect(JSON.parse(init.body)).toMatchObject({ uid: '26112009500908825771156', debittrxid: '3202622442', newamount: '15930' });
   });
 
   it('no Uid: refused before anything is sent', async () => {
@@ -300,28 +300,33 @@ describe('straight to the terminal', () => {
   });
 });
 
-describe('a part of a charge made today', () => {
+describe('which refund call', () => {
   afterEach(() => vi.unstubAllGlobals());
   const input = {
     credentials: { terminal: '0882577012', user: 'u', password: 'p' },
     paymentId: PAYMENT, providerRef: '3206881822', providerUid: '26112313122808825777208',
     chargedAmount: 107.38, amount: 20, whole: false, entry: null,
   };
+  const ok = () => new Response(JSON.stringify({ StatusCode: '000', ResultData: { ShvaResult: '000', PelecardTransactionId: '3207000001', DebitApproveNumber: '5300001', DebitTotal: '2000' } }));
 
-  it('ReverseTransaction refuses it as a cancel (999, staging) — so it goes back as RefundByID', async () => {
-    const fetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ StatusCode: '999', ErrorMessage: 'Cannot process request - NewAmount must set as original amount in Cancel operation' })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ StatusCode: '000', ResultData: { ShvaResult: '000', PelecardTransactionId: '3207000001', DebitApproveNumber: '5300001', DebitTotal: '2000' } })));
+  it('a part of the charge: one RefundByID — ReverseTransaction would refuse it the same day (999)', async () => {
+    const fetch = vi.fn(async () => ok());
     vi.stubGlobal('fetch', fetch);
-    const r = await pelecardAdapter.refund(input);
-    expect(r).toMatchObject({ status: 'refunded', providerRefundId: '3207000001' });
-    const urls = fetch.mock.calls.map((c) => String(c[0]));
-    expect(urls[0]).toMatch(/ReverseTransaction$/);
-    expect(urls[1]).toMatch(/RefundByID$/);
-    expect(JSON.parse((fetch.mock.calls[1][1] as { body: string }).body)).toMatchObject({ debitTrxId: '3206881822', NewAmount: '2000' });
+    expect(await pelecardAdapter.refund(input)).toMatchObject({ status: 'refunded', providerRefundId: '3207000001' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0][0])).toMatch(/RefundByID$/);
+    expect(JSON.parse((fetch.mock.calls[0][1] as { body: string }).body)).toMatchObject({ debitTrxId: '3206881822', NewAmount: '2000' });
   });
 
-  it('any other refusal is not retried', async () => {
+  it('the whole charge: one ReverseTransaction', async () => {
+    const fetch = vi.fn(async () => ok());
+    vi.stubGlobal('fetch', fetch);
+    await pelecardAdapter.refund({ ...input, amount: 107.38, whole: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0][0])).toMatch(/ReverseTransaction$/);
+  });
+
+  it('a refusal is final — never retried with the other call', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({ StatusCode: '173', ErrorMessage: 'double transaction.' })));
     vi.stubGlobal('fetch', fetch);
     expect((await pelecardAdapter.refund(input)).status).toBe('failed');
