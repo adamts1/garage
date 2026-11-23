@@ -4,7 +4,7 @@
  * 2026-11-19, trimmed to the fields that matter. Where they disagree with the
  * programmer's manual the sandbox is right — see the header of adapter.ts. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { agorot, attemptParamX, cardTypeOf, pelecardAdapter, entryOf, guardAuth, initBody, paramX, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
+import { agorot, attemptParamX, cardTypeOf, firstPaymentAgorot, pelecardAdapter, readCharge, reportTime, terminalBody, entryOf, guardAuth, initBody, paramX, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
 import { ProviderAuthError } from '../provider.ts';
 
 const PAYMENT = '6b1f3c1e-2d4a-4c55-9b0e-0f3a3e7c9a11';
@@ -220,5 +220,73 @@ describe('refund call', () => {
   it('a rejected login trips the breaker', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ StatusCode: '501' }))));
     await expect(pelecardAdapter.refund(input)).rejects.toBeInstanceOf(ProviderAuthError);
+  });
+});
+
+describe('straight to the terminal', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const creds = { terminal: 't', user: 'u', password: 'p' };
+  const charge = { credentials: creds, paymentId: '9a04aca5-3339-42cb-949f-ed0f80b1104d', amount: 130.98, installments: 1, label: 'GAR-137', posShopNo: '001' };
+
+  it('one payment: DebitRegularType to the shop number, no card', () => {
+    const { method, body } = terminalBody(creds, charge);
+    expect(method).toBe('DebitRegularType');
+    expect(body).toMatchObject({ shopNumber: '001', total: '13098', currency: '1', paramX: 'gar1379a04aca5', creditCard: '', cvv2: '' });
+    expect(body).not.toHaveProperty('paymentsNumber');
+  });
+
+  it('installments: DebitPaymentsType, the remainder on the first payment', () => {
+    const { method, body } = terminalBody(creds, { ...charge, installments: 7 });
+    expect(method).toBe('DebitPaymentsType');
+    expect(body).toMatchObject({ paymentsNumber: '7', firstPayment: '1872' }); // 18.72 + 6 × 18.71, as Pelecard split it
+    expect(firstPaymentAgorot(118, 6)).toBe(1970);
+  });
+
+  const approval = { ShvaResult: '000', DebitTotal: '13098', TotalPayments: '1', DebitApproveNumber: '5299678', PelecardTransactionId: '3206470029', Uid: '26112...', CardHebName: 'יורוקרד מסטרקרד', PanEntryMode: '05' };
+
+  it('an approval for the amount is paid, read off the terminal', () => {
+    expect(readCharge(approval, { amount: 130.98, installments: 1 }, null))
+      .toMatchObject({ status: 'paid', approvalNumber: '5299678', providerRef: '3206470029', cardBrand: 'יורוקרד מסטרקרד', entry: 'terminal' });
+  });
+
+  it('a refusal is declined — the sandbox\'s own answer with no device behind the shop', () => {
+    const v = readCharge({ ShvaResult: '508', ShvaResultEmvMessage: 'תאריך תוקף לא במבנה תקין ,Pan,expirationDate' }, { amount: 1, installments: 1 }, null);
+    expect(v.status).toBe('declined');
+    expect(readCharge({ ShvaResult: '009' }, { amount: 1, installments: 1 }, null)).toMatchObject({ status: 'declined', message: expect.stringContaining('אין תקשורת עם המסוף') });
+  });
+
+  it('a wrong amount or plan is never paid', () => {
+    expect(readCharge(approval, { amount: 131, installments: 1 }, null).status).toBe('pending');
+    expect(readCharge(approval, { amount: 130.98, installments: 3 }, null).status).toBe('pending');
+  });
+
+  it('the report writes the result as "0" — still an approval', () => {
+    expect(readCharge({ ...approval, ShvaResult: '0' }, { amount: 130.98, installments: 1 }, null).status).toBe('paid');
+  });
+
+  it('the report window is Israel time, as dd/MM/yyyy HH:mm', () => {
+    expect(reportTime(new Date('2026-11-20T07:50:00Z'))).toBe('20/11/2026 09:50');
+  });
+
+  it('no answer from the terminal call is pending, never declined', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('timeout'); }));
+    expect((await pelecardAdapter.chargeOnTerminal!(charge)).status).toBe('pending');
+  });
+
+  it('a lost answer is found by its own ParamX in the report', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ StatusCode: '000', ResultData: [
+      { ...approval, ShvaResult: '0', AdditionalDetailsParamX: 'gar137ffffffff' },
+      { ...approval, ShvaResult: '0', AdditionalDetailsParamX: 'gar1379a04aca5', DebitApproveNumber: '7777777' },
+    ] })));
+    vi.stubGlobal('fetch', fetch);
+    const v = await pelecardAdapter.findAttempt!({ ...charge, at: '2026-11-20T07:50:00Z' });
+    expect(v).toMatchObject({ status: 'paid', approvalNumber: '7777777' });
+    const [url] = fetch.mock.calls[0] as unknown as [string];
+    expect(url).toMatch(/\/services\/GetCompleteTransData$/);
+  });
+
+  it('not in the report yet: pending', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ StatusCode: '000', ResultData: [] }))));
+    expect((await pelecardAdapter.findAttempt!({ ...charge, at: '2026-11-20T07:50:00Z' })).status).toBe('pending');
   });
 });

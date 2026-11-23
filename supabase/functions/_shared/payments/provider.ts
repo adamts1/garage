@@ -136,8 +136,37 @@ export type RefundResult =
   | { status: 'failed'; message: string; raw: unknown }
   | { status: 'unknown'; message: string; raw: unknown };
 
+/** A charge sent straight to the garage's terminal — no hosted page. */
+export interface TerminalChargeInput {
+  credentials: PaymentCredentials;
+  paymentId: string;
+  amount: number;
+  installments: number;
+  label: string;
+  posShopNo: string;
+}
+
+/** Finding an attempt again after its answer was lost: by the attempt's own
+ *  reference, among the provider's transactions around when it was made. */
+export interface FindAttemptInput {
+  credentials: PaymentCredentials;
+  paymentId: string;
+  label: string;
+  amount: number;
+  installments: number;
+  /** When the attempt was made, ISO. */
+  at: string;
+}
+
 export interface PaymentProvider {
   start(input: StartInput): Promise<StartedPayment>;
   verify(input: VerifyInput): Promise<Verdict>;
   refund(input: RefundInput): Promise<RefundResult>;
+  /** Charges on the terminal and waits for the customer. A provider without
+   *  a direct route leaves it out, and the terminal is reached through its
+   *  page instead. 'pending' = no answer: the attempt is found later with
+   *  findAttempt, never assumed either way. */
+  chargeOnTerminal?(input: TerminalChargeInput): Promise<Verdict>;
+  /** 'pending' when the attempt is not (yet) in the provider's records. */
+  findAttempt?(input: FindAttemptInput): Promise<Verdict>;
 }

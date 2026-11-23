@@ -208,5 +208,51 @@ describe('card payments through the provider', () => {
     expect(screen.getByRole('alert').textContent).toContain('הסליקה הושבתה');
     expect((screen.getByRole('button', { name: 'המשך' }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  describe('straight to the terminal', () => {
+    const toTerminalCharge = async () => {
+      cardPaymentsActive.mockResolvedValue({ ...ACTIVE, terminal: true });
+      open();
+      fireEvent.click(screen.getByText('כרטיס אשראי'));
+      await act(async () => {});
+      fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+      fireEvent.click(screen.getByRole('button', { name: 'המשך' }));
+    };
+
+    it('waits for the card on the terminal, then shows the approval — no page', async () => {
+      let answer!: (v: unknown) => void;
+      startCardPayment.mockReturnValue(new Promise((r) => { answer = r; }));
+      await toTerminalCharge();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /חייב באשראי/ })); });
+      expect(screen.getByText(/החיוב נשלח למסוף/)).toBeTruthy();
+      expect(screen.queryByTitle('דף תשלום מאובטח')).toBeNull();
+      await act(async () => { answer({ payment: payment({ installments: 1 }), url: null, recovered: false, direct: true }); });
+      expect(screen.getByText('התשלום התקבל!')).toBeTruthy();
+      expect(screen.getByText('5290198')).toBeTruthy();
+    });
+
+    it('a refusal on the terminal offers the provider\'s page instead', async () => {
+      startCardPayment
+        .mockResolvedValueOnce({ payment: payment({ status: 'declined', message: 'אין תקשורת עם המסוף' }), url: null, recovered: false, direct: true })
+        .mockResolvedValueOnce({ payment: payment({ status: 'pending' }), url: 'https://pay.example/p', recovered: false, direct: false });
+      await toTerminalCharge();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /חייב באשראי/ })); });
+      expect(screen.getByRole('alert').textContent).toContain('אין תקשורת עם המסוף');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /דרך דף התשלום/ })); });
+      expect(startCardPayment.mock.calls[1][4]).toMatchObject({ terminal: true, viaPage: true });
+      expect(screen.getByTitle('דף תשלום מאובטח')).toBeTruthy();
+    });
+
+    it('a lost answer is looked up, and says not to charge again', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      startCardPayment.mockResolvedValue({ payment: payment({ status: 'pending', approvalNumber: null }), url: null, recovered: false, direct: true });
+      verifyCardPayment.mockResolvedValueOnce(payment());
+      await toTerminalCharge();
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /חייב באשראי/ })); });
+      expect(screen.getByText(/אל תחייב שוב/)).toBeTruthy();
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(screen.getByText('התשלום התקבל!')).toBeTruthy();
+    });
+  });
 });
 

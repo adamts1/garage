@@ -102,10 +102,14 @@ export class CardStartError extends Error {
 
 export type CardStart =
   /** A page to show. */
-  | { payment: CardPayment; url: string; recovered: false }
+  | { payment: CardPayment; url: string; recovered: false; direct: false }
   /** No page: the customer already paid on an earlier attempt that no
    *  document records yet. This IS the payment — nothing new was charged. */
-  | { payment: CardPayment; url: null; recovered: true };
+  | { payment: CardPayment; url: null; recovered: true; direct: false }
+  /** Charged straight on the terminal: the call waited for the customer, and
+   *  this is the outcome — paid, declined, or pending when the answer was
+   *  lost (verify then finds it in the provider's records). */
+  | { payment: CardPayment; url: null; recovered: false; direct: true };
 
 /** Opens a hosted payment page for `amount` on a ticket — or hands back a
  *  payment already taken on it (see CardStart). The server charges the bill's
@@ -120,7 +124,7 @@ export const startCardPayment = async (
   amount: number,
   installments: number,
   returnOrigin: string,
-  opts: { claimed?: readonly string[]; force?: boolean; terminal?: boolean } = {},
+  opts: { claimed?: readonly string[]; force?: boolean; terminal?: boolean; viaPage?: boolean } = {},
 ): Promise<CardStart> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
@@ -130,6 +134,9 @@ export const startCardPayment = async (
       action: 'start', ticket_id: t.id, amount, installments, return_origin: returnOrigin,
       claimed: opts.claimed ?? [], force: opts.force === true,
       mode: opts.terminal ? 'terminal' : 'page',
+      /* On the terminal, but through the provider's page and its terminal
+         button — the fallback when the direct call did not work. */
+      ...(opts.viaPage ? { via: 'page' } : {}),
     },
   });
   if (error) {
@@ -140,9 +147,10 @@ export const startCardPayment = async (
     }
     throw await invokeError(error);
   }
+  if (data.direct) return { payment: rowToPayment(data.payment), url: null, recovered: false, direct: true };
   return data.url
-    ? { payment: rowToPayment(data.payment), url: data.url, recovered: false }
-    : { payment: rowToPayment(data.payment), url: null, recovered: true };
+    ? { payment: rowToPayment(data.payment), url: data.url, recovered: false, direct: false }
+    : { payment: rowToPayment(data.payment), url: null, recovered: true, direct: false };
 };
 
 /** Asks the server — which asks the provider — what became of a payment. */
