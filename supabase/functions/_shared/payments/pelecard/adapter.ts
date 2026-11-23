@@ -320,7 +320,7 @@ const REFUND_REFUSALS: Record<string, string> = {
 };
 
 export function readRefund(data: unknown):
-  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string } {
+  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string; code: string } {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
   guardAuth(d?.StatusCode);
@@ -331,7 +331,7 @@ export function readRefund(data: unknown):
   }
   const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
   const said = REFUND_REFUSALS[code] ?? (bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused');
-  return { ok: false, message: `${said} (${code || '?'})` };
+  return { ok: false, message: `${said} (${code || '?'})`, code };
 }
 
 // ---------------------------------------------------------------- terminal, direct
@@ -527,21 +527,41 @@ export const pelecardAdapter: PaymentProvider = {
 
   async refund(input: RefundInput): Promise<RefundResult> {
     const c = readCreds(input.credentials);
-    if (!input.providerUid) {
-      return { status: 'failed', message: 'the charge carries no Pelecard Uid to reverse', raw: null };
+
+    /* One call, chosen by what is being returned:
+         the whole charge, nothing returned from it before → ReverseTransaction
+           (before the broadcast it voids the charge, after it it refunds it);
+         any part of it — including "the rest" after an earlier part →
+           RefundByID with the amount.
+       ReverseTransaction refuses a part of a charge still before its
+       broadcast: it acts as a cancel, all or nothing (999 "NewAmount must set
+       as original amount in Cancel operation", staging, 2026-11-23).
+       RefundByID took a part both the same day and after the broadcast
+       (sandbox, 2026-11-20). */
+    let method: string;
+    let body: Record<string, unknown>;
+    if (input.whole) {
+      if (!input.providerUid) {
+        return { status: 'failed', message: 'the charge carries no Pelecard Uid to reverse', raw: null };
+      }
+      method = 'ReverseTransaction';
+      body = {
+        uid: input.providerUid,
+        debittrxid: input.providerRef,
+        newamount: String(agorot(input.amount)),
+        newparamx: paramX(`refund${input.paymentId}`),
+      };
+    } else {
+      method = 'RefundByID';
+      body = { debitTrxId: input.providerRef, NewAmount: String(agorot(input.amount)) };
     }
-    const answer = await service(c, 'ReverseTransaction', {
-      uid: input.providerUid,
-      debittrxid: input.providerRef,
-      newamount: String(agorot(input.amount)),
-      newparamx: paramX(`refund${input.paymentId}`),
-    });
+
+    const answer = await service(c, method, body);
     if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
     const refund = readRefund(answer);
-    const raw = scrub(answer);
     return refund.ok
-      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw }
-      : { status: 'failed', message: refund.message, raw };
+      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw: scrub(answer) }
+      : { status: 'failed', message: refund.message, raw: scrub(answer) };
   },
 };
 
