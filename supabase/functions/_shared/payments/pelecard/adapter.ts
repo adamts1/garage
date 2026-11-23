@@ -313,6 +313,11 @@ export function readTransaction(
 const approvalOf = (r: any): string | null =>
   String(r?.DebitApproveNumber ?? r?.AuthManpikNo ?? '').trim() || null;
 
+/** ReverseTransaction refusing a part of a charge that is still before its
+ *  broadcast — where it acts as a cancel, which takes the whole sum only. */
+export const isPartialCancelRefusal = (r: { ok: boolean; code?: string; message?: string }) =>
+  !r.ok && r.code === '999' && /original amount in cancel/i.test(r.message ?? '');
+
 /* What the advisor is told when Pelecard says no — in Hebrew, for the ones
    that have happened. The code stays on the end for whoever calls Pelecard. */
 const REFUND_REFUSALS: Record<string, string> = {
@@ -320,7 +325,7 @@ const REFUND_REFUSALS: Record<string, string> = {
 };
 
 export function readRefund(data: unknown):
-  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string } {
+  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string; code: string } {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
   guardAuth(d?.StatusCode);
@@ -331,7 +336,7 @@ export function readRefund(data: unknown):
   }
   const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
   const said = REFUND_REFUSALS[code] ?? (bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused');
-  return { ok: false, message: `${said} (${code || '?'})` };
+  return { ok: false, message: `${said} (${code || '?'})`, code };
 }
 
 // ---------------------------------------------------------------- terminal, direct
@@ -538,10 +543,25 @@ export const pelecardAdapter: PaymentProvider = {
     });
     if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
     const refund = readRefund(answer);
-    const raw = scrub(answer);
-    return refund.ok
-      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw }
-      : { status: 'failed', message: refund.message, raw };
+    if (refund.ok) {
+      return { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw: scrub(answer) };
+    }
+
+    /* Before the nightly broadcast ReverseTransaction is a cancel, and a cancel
+       is all of the charge or nothing: a part of it is refused with 999
+       "NewAmount must set as original amount in Cancel operation" (staging,
+       2026-11-23) — a definite no, nothing moved. A part of a charge made today
+       goes back as a refund instead: RefundByID took exactly that on the
+       sandbox (10 of a same-day charge in 7 installments, 2026-11-20). */
+    if (isPartialCancelRefusal(refund)) {
+      const again = await service(c, 'RefundByID', { debitTrxId: input.providerRef, NewAmount: String(agorot(input.amount)) });
+      if (again == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
+      const second = readRefund(again);
+      return second.ok
+        ? { status: 'refunded', kind: 'refund', providerRefundId: second.id, approvalNumber: second.approval, raw: scrub(again) }
+        : { status: 'failed', message: second.message, raw: scrub(again) };
+    }
+    return { status: 'failed', message: refund.message, raw: scrub(answer) };
   },
 };
 

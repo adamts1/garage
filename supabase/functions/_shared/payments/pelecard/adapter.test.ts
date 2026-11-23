@@ -299,3 +299,32 @@ describe('straight to the terminal', () => {
     expect((await pelecardAdapter.findAttempt!({ ...charge, at: '2026-11-20T07:50:00Z' })).status).toBe('pending');
   });
 });
+
+describe('a part of a charge made today', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const input = {
+    credentials: { terminal: '0882577012', user: 'u', password: 'p' },
+    paymentId: PAYMENT, providerRef: '3206881822', providerUid: '26112313122808825777208',
+    chargedAmount: 107.38, amount: 20, whole: false, entry: null,
+  };
+
+  it('ReverseTransaction refuses it as a cancel (999, staging) — so it goes back as RefundByID', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ StatusCode: '999', ErrorMessage: 'Cannot process request - NewAmount must set as original amount in Cancel operation' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ StatusCode: '000', ResultData: { ShvaResult: '000', PelecardTransactionId: '3207000001', DebitApproveNumber: '5300001', DebitTotal: '2000' } })));
+    vi.stubGlobal('fetch', fetch);
+    const r = await pelecardAdapter.refund(input);
+    expect(r).toMatchObject({ status: 'refunded', providerRefundId: '3207000001' });
+    const urls = fetch.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toMatch(/ReverseTransaction$/);
+    expect(urls[1]).toMatch(/RefundByID$/);
+    expect(JSON.parse((fetch.mock.calls[1][1] as { body: string }).body)).toMatchObject({ debitTrxId: '3206881822', NewAmount: '2000' });
+  });
+
+  it('any other refusal is not retried', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ StatusCode: '173', ErrorMessage: 'double transaction.' })));
+    vi.stubGlobal('fetch', fetch);
+    expect((await pelecardAdapter.refund(input)).status).toBe('failed');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
