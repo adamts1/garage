@@ -191,6 +191,14 @@ export const cardRefundable = async (
   return left.amount > 0 ? { ...left, unresolved } : null;
 };
 
+/** The drawer left this attempt (cancelled on the page, stopped, expired).
+ *  It stays pending and is still checked before any new charge; it just no
+ *  longer makes the next attempt ask whether it may still be paid. Best
+ *  effort: a failure here costs only that question. */
+export const abandonCardPayment = async (paymentId: string): Promise<void> => {
+  await getClient().functions.invoke('card-payment', { body: { action: 'abandon', payment_id: paymentId } }).catch(() => {});
+};
+
 /** What goes in the receipt's reference field for a card the provider charged. */
 export const cardPaymentReference = (p: CardPayment): string =>
   [p.cardLast4 ? `****${p.cardLast4}` : null, p.approvalNumber ? `אישור ${p.approvalNumber}` : null]

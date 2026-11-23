@@ -1,5 +1,5 @@
 import {
-  CardStartError, DEFAULT_CARD_SETTINGS, cardPaymentReference, cardPaymentsActive, installmentsAllowed, money,
+  CardStartError, DEFAULT_CARD_SETTINGS, abandonCardPayment, cardPaymentReference, cardPaymentsActive, installmentsAllowed, money,
   startCardPayment, verifyCardPayment, type CardPayment, type CardSettings, type PayMethod,
   type PaymentPart,
 } from '@garage/shared';
@@ -371,6 +371,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
   const leaveCard = async (note: string) => {
     const p = await check();
     if (p?.status === 'paid' || p?.status === 'declined') return;
+    /* Left, not decided: still pending at the server, still re-checked before
+       the next charge — but the next attempt need not ask about it. */
+    if (card) void abandonCardPayment(card.payment.id);
     setCard(null);
     setState('form');
     setCardNote(note);

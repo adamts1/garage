@@ -223,7 +223,10 @@ Deno.serve(async (req) => {
       }
       const unclaimed = settled.find((r) => r.status === 'paid' && !claimed.has(r.id));
       if (unclaimed) return json({ payment: publicOf(unclaimed), url: null, recovered: true });
-      const open = settled.find((r) => r.status === 'pending'
+      /* Still open: pending, recent, and not abandoned. An abandoned attempt
+         was re-checked just above like any other — paid would have been
+         handed back — but nobody is still paying on it, so it asks nothing. */
+      const open = settled.find((r) => r.status === 'pending' && !r.abandoned_at
         && Date.now() - new Date(r.created_at).getTime() < PAGE_TTL_MS);
       if (open && body.force !== true) {
         return json({ error: 'an earlier payment page on this ticket may still be completed', code: 'payment_open', payment: publicOf(open) }, 409);
@@ -389,6 +392,24 @@ Deno.serve(async (req) => {
         if (err instanceof PaymentsSuspended) return json({ error: message, code: 'payments_suspended' }, 423);
         return json({ error: message }, 502);
       }
+    }
+
+    // ============================ ABANDON ============================
+    /* The drawer left this attempt: cancelled on the provider's page, stopped
+       by the advisor, or expired. Nothing about the money changes — it stays
+       pending and is still checked with the provider before any new charge on
+       the ticket. It only stops the "an earlier page may still be paid?"
+       question, which the advisor has just answered. */
+    if (action === 'abandon') {
+      const paymentId = body.payment_id as string;
+      if (!paymentId) return json({ error: 'payment_id required' }, 400);
+      const { data: mine } = await userClient.from('card_payments').select('id').eq('id', paymentId).maybeSingle();
+      if (!mine) return json({ error: 'payment not found in your garage' }, 404);
+      const { error } = await admin.from('card_payments')
+        .update({ abandoned_at: new Date().toISOString() })
+        .eq('id', paymentId).eq('status', 'pending').is('abandoned_at', null);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
     }
 
     // ============================ VERIFY ============================
