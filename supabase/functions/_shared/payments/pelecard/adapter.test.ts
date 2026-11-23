@@ -4,7 +4,7 @@
  * 2026-11-19, trimmed to the fields that matter. Where they disagree with the
  * programmer's manual the sandbox is right — see the header of adapter.ts. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { agorot, cardTypeOf, pelecardAdapter, entryOf, guardAuth, initBody, paramX, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
+import { agorot, attemptParamX, cardTypeOf, pelecardAdapter, entryOf, guardAuth, initBody, paramX, readInit, readRefund, readTransaction, scrub } from './adapter.ts';
 import { ProviderAuthError } from '../provider.ts';
 
 const PAYMENT = '6b1f3c1e-2d4a-4c55-9b0e-0f3a3e7c9a11';
@@ -48,13 +48,20 @@ describe('init', () => {
     const base = { credentials: {}, paymentId: PAYMENT, amount: 350.5, installments: 1, purpose: 'charge' as const, label: 'Ticket ABC-123', returnUrl: 'https://x/pay-return.html', posShopNo: null };
     const plain = initBody(creds, base);
     expect(plain.Total).toBe(35050);
-    expect(plain.ParamX).toBe('ticketabc123');
+    expect(plain.ParamX).toBe('ticketabc126b1f3c1e'); // 19: the ticket part gives way, the attempt code does not
     expect(plain.UserKey).toBe(PAYMENT);
     expect(plain.GoodURL).toBe('https://x/pay-return.html?r=good');
     expect(plain).not.toHaveProperty('EmvPinpad');
     expect(plain).toMatchObject({ MaxPayments: 1, MinPayments: 1 });
     expect(initBody(creds, { ...base, installments: 6 })).toMatchObject({ MaxPayments: 6, MinPayments: 6, MinPaymentsForCredit: 99 });
     expect(initBody(creds, { ...base, posShopNo: '7' })).toMatchObject({ EmvPinpad: 'True', ShopNo: '7' });
+  });
+
+  it('each attempt has its own ParamX: the ticket, then the attempt', () => {
+    expect(attemptParamX('GAR-137', '9a04aca5-3339-42cb-949f-ed0f80b1104d')).toBe('gar1379a04aca5');
+    const long = attemptParamX('GARAGE-1234567890123', '9a04aca5-3339-42cb-949f-ed0f80b1104d');
+    expect(long).toHaveLength(19);
+    expect(long.endsWith('9a04aca5')).toBe(true);
   });
 
   it('agorot round, ParamX caps at 19', () => {

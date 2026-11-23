@@ -88,6 +88,17 @@ export function guardAuth(code: unknown): void {
    19 characters of lowercase letters and digits; anything else is refused. */
 export const paramX = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 19);
 
+/* The ParamX of one attempt: the ticket, for a person reading Pelecard's back
+   office, then the first 8 characters of the attempt's own id, so a report
+   (GetCompleteTransData) can be searched for exactly this attempt — a ticket
+   may have several (a declined card, a part payment). The ticket part is
+   shortened to fit; the attempt code never is.  GAR-137 + 9a04aca5-… →
+   "gar1379a04aca5". */
+export const attemptParamX = (label: string, attemptId: string): string => {
+  const code = attemptId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+  return paramX(label).slice(0, 19 - code.length) + code;
+};
+
 // ---------------------------------------------------------------- start
 
 export function initBody(c: Creds, input: StartInput): Record<string, unknown> {
@@ -105,7 +116,7 @@ export function initBody(c: Creds, input: StartInput): Record<string, unknown> {
     Currency: '1',
     Total: agorot(input.amount),
     UserKey: input.paymentId,
-    ParamX: paramX(input.label),
+    ParamX: attemptParamX(input.label, input.paymentId),
     Language: 'HE',
     /* Exactly the number chosen in our drawer: min = max leaves the page
        nothing to choose. Credit (interest) plans start above anything we
