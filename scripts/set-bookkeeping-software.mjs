@@ -28,7 +28,9 @@
  * --list prints every garage with its current setting and changes nothing.
  */
 
-import { createClient } from '@supabase/supabase-js';
+/* The write lives in packages/ops (onboarding/billing.ts), shared with the
+   admin console's onboarding form. This file is the command line. */
+import { checkedClient, projectRefOf, setBookkeeping } from '../packages/ops/src/index.ts';
 import { createInterface } from 'node:readline/promises';
 
 const SOFTWARE = {
@@ -55,19 +57,13 @@ if (!url || !serviceKey) die('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (ru
 /* Same two guards as connect-billing.mjs: the anon key is a plausible paste
    mistake, and a production key with a staging URL (or the reverse) is the
    dangerous one. */
-const claims = (key) => {
-  try { return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()); } catch { return null; }
-};
-if (!serviceKey.startsWith('sb_secret_') && claims(serviceKey)?.role !== 'service_role') {
-  die('SUPABASE_SERVICE_ROLE_KEY is not a service_role key — check you did not paste the anon key.');
+let db;
+try {
+  db = checkedClient({ url, serviceKey });
+} catch (e) {
+  die(e.message);
 }
-const projectRef = url.replace(/^https?:\/\//, '').split('.')[0];
-const keyRef = serviceKey.startsWith('sb_secret_') ? null : claims(serviceKey)?.ref;
-if (keyRef && keyRef !== projectRef) {
-  die(`Key/URL mismatch: the key belongs to "${keyRef}" but the URL points at "${projectRef}".`);
-}
-
-const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+const projectRef = projectRefOf(url);
 console.log(`\nProject   ${url.includes('.supabase.co') ? projectRef : url}\n`);
 
 /* ---------- --list: look, change nothing ---------- */
@@ -117,15 +113,10 @@ if (!args.has('yes')) {
   if (answer !== 'yes') die('Not changed.');
 }
 
-const { error: uErr } = await db.from('garage_billing')
-  .update({ bookkeeping_software: software, updated_at: new Date().toISOString() })
-  .eq('garage_id', garageId);
-if (uErr) die(`Could not write: ${uErr.message}`);
-
-/* Read back rather than assume. */
-const { data: after, error: aErr } = await db.from('garage_billing')
-  .select('bookkeeping_software').eq('garage_id', garageId).single();
-if (aErr) die(`Written, but could not read it back: ${aErr.message}`);
-if (after.bookkeeping_software !== software) die(`Read back "${after.bookkeeping_software}" — expected "${software}".`);
+try {
+  await setBookkeeping(db, garageId, { software });
+} catch (e) {
+  die(e.message);
+}
 
 console.log(`\x1b[32m✓\x1b[0m ${garage.name}: bookkeeping software is now ${software}.\n`);

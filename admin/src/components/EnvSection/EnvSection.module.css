@@ -1,0 +1,32 @@
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.local {
+  background: var(--steel);
+}
+
+.staging {
+  background: var(--warn);
+}
+
+.production {
+  background: var(--danger);
+}
+
+.ref {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted-d);
+  direction: ltr;
+  unicode-bidi: isolate;
+}

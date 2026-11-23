@@ -29,7 +29,9 @@
  * plaintext here at setup time.
  */
 
-import { createClient } from '@supabase/supabase-js';
+/* The writes live in packages/ops (onboarding/billing.ts), shared with the
+   admin console's onboarding form. This file is the command line. */
+import { checkedClient, connectBilling, findGarage, projectRefOf } from '../packages/ops/src/index.ts';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -74,50 +76,17 @@ if (vatRate !== undefined && !(vatRate >= 0 && vatRate < 1)) {
   die(`--vat-rate must be a fraction between 0 and 1 (e.g. 0.18), got "${args.get('vat-rate')}"`);
 }
 
-/* A service_role key is a full-access credential and the anon key is a plausible
-   paste mistake — both are JWTs from the same page, differing only in a claim.
-   Decode and check, unless it is an opaque sb_secret_ key (no readable claims;
-   the anon equivalent is sb_publishable_ and cannot be confused with one). */
-const looksLikeServiceRole = (key) => {
-  if (key.startsWith('sb_secret_')) return true;
-  if (key.startsWith('sb_publishable_')) return false;
-  try {
-    const payload = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
-    return payload.role === 'service_role';
-  } catch {
-    return false;
-  }
-};
-
-if (!looksLikeServiceRole(serviceKey)) {
-  die('SUPABASE_SERVICE_ROLE_KEY is not a service_role key — check you did not paste the anon key.');
+/* A service_role key (the anon key is a plausible paste mistake), and one that
+   belongs to the project in the URL (a production key with a staging URL is
+   the dangerous direction). Opaque sb_secret_ keys carry no claims; the
+   printed project ref below is the only guard for those. */
+let db;
+try {
+  db = checkedClient({ url, serviceKey });
+} catch (e) {
+  die(e.message);
 }
-
-/* The dangerous mistake is a production key with a staging URL (or the reverse),
-   then reading the success as confirmation you hit the project you meant. A
-   Supabase JWT carries its project in the `ref` claim, so the mismatch is
-   detectable before anything is written. Opaque sb_secret_ keys carry no claims;
-   the printed project ref below is the only guard for those. */
-const projectRef = url.replace(/^https:\/\//, '').split('.')[0];
-
-const keyProjectRef = (key) => {
-  if (key.startsWith('sb_secret_')) return null;
-  try {
-    return JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).ref ?? null;
-  } catch {
-    return null;
-  }
-};
-
-const keyRef = keyProjectRef(serviceKey);
-if (keyRef && keyRef !== projectRef) {
-  die(
-    `Key/URL mismatch: the key belongs to "${keyRef}" but the URL points at "${projectRef}". ` +
-      'One of them is from the wrong project.',
-  );
-}
-
-const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+const projectRef = projectRefOf(url);
 
 // Printed before anything is written. For an opaque sb_secret_ key this line is
 // the only indication of which database is about to be changed.
@@ -126,63 +95,35 @@ console.log(`Garage    ${garageId}`);
 console.log(`Provider  ${provider}`);
 console.log(`Issuing   ${active ? 'ON' : 'off (credentials stored, issuing disabled)'}\n`);
 
+const attempt = async (work) => {
+  try {
+    return await work();
+  } catch (e) {
+    return die(e.message);
+  }
+};
+
 /* ---------- 0. the garage must exist ---------- */
-// A typo'd garage-id would otherwise create billing rows for a garage that is
-// not there (FKs would reject it, but the message is clearer here).
-{
-  const { data, error } = await db.from('garages').select('id,name').eq('id', garageId).maybeSingle();
-  if (error) die(`Could not look up the garage: ${error.message}`);
-  if (!data) die(`No garage with id ${garageId} in ${projectRef}.`);
-  console.log(`\x1b[32m✓\x1b[0m garage found      ${data.name}`);
-}
+// A typo'd garage-id would otherwise fail on a foreign key, less clearly.
+const garage = await attempt(() => findGarage(db, garageId));
+console.log(`\x1b[32m✓\x1b[0m garage found      ${garage.name}`);
 
-/* ---------- 1. the credentials bag (secret) ---------- */
-// Provider-agnostic jsonb: iCount is { cid, token }; another provider is whatever
-// its adapter reads (see supabase/functions/_shared/provider.ts).
-const credentials = provider === 'icount' ? { cid, token } : { token };
+/* ---------- 1–3. credentials, settings, and a read-back ----------
+   Provider-agnostic credentials: iCount is { cid, token }; another provider is
+   whatever its adapter reads (see supabase/functions/_shared/provider.ts). The
+   token comes back as its last four characters only. */
+const summary = await attempt(() => connectBilling(db, {
+  garageId,
+  provider,
+  credentials: provider === 'icount' ? { cid, token } : { token },
+  vatRate,
+  active,
+}));
 
-{
-  const { error } = await db
-    .from('garage_billing_secrets')
-    .upsert({ garage_id: garageId, credentials, updated_at: new Date().toISOString() },
-      { onConflict: 'garage_id' });
-  if (error) die(`Could not store the credentials: ${error.message}`);
-  console.log(`\x1b[32m✓\x1b[0m credentials stored`);
-}
-
-/* ---------- 2. the operational settings (non-secret) ---------- */
-{
-  const row = { garage_id: garageId, provider, active, updated_at: new Date().toISOString() };
-  if (vatRate !== undefined) row.vat_rate = vatRate;   // else keep the column default / existing value
-  const { error } = await db
-    .from('garage_billing')
-    .upsert(row, { onConflict: 'garage_id' });
-  if (error) die(`Could not write the billing settings: ${error.message}`);
-  console.log(`\x1b[32m✓\x1b[0m billing settings written`);
-}
-
-/* ---------- 3. verify, rather than assume ---------- */
-// Read both back through service_role. The token is confirmed present and its
-// tail shown (never the whole thing), so a wrong paste is visible without the
-// secret ever being logged in full.
-{
-  const { data: cfg, error: cfgErr } = await db
-    .from('garage_billing').select('provider, vat_rate, active').eq('garage_id', garageId).single();
-  if (cfgErr) die(`Verification failed reading garage_billing: ${cfgErr.message}`);
-
-  const { data: sec, error: secErr } = await db
-    .from('garage_billing_secrets').select('credentials').eq('garage_id', garageId).single();
-  if (secErr) die(`Verification failed reading garage_billing_secrets: ${secErr.message}`);
-
-  const c = sec.credentials ?? {};
-  const tail = typeof c.token === 'string' && c.token.length >= 4 ? `••••${c.token.slice(-4)}` : '(missing!)';
-  if (!c.token) die('Stored, but the token came back empty — check the value passed to --token.');
-
-  console.log(`\n\x1b[32mConnected.\x1b[0m`);
-  console.log(`  provider  ${cfg.provider}`);
-  if (provider === 'icount') console.log(`  cid       ${c.cid}`);
-  console.log(`  token     ${tail}`);
-  console.log(`  vat_rate  ${cfg.vat_rate}`);
-  console.log(`  active    ${cfg.active}`);
-  console.log('\n  Test issuing from the ticket billing panel. Rotate the token after go-live.\n');
-}
+console.log(`\n\x1b[32mConnected.\x1b[0m`);
+console.log(`  provider  ${summary.provider}`);
+if (provider === 'icount') console.log(`  cid       ${summary.cid}`);
+console.log(`  token     ${summary.tokenTail}`);
+console.log(`  vat_rate  ${summary.vatRate}`);
+console.log(`  active    ${summary.active}`);
+console.log('\n  Test issuing from the ticket billing panel. Rotate the token after go-live.\n');

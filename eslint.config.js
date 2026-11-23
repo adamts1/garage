@@ -15,13 +15,13 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['src/**/*.{ts,tsx}', 'admin/src/**/*.{ts,tsx}', 'packages/shared/src/**/*.ts', 'mobile/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'admin/src/**/*.{ts,tsx}', 'admin/server/**/*.ts', 'packages/ops/src/**/*.ts', 'packages/shared/src/**/*.ts', 'mobile/**/*.{ts,tsx}'],
     extends: [tseslint.configs.base],
     plugins: { 'react-hooks': reactHooks },
     languageOptions: {
       globals: { ...globals.browser },
       parserOptions: {
-        project: ['./tsconfig.eslint.json', './mobile/tsconfig.json'],
+        project: ['./tsconfig.eslint.json', './admin/tsconfig.json', './packages/ops/tsconfig.json', './mobile/tsconfig.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },

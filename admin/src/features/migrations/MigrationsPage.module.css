@@ -1,0 +1,34 @@
+.cmd {
+  direction: ltr;
+  text-align: left;
+  background: var(--ink);
+  color: var(--sand);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 4px 0 18px;
+  font-size: 13px;
+}
+
+.group {
+  margin: 10px 0;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.list li {
+  padding: 3px 0;
+}
+
+.list code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.muted {
+  color: var(--muted-d);
+}

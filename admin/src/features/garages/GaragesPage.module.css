@@ -1,0 +1,38 @@
+.table td,
+.table th {
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  padding: 6px 4px;
+  text-align: start;
+}
+
+.details h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  color: var(--muted-d);
+}
+
+.details h4:first-child {
+  margin-top: 0;
+}
+
+.members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 15px;
+}
+
+.members li {
+  padding: 3px 0;
+}
+
+.muted {
+  color: var(--muted-d);
+}

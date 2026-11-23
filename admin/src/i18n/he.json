@@ -1,0 +1,287 @@
+{
+  "console": {
+    "title": "קונסול ניהול",
+    "localOnly": "רץ מקומית בלבד",
+    "tabs": {
+      "label": "אזורי הקונסול",
+      "garages": "מוסכים",
+      "onboard": "מוסך חדש",
+      "migrations": "מיגרציות",
+      "functions": "פונקציות",
+      "mobile": "מובייל"
+    },
+    "common": {
+      "reload": "רענון",
+      "loading": "טוען…",
+      "error": "שגיאה: {{message}}",
+      "unknown": "לא ידוע",
+      "yes": "כן",
+      "no": "לא",
+      "copy": "העתקה",
+      "copied": "הועתק",
+      "updated": "עודכן"
+    },
+    "roles": {
+      "admin": "מנהל",
+      "member": "משתמש"
+    },
+    "software": {
+      "rivhit": "ריווחית",
+      "hashavshevet": "חשבשבת"
+    },
+    "docTypes": {
+      "invoice_receipt": "חשבונית מס קבלה",
+      "tax_invoice": "חשבונית מס"
+    },
+    "letterhead": {
+      "printName": "שם להדפסה",
+      "motto": "מוטו",
+      "services": "שירותים",
+      "address": "כתובת",
+      "phone": "טלפון",
+      "fax": "פקס",
+      "licenseNo": "מספר רישיון מוסך",
+      "taxId": "ח״פ / עוסק מורשה"
+    },
+    "services": {
+      "invoicing": "חשבוניות",
+      "payments": "סליקה",
+      "bookkeeping": "הנהלת חשבונות",
+      "notConnected": "לא מחובר",
+      "none": "—",
+      "active": "{{provider}} · פעיל",
+      "activeTerminal": "{{provider}} · פעיל · מסוף",
+      "inactive": "{{provider}} · כבוי",
+      "noCredentials": "{{provider}} · בלי פרטי התחברות",
+      "noCredentialsHint": "יש הגדרות, אבל אין פרטי התחברות. הפקת חשבונית תיכשל.",
+      "suspended": "{{provider}} · מושעה",
+      "suspendedHint": "הספק דחה את פרטי ההתחברות: {{error}}",
+      "installmentsOnly": "בלי ספק · עד {{max}} תשלומים",
+      "installmentsOnlyHint": "רק הגדרות תשלומים לכרטיס שנסלק במסוף של המוסך ונרשם ידנית",
+      "unknown": "לא ידוע",
+      "unknownHint": "העמודה עוד לא קיימת בסביבה הזו",
+      "noSoftware": "לא נבחרה תוכנה",
+      "noSoftwareHint": "ייצוא לרואה החשבון חסום עד שבוחרים תוכנה"
+    },
+    "garages": {
+      "count": "{{count}} מוסכים",
+      "empty": "אין מוסכים בסביבה הזו",
+      "name": "מוסך",
+      "created": "נוצר",
+      "admins": "מנהלים",
+      "memberCount": "משתמשים",
+      "noAdmin": "אין מנהל",
+      "missingTables": "חסרות טבלאות בסביבה הזו, כי המיגרציה שלהן עוד לא הוחלה: {{tables}}",
+      "id": "מזהה",
+      "members": "משתמשים",
+      "noMembers": "אין משתמשים",
+      "lastSignIn": "כניסה אחרונה {{date}}",
+      "letterhead": "נייר מכתבים"
+    },
+    "invoicing": {
+      "provider": "ספק",
+      "active": "פעיל",
+      "credentials": "פרטי התחברות",
+      "stored": "שמורים",
+      "missing": "חסרים",
+      "docType": "סוג מסמך",
+      "vat": "מע״מ"
+    },
+    "bookkeeping": {
+      "software": "תוכנת הנהלת חשבונות",
+      "accountantEmail": "מייל רואה החשבון"
+    },
+    "payments": {
+      "provider": "ספק",
+      "noProvider": "אין",
+      "shopNo": "מסוף",
+      "noTerminal": "אין (הקלדת כרטיס בלבד)",
+      "installments": "תשלומים",
+      "installmentsValue": "עד {{max}}, מ־₪{{min}}",
+      "suspended": "הושעה"
+    },
+    "migrations": {
+      "intro": "כל סביבה מושווית לענף שממנו היא נפרסת ולקבצים שאצלך עכשיו. כדי שההשוואה לענף תהיה עדכנית, הרץ קודם:",
+      "applied": "{{count}} הוחלו · אחרונה {{last}}",
+      "upToDate": "מעודכן",
+      "noBranch": "הענף {{ref}} לא קיים אצלך מקומית, אז אין השוואה אליו.",
+      "pendingFromBranch": "מוזגו ל־{{ref}} ולא הוחלו",
+      "pendingFromTree": "רק בענף שלך, לא הוחלו",
+      "pendingLocal": "בקבצים אצלך ולא הוחלו",
+      "unknown": "הוחלו, אבל אין להן קובץ בענף שלך"
+    },
+    "functions": {
+      "title": "פריסה לפי סביבה",
+      "byHash": "השוואה לפי חתימת הקוד שרץ בפועל",
+      "name": "פונקציה",
+      "between": "בין הסביבות",
+      "same": "אותו קוד",
+      "different": "קוד שונה",
+      "notDeployed": "לא נפרסה",
+      "noSource": "אין קוד במאגר",
+      "unreadable": "לא הצלחתי לקרוא את {{env}}: {{message}}",
+      "versus": "מול {{ref}}",
+      "driftHint": "הורדה של הקוד שרץ והשוואה בייט מול בייט, לוקח כדקה",
+      "check": "בדיקה",
+      "recheck": "בדיקה מחדש",
+      "checking": "בודק…",
+      "allSame": "כל הפונקציות זהות ל־{{ref}}",
+      "liveNoSource": "רצה, אבל אין לה קוד במאגר",
+      "downloadFailed": "לא הצלחתי להוריד",
+      "differsFrom": "שונה מ־{{ref}}",
+      "matchesTree": "(זהה לקבצים אצלך)",
+      "deployWith": "לפרוס את הקוד של {{ref}}:"
+    },
+    "mobile": {
+      "title": "בילדים של המובייל",
+      "base": "מושווה ל־{{base}} בקומיט {{commit}}",
+      "builtNotLive": "מה שמוצג כאן הוא מה שנבנה, לא מה שזמין למשתמשים. EAS לא יודע מה Apple אישרה או באיזה מסלול ב־Google Play הקובץ נמצא.",
+      "platform": "פלטפורמה",
+      "platforms": {
+        "IOS": "iOS",
+        "ANDROID": "אנדרואיד"
+      },
+      "profile": "פרופיל",
+      "version": "גרסה (בילד)",
+      "built": "נבנה",
+      "commit": "קומיט",
+      "state": "מצב",
+      "artifact": "קובץ",
+      "download": "הורדה",
+      "verdicts": {
+        "current": "מעודכן",
+        "behind": "חסרים {{bundled}} שינויים במובייל (מתוך {{total}} קומיטים)",
+        "off-main": "נבנה מקומיט שלא נמצא ב־main",
+        "unknown-commit": "הקומיט לא קיים אצלך",
+        "never-built": "לא נבנה אף פעם"
+      },
+      "laterAttempt": "יש בילד מאוחר יותר במצב {{status}} ({{date}})",
+      "missing": "השינויים שעוד לא נכנסו לבילד:",
+      "howToBuild": "בנייה דרך release.sh, מתוך התיקייה mobile:"
+    },
+    "errors": {
+      "required": "שדה חובה",
+      "email": "כתובת מייל לא תקינה",
+      "confirmEnv": "צריך להקליד בדיוק את שם הסביבה",
+      "vatRate": "אחוז מע״מ בין 0 ל־99",
+      "maxInstallments": "מספר שלם בין 1 ל־36",
+      "installmentsMin": "סכום של 0 ומעלה",
+      "testTerminalOnProduction": "זה מסוף הבדיקות של פלאקארד. בייצור הוא מאושר רק למוסך בדיקות, עם האישור למטה.",
+      "realTerminalNotConfirmed": "זה לא מסוף הבדיקות, והסביבה היא לא ייצור. צריך לאשר למטה שזה מסוף אמיתי.",
+      "passwordTooShort": "לפחות 6 תווים, או ריק כדי שתיווצר סיסמה",
+      "needsInvoicing": "הגדרות הנהלת החשבונות נשמרות רק כשהחשבוניות מחוברות",
+      "activeNeedsProvider": "אי אפשר להפעיל סליקה בלי ספק סליקה"
+    },
+    "onboard": {
+      "env": {
+        "title": "סביבה",
+        "label": "לאיזו סביבה",
+        "production": "ייצור: נוצר מוסך אמיתי עם משתמש אמיתי. חשבוניות שיופקו בו הן מסמכים חוקיים."
+      },
+      "garage": {
+        "title": "המוסך",
+        "name": "שם המוסך",
+        "nameHint": "כמו שיופיע באפליקציה",
+        "letterhead": "נייר מכתבים",
+        "letterheadHint": "מה שמודפס בראש כרטיס העבודה. אפשר להשאיר ריק ולהשלים אחר כך בסקריפט.",
+        "seedCatalog": "להעתיק קטלוג התחלתי (10 עבודות ו־24 חלקים)",
+        "seedCatalogHint": "להדגמות ולבדיקות בלבד. מוסך אמיתי בונה את הקטלוג שלו."
+      },
+      "admin": {
+        "title": "המנהל הראשון",
+        "email": "מייל",
+        "password": "סיסמה",
+        "passwordHint": "אפשר להשאיר ריק, ותיווצר סיסמה שתוצג פעם אחת. משתמש שכבר קיים שומר את הסיסמה שלו."
+      },
+      "invoicing": {
+        "title": "חשבוניות (iCount)",
+        "enable": "לחבר את המוסך ל־iCount",
+        "enableHint": "אפשר גם בהמשך, עם npm run connect-billing",
+        "cid": "מזהה חברה (cid)",
+        "token": "טוקן",
+        "tokenHint": "נשמר בטבלה סגורה. לא יוצג שוב, רק ארבע הספרות האחרונות.",
+        "vatPercent": "מע״מ (%)",
+        "docType": "סוג המסמך",
+        "active": "להפעיל הפקת חשבוניות מיד",
+        "activeHint": "בלי זה, פרטי ההתחברות נשמרים וההפקה כבויה עד שבודקים אותם"
+      },
+      "bookkeeping": {
+        "title": "הנהלת חשבונות",
+        "software": "התוכנה של רואה החשבון",
+        "softwareHint": "כל תוכנה צריכה קבצים אחרים. עד שבוחרים, הייצוא חסום.",
+        "notYet": "עוד לא ידוע",
+        "accountantEmail": "מייל רואה החשבון"
+      },
+      "payments": {
+        "title": "סליקה באשראי",
+        "mode": "סוג",
+        "modes": {
+          "none": "בלי",
+          "installments": "רק הגדרות תשלומים",
+          "pelecard": "פלאקארד"
+        },
+        "modeHints": {
+          "none": "אפשר להוסיף בהמשך, עם npm run connect-payments",
+          "installments": "כרטיס שנסלק במסוף של המוסך ונרשם ידנית, עם מגבלת תשלומים",
+          "pelecard": "סליקה דרך המערכת"
+        },
+        "noCall": "לא מתבצעת פנייה לפלאקארד. סיסמה שגויה נספרת לנעילת החשבון, אז הבדיקה הראשונה היא תשלום אחד מכוון מהאפליקציה.",
+        "terminal": "מספר מסוף",
+        "testTerminal": "זה מסוף הבדיקות: מאשר כרטיסים, לא מעביר כסף",
+        "user": "שם משתמש",
+        "password": "סיסמה",
+        "shopNo": "מספר עמדה (ShopNo)",
+        "shopNoHint": "למסוף פיזי. ריק: הקלדת כרטיס בלבד.",
+        "allowTestTerminal": "זה מוסך בדיקות בייצור, לאשר את מסוף הבדיקות",
+        "allowTestTerminalHint": "במוסך אמיתי זה יסמן כ״שולם״ עבודות שלא שולמו",
+        "realTerminal": "זה מסוף אמיתי",
+        "realTerminalHint": "בסביבה שאינה ייצור, כדי לא להחליף בטעות בין מסוף בדיקות למסוף חי",
+        "active": "להפעיל סליקה מיד",
+        "activeHint": "בלי זה, הפרטים נשמרים והסליקה כבויה",
+        "maxInstallments": "מקסימום תשלומים",
+        "maxInstallmentsHint": "1 מבטל תשלומים",
+        "installmentsMin": "סכום מינימלי לתשלומים (₪)"
+      },
+      "confirm": {
+        "title": "אישור",
+        "into": "ייווצר ב:",
+        "type": "להקליד {{env}} כדי לאשר",
+        "fixErrors": "יש שדות לתקן למעלה",
+        "submit": "יצירת המוסך",
+        "working": "יוצר…"
+      },
+      "steps": {
+        "garage": "יצירת המוסך \"{{name}}\" עם נייר המכתבים",
+        "user": "יצירת המשתמש {{email}}, או שימוש בקיים",
+        "membership": "שיוך המשתמש למוסך כמנהל",
+        "catalog": "העתקת הקטלוג ההתחלתי",
+        "invoicingOn": "חיבור ל־iCount, הפקה פעילה",
+        "invoicingOff": "חיבור ל־iCount, הפקה כבויה",
+        "bookkeeping": "הגדרות הנהלת חשבונות",
+        "paymentsOn": "חיבור לפלאקארד, סליקה פעילה",
+        "paymentsOff": "חיבור לפלאקארד, סליקה כבויה",
+        "paymentsInstallments": "הגדרות תשלומים, בלי ספק סליקה",
+        "verify": "בדיקה שהמשתמש משויך למוסך"
+      },
+      "stepsDone": {
+        "garage": "המוסך נוצר",
+        "user": "המשתמש",
+        "membership": "שיוך כמנהל",
+        "catalog": "קטלוג התחלתי",
+        "invoicing": "חשבוניות",
+        "bookkeeping": "הנהלת חשבונות",
+        "payments": "סליקה",
+        "verify": "בדיקה"
+      },
+      "result": {
+        "ok": "המוסך מוכן",
+        "failed": "היצירה נעצרה באמצע",
+        "partial": "המוסך כבר נוצר. אל תריץ שוב את הטופס, זה ייצור מוסך שני. את מה שנשאר משלימים עם הסקריפטים ועם המזהה שלמטה.",
+        "another": "מוסך נוסף",
+        "existingUser": "משתמש קיים, הסיסמה שלו לא השתנתה",
+        "chosenPassword": "הסיסמה שהוקלדה",
+        "passwordOnce": "הסיסמה מוצגת עכשיו בלבד ולא נשמרת בשום מקום. למסור אותה ולבקש להחליף."
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@
 import {
   environment,
   environmentDrift,
-} from '../packages/ops/src/index.mjs';
+} from '../packages/ops/src/index.ts';
 
 const c = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`,
@@ -47,7 +47,7 @@ try {
 }
 const gitRef = args.get('ref') ?? env.gitRef;
 
-/* The comparison itself lives in packages/ops (functions.mjs), shared with the
+/* The comparison itself lives in packages/ops (functions.ts), shared with the
    admin console. This file only prints it. */
 const main = async () => {
   let report;

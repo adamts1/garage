@@ -14,8 +14,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    /* No ambient @types: @types/node is installed for packages/ops, and its
+       globals (process, Buffer) must not typecheck in browser code. */
+    "types": []
   },
-  "include": ["src", "admin/src"],
+  "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
