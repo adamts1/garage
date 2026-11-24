@@ -210,40 +210,6 @@ async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: str
 
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
-/* A line is priced BEFORE VAT and the provider adds the VAT, so the gross a
-   customer sees is never chosen directly — it is whatever subtotal + round(
-   subtotal × rate) lands on. At 18% those grosses step in jumps with gaps
-   between them, and ₪100.00 is a gap: ₪84.75 grosses to ₪100.01, ₪84.74 to
-   ₪99.99, and nothing prices to ₪100.00 exactly.
-
-   Storing the amount asked for while the provider prints another is the one
-   outcome worth ruling out — the row and the document would disagree, and every
-   sum built on the row would be wrong by the difference. So a credit is snapped
-   to a gross that can actually be issued: closest to what was asked, ties to
-   the lower, and never above `cap`. An agora short is a rounding artefact; an
-   agora over is money the garage did not agree to hand back, and on a final
-   credit it is a sum of notes larger than the invoice they credit.
-
-   Mirrored in packages/shared/src/invoices.ts so the dialog can name the real
-   figure. This copy is the authoritative one: it works from the stored invoice,
-   not from an amount a client sent. */
-function issuableCredit(requested: number, vatRate: number, cap: number):
-  { subtotal: number; vat: number; total: number } | null {
-  const start = round2(requested / (1 + vatRate));
-  let best: { subtotal: number; vat: number; total: number } | null = null;
-  for (let step = -2; step <= 2; step++) {
-    const subtotal = round2(start + step / 100);
-    if (subtotal <= 0) continue;
-    const vat = round2(subtotal * vatRate);
-    const total = round2(subtotal + vat);
-    if (total <= 0 || total > cap) continue;
-    if (!best || Math.abs(total - requested) < Math.abs(best.total - requested) - 1e-9) {
-      best = { subtotal, vat, total };
-    }
-  }
-  return best;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -991,17 +957,16 @@ Deno.serve(async (req) => {
 
       /* A full credit of an untouched invoice copies its own lines, so the two
          documents are the same money written twice — no rounding to argue
-         about later. Anything else is one line for the amount agreed, with the
-         reason on it, priced pre-VAT the way every other line is: the provider
-         adds VAT, and what the customer gets back is the gross typed in. */
+         about later. Anything else is one line for exactly the amount agreed,
+         VAT included: the line is sent VAT-inclusive and the provider takes
+         the VAT out of it, so ₪10.00 is ₪10.00 (8.47 + 1.53), not the 9.99 or
+         10.01 a pre-VAT price would land on. What is stored is what the
+         provider issues: the net to the agora, the VAT as the difference. */
       const untouched = full && Number(creditedSoFar ?? 0) === 0;
+      const exactNet = round2(requested / (1 + vatRate));
       const priced = untouched
         ? { subtotal: Number(inv.subtotal), vat: Number(inv.vat), total: Number(inv.total) }
-        : issuableCredit(requested, vatRate, remaining);
-      if (!priced) {
-        await release('no issuable amount');
-        return json({ error: 'no credit can be issued for that amount' }, 400);
-      }
+        : { subtotal: exactNet, vat: round2(requested - exactNet), total: requested };
       const { subtotal, vat, total } = priced;
 
       /* ---- money back to the card, BEFORE the document ----
@@ -1023,7 +988,7 @@ Deno.serve(async (req) => {
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
             description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
-        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
+        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
 
       const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({

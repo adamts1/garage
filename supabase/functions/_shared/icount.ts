@@ -154,9 +154,14 @@ async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
    collapses ordinary ones; the mark because it may trim even those, and then
    the part is still told apart from the work. */
 const PART_INDENT = '\u00A0'.repeat(6) + '◦ ';
-const icountItems = (items: InvoiceItem[]) => items.map(({ indent, ...item }) => (
-  indent ? { ...item, description: `${PART_INDENT}${item.description}` } : item
-));
+const icountItems = (items: InvoiceItem[]) => items.map(({ indent, unitpriceIncVat, ...item }) => {
+  const line = indent ? { ...item, description: `${PART_INDENT}${item.description}` } : item;
+  /* A VAT-inclusive price replaces the pre-VAT one: iCount takes the VAT out of
+     it, so the document comes to exactly that sum. */
+  if (unitpriceIncVat == null) return line;
+  const { unitprice: _pre, ...rest } = line;
+  return { ...rest, unitprice_incvat: unitpriceIncVat };
+});
 
 /* The document's free-text remark — where the car, its mileage and its dates
    go, since iCount has no fields of its own for them.
