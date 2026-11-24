@@ -24,6 +24,10 @@ const listInvoices = vi.fn();
    else. Admin by default here; the last case below turns it off. */
 const isGarageAdmin = vi.fn(() => true);
 
+/* Cards charged for the ticket that no document records — none, unless a
+   test says otherwise. */
+const unclaimedCardPayments = vi.fn(async (): Promise<unknown[]> => []);
+
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
   return {
@@ -35,6 +39,7 @@ vi.mock('@garage/shared', async (importActual) => {
     listItems: vi.fn(async () => []),
     listInvoices: (...a: unknown[]) => listInvoices(...a),
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
+    unclaimedCardPayments: () => unclaimedCardPayments(),
     creditInvoice: (...a: unknown[]) => creditInvoice(...a),
     /* Not paid by a card the clearing provider charged: no refund to offer. */
     cardRefundable: vi.fn(async () => null),

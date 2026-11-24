@@ -4,7 +4,7 @@
    thing that decides whether a card was charged. These are thin calls to it,
    plus one cheap read of whether the garage has a provider at all. */
 import { getClient, invokeError } from './client';
-import type { CardType } from './payment';
+import type { CardType, PaymentPart } from './payment';
 
 export type CardPaymentStatus = 'pending' | 'paid' | 'declined';
 
@@ -203,6 +203,40 @@ export const abandonCardPayment = async (paymentId: string): Promise<void> => {
 export const cardPaymentReference = (p: CardPayment): string =>
   [p.cardLast4 ? `****${p.cardLast4}` : null, p.approvalNumber ? `אישור ${p.approvalNumber}` : null]
     .filter(Boolean).join(' · ');
+
+/** Cards charged for this ticket that no document records yet — the customer
+ *  paid, and the receipt failed (or was never issued). issue-invoice puts them
+ *  on the next receipt for the ticket and refuses one that leaves them off;
+ *  the ticket page warns while there are any. Only the columns every member
+ *  may read, under RLS. */
+export const unclaimedCardPayments = async (ticketKey: string): Promise<CardPayment[]> => {
+  const db = getClient();
+  const { data: t, error: tErr } = await db.from('tickets').select('id').eq('key', ticketKey).maybeSingle();
+  if (tErr) throw tErr;
+  if (!t) return [];
+  const { data, error } = await db.from('card_payments')
+    .select('id, invoice_id, ticket_id, amount, installments, status, approval_number, card_last4, card_brand, card_type, message')
+    .eq('ticket_id', t.id).eq('status', 'paid').eq('purpose', 'charge').is('invoice_id', null)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToPayment);
+};
+
+/** A charged card as one of a visit's payments — what the drawer returns for
+ *  it, so a receipt issued later reads exactly like one issued at the time. */
+export const chargedPart = (p: CardPayment): PaymentPart => {
+  const reference = cardPaymentReference(p);
+  return {
+    method: 'card',
+    amount: p.amount,
+    ...(reference ? { reference } : {}),
+    ...(p.installments > 1 ? { installments: p.installments } : {}),
+    cardPaymentId: p.id,
+    ...(p.cardLast4 ? { cardLast4: p.cardLast4 } : {}),
+    ...(p.cardType ? { cardType: p.cardType } : {}),
+    ...(p.approvalNumber ? { approvalNumber: p.approvalNumber } : {}),
+  };
+};
 
 /** The terminal check (admin). `credentials`: one call that only asks the
  *  provider whether it accepts the garage's credentials. `card`: a card check
