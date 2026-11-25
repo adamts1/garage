@@ -157,7 +157,8 @@
   border: 1.5px solid var(--border);
   background: var(--surface);
 }
-.choice.on .radio {
+.choice.on .radio,
+.payCard.on .radio {
   border-color: var(--slate);
   background: radial-gradient(circle, var(--slate) 0 5px, transparent 6px);
 }
