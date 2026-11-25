@@ -9,7 +9,7 @@ import { Pagination } from '../../components/Pagination';
 import { SearchBar } from '../../components/SearchBar';
 import { PagedTable, Table, type Column } from '../../components/Table';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
-import { IconClock } from '../../icons';
+import { IconClock, IconExcel } from '../../icons';
 import { epicChip } from '../../lib/epic';
 import { downloadXlsx } from '../../lib/xlsx';
 import { PER_PAGE_OPTIONS, useServerPage } from '../../lib/useServerPage';
@@ -228,7 +228,7 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         actions={
           tab === 'own' && (
             <Button onClick={exportSheet} disabled={rows.length === 0}>
-              ⭳ {t('archive.export')}
+              <IconExcel /> {t('archive.export')}
             </Button>
           )
         }
