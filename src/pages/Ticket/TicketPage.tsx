@@ -15,6 +15,7 @@ import {
 } from '../../icons';
 import { payMethodLabel } from '../../lib/payMethodLabel';
 import { printInvoice, printTicket, warnIfBlocked } from '../../lib/print';
+import { signedTotal } from './ticketDocuments';
 import { useTicketPage } from './useTicketPage';
 
 export interface TicketPageProps {
@@ -565,9 +566,16 @@ export default function TicketPage({
                     </>
                   )}
                 </dl>
-                {invoice.pdfUrl && (
-                  <a className="btn ghost block" href={invoice.pdfUrl} target="_blank" rel="noreferrer">
-                    <IconDoc /> {t('ticket.viewInvoicePdf')}
+                {/* The document that stands for the sale — the live bill, or
+                    the credit note that cancelled it. Named on the button, so
+                    with several on the ticket nobody has to guess which opens. */}
+                {page.documents.primary?.pdfUrl && (
+                  <a className="btn ghost block" href={page.documents.primary.pdfUrl} target="_blank" rel="noreferrer">
+                    <IconDoc /> {t('ticket.docs.view', {
+                      doc: t(`invoices.docType.${page.documents.primary.docType}`),
+                      docnum: page.documents.primary.docnum,
+                      amount: money(signedTotal(page.documents.primary)),
+                    })}
                   </a>
                 )}
                 {/* A readable copy from the stored row — reachable even when the
@@ -609,6 +617,40 @@ export default function TicketPage({
                     right, since both did the same thing. */}
                 {page.owed > 0 && (
                   <p className="muted">{t('collect.outstanding', { owed: money(page.owed) })}</p>
+                )}
+
+                {/* The rest of the ticket's documents — receipts, credit notes,
+                    a cancelled bill — each openable here, so nobody has to go
+                    to the invoices page for one. The latest is flagged "new"
+                    for a few days: it is the one the customer most likely has
+                    not been sent yet. */}
+                {page.documents.others.length > 0 && (
+                  <div className="ticket-docs">
+                    <h5>{t('ticket.docs.others')}</h5>
+                    <ul>
+                      {page.documents.others.map(({ doc, isNew }) => (
+                        <li key={doc.id} className={isNew ? 'is-new' : undefined}>
+                          <span className="ticket-docs-name">
+                            {t(`invoices.docType.${doc.docType}`)} {doc.docnum}
+                            {isNew && <span className="inv-pill due">{t('ticket.docs.new')}</span>}
+                            {doc.status === 'cancelled' && (
+                              <span className="inv-pill overdue">{t('invoices.status.cancelled')}</span>
+                            )}
+                          </span>
+                          <span className="ticket-docs-date">{new Date(doc.issuedAt).toLocaleDateString('he-IL')}</span>
+                          <b className="ticket-docs-amount">{money(signedTotal(doc))}</b>
+                          {doc.pdfUrl ? (
+                            <a href={doc.pdfUrl} target="_blank" rel="noreferrer">{t('ticket.docs.open')}</a>
+                          ) : <span />}
+                        </li>
+                      ))}
+                    </ul>
+                    {invoice.status === 'issued' && page.creditable < invoice.total && (
+                      <p className="ticket-docs-net">
+                        {t('ticket.docs.netAfterCredit')} <b>{money(page.creditable)}</b>
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             ) : settled ? (

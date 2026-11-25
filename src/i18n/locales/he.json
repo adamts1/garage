@@ -532,7 +532,13 @@
     "collectPayment": "גבה תשלום",
     "closeAndCharge": "סגור כרטיס וחייב לקוח",
     "issueInvoice": "הפק חשבונית מס-קבלה",
-    "viewInvoicePdf": "צפה בחשבונית (PDF)",
+    "docs": {
+      "view": "צפה ב{{doc}} {{docnum}} · {{amount}}",
+      "others": "מסמכים נוספים בכרטיס",
+      "open": "פתח",
+      "new": "חדש",
+      "netAfterCredit": "סה״כ אחרי זיכוי:"
+    },
     "printInvoice": "הדפס עותק חשבונית",
     "creditCustomer": "זכה לקוח",
     "messageCustomer": "שלח הודעה ללקוח",
