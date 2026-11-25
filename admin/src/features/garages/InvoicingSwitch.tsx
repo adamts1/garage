@@ -41,7 +41,7 @@ export function InvoicingSwitch({ env, garage, onChanged, showLabel = false, onD
         label={t(b.active ? 'console.invoicing.switchOff' : 'console.invoicing.switchOn')}
       />
       <span className={b.active ? styles.on : styles.off}>
-        {showLabel && `${providerName(b.provider)} · `}
+        {showLabel && `${providerName(b.provider)} `}
         {t(b.active ? 'console.invoicing.isOn' : 'console.invoicing.isOff')}
       </span>
       {asking && (

@@ -13,3 +13,6 @@ export { ConfirmDialog } from './ConfirmDialog/ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog/ConfirmDialog';
 export { EnvPicker } from './EnvPicker/EnvPicker';
 export { Toggle } from './Toggle/Toggle';
+export { SearchInput } from './SearchInput/SearchInput';
+export { StatCard, StatRow } from './StatCard/StatCard';
+export type { StatTone } from './StatCard/StatCard';

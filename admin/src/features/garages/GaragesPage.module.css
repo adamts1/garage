@@ -1,16 +1,125 @@
-.toolbar {
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 26px;
+}
+
+.titleBlock {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}
+
+.title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 20px;
+  font-size: 16px;
+}
+
+.actions .newGarage {
+  background: var(--primary);
+  color: #fff;
+}
+
+.actions .newGarage:hover:not(:disabled) {
+  background: var(--primary-d);
+}
+
+.list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 22px 22px 24px;
+}
+
+.listHead {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 18px;
 }
 
-.ref {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  color: var(--muted-d);
-  margin-inline-end: auto;
+.listHead h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filters > label {
+  width: 370px;
+  flex-shrink: 1;
+}
+
+.filter {
+  white-space: nowrap;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.filter:hover {
+  border-color: var(--steel);
+}
+
+.filter:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.filterOn {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-d);
+}
+
+/* A garage with something to fix: the row itself is warm, not just its pill. */
+.attentionRow td {
+  background: #fdf6e7;
+}
+
+.attentionRow:hover td {
+  background: #faefd6;
 }
 
 .table {
@@ -65,12 +174,9 @@
 }
 
 .chevron {
-  color: var(--steel);
-  font-size: 20px;
-}
-
-.testsToggle {
-  margin-inline-start: auto;
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .empty {
@@ -89,8 +195,8 @@
 
 .on {
   color: var(--ok);
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 15px;
 }
 
 .off {

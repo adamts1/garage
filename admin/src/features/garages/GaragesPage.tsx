@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EnvId, EnvironmentInfo, GarageOverview, GaragesReport } from '../../api/types';
 import {
-  Button, CheckboxField, EnvPicker, KpiCard, KpiRow, LoadState, Note, Pill, SearchBar, Section, Table, type Column,
+  Button, EnvPicker, LoadState, Note, Pill, SearchInput, StatCard, StatRow, Table, type Column,
 } from '../../components';
+import { IconFilter, IconPlus, IconRefresh } from '../../components/icons';
 import { useLoad, type Load } from '../../hooks/useLoad';
 import { formatDate } from '../../lib/format';
+import { goTo } from '../../lib/nav';
 import { GarageDetails } from './GarageDetails';
 import styles from './GaragesPage.module.css';
 import { InvoicingSwitch } from './InvoicingSwitch';
@@ -37,13 +39,16 @@ export function GaragesPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
   const [envId, setEnvId] = useState<EnvId>(() => savedEnv(envs));
   const [query, setQuery] = useState('');
   const [showTests, setShowTests] = useState(false);
+  const [attentionOnly, setAttentionOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const env = envs.find((e) => e.id === envId) ?? envs[0];
   const load = loads[envId];
   const all = load.data?.garages ?? [];
   const tests = all.filter(isAutomatedTestGarage).length;
-  const rows = all.filter((g) => (showTests || !isAutomatedTestGarage(g)) && matchesQuery(g, query));
+  const rows = all.filter((g) => (showTests || !isAutomatedTestGarage(g))
+    && (!attentionOnly || garageIssues(g).length > 0)
+    && matchesQuery(g, query));
   const open = all.find((g) => g.id === openId) ?? null;
 
   const select = (id: EnvId) => {
@@ -68,7 +73,7 @@ export function GaragesPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
               {g.name}
               {issues.length > 0 && (
                 <Pill tone={worst} title={issues.map((i) => t(i.key)).join('\n')}>
-                  {t('console.issues.count', { count: issues.length })}
+                  {t('console.issues.badge')}
                 </Pill>
               )}
             </span>
@@ -126,13 +131,20 @@ export function GaragesPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
 
   return (
     <>
-      <div className={styles.toolbar}>
-        <EnvPicker envs={envs} selected={envId} onSelect={select} counts={counts} label={t('console.garages.envPicker')} />
-        <span className={styles.ref} dir="ltr">{env?.ref ?? 'localhost'}</span>
-        <Button size="sm" onClick={load.reload} disabled={load.loading}>
-          {load.loading ? t('console.common.loading') : t('console.common.reload')}
-        </Button>
-      </div>
+      <header className={styles.header}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>{t('console.tabs.garages')}</h1>
+          <EnvPicker envs={envs} selected={envId} onSelect={select} counts={counts} label={t('console.garages.envPicker')} />
+        </div>
+        <div className={styles.actions}>
+          <Button variant="primary" className={styles.newGarage} onClick={() => goTo('onboard')}>
+            <IconPlus /> {t('console.tabs.onboard')}
+          </Button>
+          <Button onClick={load.reload} disabled={load.loading} title={env?.ref ?? undefined}>
+            <IconRefresh /> {load.loading ? t('console.common.loading') : t('console.common.reload')}
+          </Button>
+        </div>
+      </header>
 
       <LoadState load={load}>
         {(report) => (
@@ -141,30 +153,39 @@ export function GaragesPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
               <Note tone="warn">{t('console.garages.missingTables', { tables: report.missingTables.join(', ') })}</Note>
             )}
 
-            <KpiRow>
-              <KpiCard label="console.kpi.garages" value={String(kpi.garages)} tone="navy"
+            <StatRow>
+              <StatCard label="console.kpi.garages" value={String(kpi.garages)}
                 sub={tests ? 'console.kpi.plusTests' : undefined} subValues={{ count: tests }} />
-              <KpiCard label="console.kpi.invoicing" value={`${kpi.invoicing}/${kpi.garages}`} tone="ok" sub="console.kpi.invoicingSub" />
-              <KpiCard label="console.kpi.payments" value={`${kpi.payments}/${kpi.garages}`} tone="slate" sub="console.kpi.paymentsSub" />
-              <KpiCard label="console.kpi.attention" value={String(kpi.attention)} tone={kpi.attention ? 'warn' : 'ok'} sub="console.kpi.attentionSub" />
-            </KpiRow>
+              <StatCard label="console.kpi.invoicing" value={`${kpi.invoicing}/${kpi.garages}`} tone="ok" sub="console.kpi.invoicingSub" />
+              <StatCard label="console.kpi.payments" value={`${kpi.payments}/${kpi.garages}`} sub="console.kpi.paymentsSub" />
+              <StatCard label="console.kpi.attention" value={String(kpi.attention)} tone={kpi.attention ? 'attention' : 'plain'} sub="console.kpi.attentionSub" />
+            </StatRow>
 
-            <Section
-              title="console.garages.listTitle"
-              aside={t('console.garages.shown', { shown: rows.length, total: showTests ? all.length : all.length - tests })}
-            >
-              <SearchBar value={query} onChange={setQuery} placeholder="console.garages.search">
-                {tests > 0 && (
-                  <div className={styles.testsToggle}>
-                    <CheckboxField
-                      label="console.garages.showTests"
-                      labelValues={{ count: tests }}
-                      checked={showTests}
-                      onChange={(e) => setShowTests(e.target.checked)}
-                    />
-                  </div>
-                )}
-              </SearchBar>
+            <section className={styles.list}>
+              <div className={styles.listHead}>
+                <h2>{t('console.garages.listTitle')}</h2>
+                <div className={styles.filters}>
+                  <SearchInput value={query} onChange={setQuery} placeholder="console.garages.search" />
+                  <button
+                    type="button"
+                    className={`${styles.filter} ${attentionOnly ? styles.filterOn : ''}`}
+                    aria-pressed={attentionOnly}
+                    onClick={() => setAttentionOnly((v) => !v)}
+                  >
+                    <IconFilter /> {t('console.kpi.attention')}
+                  </button>
+                  {tests > 0 && (
+                    <button
+                      type="button"
+                      className={`${styles.filter} ${showTests ? styles.filterOn : ''}`}
+                      aria-pressed={showTests}
+                      onClick={() => setShowTests((v) => !v)}
+                    >
+                      {t('console.garages.showTests', { count: tests })}
+                    </button>
+                  )}
+                </div>
+              </div>
               <Table
                 className={styles.table}
                 columns={columns}
@@ -174,9 +195,10 @@ export function GaragesPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
                 emptyKey="console.garages.empty"
                 onRowClick={(g) => setOpenId(g.id)}
                 isRowSelected={(g) => g.id === openId}
+                rowClassName={(g) => (garageIssues(g).length ? styles.attentionRow : undefined)}
                 defaultSort={{ key: 'name', dir: 1 }}
               />
-            </Section>
+            </section>
 
             {open && env && (
               <GarageDetails garage={open} env={env} onChanged={load.reload} onClose={() => setOpenId(null)} />
