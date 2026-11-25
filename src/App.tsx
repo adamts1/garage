@@ -109,7 +109,6 @@ export default function App() {
      archive. Derived, so it recomputes as time passes — no stored flag to keep
      in sync. */
   const activeTickets = useMemo(() => tickets.filter((x) => !isArchived(x)), [tickets]);
-  const archivedTickets = useMemo(() => tickets.filter((x) => isArchived(x)), [tickets]);
   /* Money and workload are about jobs that happened. A cancelled ticket is kept
      on file and listed under its customer and in the archive, but counts for
      nothing in a report. */
@@ -208,7 +207,7 @@ export default function App() {
                   path="/archive"
                   element={
                     <ArchivePage
-                      tickets={archivedTickets}
+                      tickets={tickets}
                       workerChips={workerChips}
                       onOpenTicket={openTicket}
                     />

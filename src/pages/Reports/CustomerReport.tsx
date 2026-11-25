@@ -5,7 +5,7 @@ import { ClearFilters, Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Pagination, usePagination } from '../../components/Pagination';
 import { Table, useTable, type Column } from '../../components/Table';
-import { IconCustomers, IconDoc, IconReports, IconTickets } from '../../icons';
+import { IconCustomers, IconDoc, IconReports, IconTickets, IconExcel } from '../../icons';
 import { downloadXlsx } from '../../lib/xlsx';
 import styles from './ReportsPage.module.css';
 import { useCustomerReport, type DocFilter, type ReportRow } from './useCustomerReport';
@@ -154,7 +154,7 @@ export default function CustomerReport({ tickets }: { tickets: Ticket[] }) {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t('reports.breakdown', { count: report.rows.length })}
-          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}><IconExcel /> {t('reports.export')}</Button>
         </h3>
 
         <Table

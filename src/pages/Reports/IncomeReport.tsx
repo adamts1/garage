@@ -5,7 +5,7 @@ import { Button } from '../../components/Button';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Table, type Column } from '../../components/Table';
-import { IconCard, IconDoc, IconReports } from '../../icons';
+import { IconCard, IconDoc, IconReports, IconExcel } from '../../icons';
 import { downloadXlsx } from '../../lib/xlsx';
 import { showError, useAppDispatch } from '../../store';
 import styles from './ReportsPage.module.css';
@@ -159,7 +159,7 @@ export default function IncomeReport() {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t('reports.income.breakdown')}
-          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}><IconExcel /> {t('reports.export')}</Button>
         </h3>
 
         <Table

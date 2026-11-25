@@ -1,6 +1,7 @@
-import { isCancelled, searchLegacyTickets, shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
+import { COLUMNS, isArchived, isCancelled, searchLegacyTickets, shekel, workerChip, type Ticket, type WorkerMap } from '@garage/shared';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '../../components/Button';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { Pill } from '../../components/Pill';
 import { PageHeader } from '../../components/PageHeader';
@@ -8,16 +9,28 @@ import { Pagination } from '../../components/Pagination';
 import { SearchBar } from '../../components/SearchBar';
 import { PagedTable, Table, type Column } from '../../components/Table';
 import { TabPanel, Tabs, type TabDef } from '../../components/Tabs';
-import { IconClock } from '../../icons';
+import { IconClock, IconExcel } from '../../icons';
 import { epicChip } from '../../lib/epic';
+import { downloadXlsx } from '../../lib/xlsx';
 import { PER_PAGE_OPTIONS, useServerPage } from '../../lib/useServerPage';
 import styles from './ArchivePage.module.css';
 
 type TabId = 'own' | 'legacy';
 const TABS: readonly TabDef<TabId>[] = [
-  { id: 'own', label: 'archive.title' },
-  { id: 'legacy', label: 'car.legacy.tab' },
+  { id: 'own', label: 'archive.tabAll' },
+  { id: 'legacy', label: 'archive.tabLegacy' },
 ];
+
+/* Active is what is still on the board (board_hidden included — hiding is a
+   view choice, not a status); archived is paid and aged past the cutoff;
+   cancelled is its own bucket, so "archive" here means work that was done. */
+type StatusFilter = 'all' | 'active' | 'archived' | 'cancelled';
+const matchesStatus = (ticket: Ticket, status: StatusFilter): boolean => {
+  if (status === 'all') return true;
+  if (status === 'cancelled') return isCancelled(ticket);
+  if (status === 'archived') return isArchived(ticket) && !isCancelled(ticket);
+  return !isArchived(ticket);
+};
 
 /** Work cards imported from the previous system (RB-…): searched and paged by
  *  the database, since they are not in the board's list — a garage moving
@@ -53,11 +66,10 @@ function LegacyArchive({ onOpenTicket }: { onOpenTicket: (k: string) => void }) 
 }
 
 export interface ArchivePageProps {
-  /** Already filtered to archived tickets — paid and aged past the cutoff, or
-   *  cancelled. */
+  /** Every ticket of the garage — active, archived and cancelled. */
   tickets: Ticket[];
-  /** Code → chip. Retired workers included: the archive is entirely history, so
-   *  it is the view that most needs them to keep resolving. */
+  /** Code → chip. Retired workers included: most of what is listed here is
+   *  history, so it is the view that most needs them to keep resolving. */
   workerChips: WorkerMap;
   onOpenTicket: (k: string) => void;
 }
@@ -68,12 +80,12 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
   const { t } = useTranslation();
   const [tab, setTab] = useState<TabId>('own');
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | 'paid' | 'cancelled'>('all');
+  const [status, setStatus] = useState<StatusFilter>('all');
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const kept = tickets.filter((ticket) =>
-      (status === 'all' || (status === 'cancelled') === isCancelled(ticket))
+      matchesStatus(ticket, status)
       && (!q || (ticket.k + ticket.title + ticket.plate + ticket.car + ticket.customer)
         .toLowerCase()
         .includes(q)),
@@ -85,6 +97,11 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
        a header still re-sorts from here. */
     return [...kept].sort((a, b) => (b.createdAtISO ?? '').localeCompare(a.createdAtISO ?? ''));
   }, [tickets, query, status]);
+
+  const statusLabel = (ticket: Ticket): string =>
+    isCancelled(ticket)
+      ? t('archive.cancelled')
+      : COLUMNS.find((c) => c.id === ticket.st)?.title ?? ticket.st;
 
   const columns: Column<Ticket>[] = [
     {
@@ -103,18 +120,25 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
         const epic = epicChip(ticket.epic);
         return (
           <>
-            <div className={styles.title}>
-              {ticket.title || t('common.untitled')}
-              {isCancelled(ticket) && (
-                <> <Pill tone="danger" title={ticket.cancelReason ?? undefined}>{t('archive.cancelled')}</Pill></>
-              )}
-            </div>
+            <div className={styles.title}>{ticket.title || t('common.untitled')}</div>
             <span className={styles.epic} style={{ background: epic.bg, color: epic.c }}>
               {epic.t}
             </span>
           </>
         );
       },
+    },
+    {
+      key: 'status',
+      header: 'archive.fields.status',
+      width: 120,
+      sortValue: (ticket) => statusLabel(ticket),
+      render: (ticket) =>
+        isCancelled(ticket) ? (
+          <Pill tone="danger" title={ticket.cancelReason ?? undefined}>{t('archive.cancelled')}</Pill>
+        ) : (
+          statusLabel(ticket)
+        ),
     },
     {
       key: 'customer',
@@ -163,13 +187,51 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
     },
   ];
 
+  /* Every filtered row, not the page on screen, with the table's columns in
+     the table's order. The worker goes out as a name: initials on a coloured
+     dot mean nothing in a spreadsheet. */
+  const exportSheet = () => {
+    downloadXlsx('work-cards', {
+      name: t('archive.title'),
+      columns: [
+        { header: t('archive.fields.key'), width: 12 },
+        { header: t('archive.fields.title'), width: 32 },
+        { header: t('archive.fields.status'), width: 14 },
+        { header: t('archive.fields.customer'), width: 24 },
+        { header: t('archive.fields.plate'), width: 14 },
+        { header: t('archive.fields.car'), width: 20 },
+        { header: t('archive.fields.due'), width: 14 },
+        { header: t('archive.fields.worker'), width: 16 },
+        { header: t('archive.fields.amount'), width: 14, format: 'money' },
+      ],
+      rows: rows.map((ticket) => [
+        ticket.k,
+        ticket.title,
+        statusLabel(ticket),
+        ticket.customer,
+        ticket.plate,
+        ticket.car,
+        ticket.due && ticket.due !== '-' ? ticket.due : '',
+        ticket.who ? workerChip(workerChips, ticket.who).n : '',
+        ticket.amount || null,
+      ]),
+    });
+  };
+
   return (
     <>
       <PageHeader
         title="archive.title"
         subtitle="archive.subtitle"
-        count={rows.length}
+        count={tab === 'own' ? rows.length : undefined}
         icon={<IconClock />}
+        actions={
+          tab === 'own' && (
+            <Button onClick={exportSheet} disabled={rows.length === 0}>
+              <IconExcel /> {t('archive.export')}
+            </Button>
+          )
+        }
       />
 
       <Tabs tabs={TABS} selected={tab} onSelect={setTab} label="archive.title" />
@@ -195,7 +257,8 @@ export default function ArchivePage({ tickets, workerChips, onOpenTicket }: Arch
           {(id) => (
             <select id={id} value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
               <option value="all">{t('archive.statusAll')}</option>
-              <option value="paid">{t('archive.statusPaid')}</option>
+              <option value="active">{t('archive.statusActive')}</option>
+              <option value="archived">{t('archive.statusArchived')}</option>
               <option value="cancelled">{t('archive.cancelled')}</option>
             </select>
           )}

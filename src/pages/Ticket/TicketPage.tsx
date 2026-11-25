@@ -595,7 +595,6 @@ export default function TicketPage({
                   <p className="muted">
                     {t('credit.alreadyOnInvoice', {
                       credited: money(invoice.total - page.creditable),
-                      remaining: money(page.creditable),
                     })}
                   </p>
                 )}
