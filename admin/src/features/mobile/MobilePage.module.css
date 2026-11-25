@@ -1,0 +1,37 @@
+.table td,
+.table th {
+  padding: 10px 14px;
+  font-size: 15px;
+}
+
+.table code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.muted {
+  color: var(--muted-d);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.log {
+  text-align: start;
+  font-size: 14px;
+}
+
+.log ul {
+  margin: 6px 0 0;
+  padding-inline-start: 18px;
+}
+
+.cmd {
+  direction: ltr;
+  text-align: left;
+  background: var(--ink);
+  color: var(--sand);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 4px 0 0;
+  font-size: 13px;
+}

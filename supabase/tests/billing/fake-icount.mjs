@@ -17,7 +17,7 @@ http.createServer((req, res) => {
     if (mode === 'refuse') return send(200, { status: false, reason: 'refused by fake' });
     if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
     const n = String(++docnum);
-    creates.push({ docnum: n, doctype: parsed.doctype });
+    creates.push({ docnum: n, doctype: parsed.doctype, cc: parsed.cc ?? null, cash: parsed.cash ?? null });
     if (mode === 'created_then_html') return send(502, null, '<html>bad gateway</html>');   // created, but the answer is lost
     return send(200, { status: true, docnum: n, doc_url: `https://fake/${n}.pdf` });
   });

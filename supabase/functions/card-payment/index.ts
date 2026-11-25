@@ -31,6 +31,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { garageProvider, PaymentsSuspended, tripOnAuth } from '../_shared/payments/registry.ts';
+import type { Verdict } from '../_shared/payments/provider.ts';
 import { priceTicket, round2, type Work } from '../_shared/billing.ts';
 
 // The provider registry lives in _shared/payments/registry.ts, shared with
@@ -46,7 +47,7 @@ const json = (body: unknown, status = 200) =>
 
 /* What a client may see of a payment — the same columns its grant allows. */
 const PUBLIC_COLUMNS =
-  'id, garage_id, ticket_id, invoice_id, provider, mode, purpose, entry, amount, installments, status, provider_tx_id, approval_number, card_last4, card_brand, card_type, message, created_at, updated_at, settled_at';
+  'id, garage_id, ticket_id, invoice_id, provider, mode, purpose, channel, entry, amount, installments, status, provider_tx_id, approval_number, card_last4, card_brand, card_type, message, created_at, updated_at, settled_at';
 
 /* A sanity bound, not a business rule: no garage bill is a million shekels,
    and a typo that adds three zeros should be refused before a card sees it. */
@@ -100,21 +101,46 @@ Deno.serve(async (req) => {
        provider's record moves a row; see the header. */
     // deno-lint-ignore no-explicit-any
     async function settle(p: Provider, pay: any) {
-      if (pay.status === 'paid' || !pay.provider_tx_id) return pay;
-      let verdict;
+      if (pay.status === 'paid') return pay;
+      const direct = pay.channel === 'direct';
+      /* A page attempt is looked up by its page; a direct one, which has no
+         page, by its own reference in the provider's transactions report. */
+      if (!direct && !pay.provider_tx_id) return pay;
+      if (direct && !p.adapter.findAttempt) return pay;
+      let verdict: Verdict;
       try {
-        verdict = await p.adapter.verify({
-          credentials: p.credentials,
-          paymentId: pay.id,
-          amount: Number(pay.amount),
-          installments: Number(pay.installments),
-          purpose: pay.purpose === 'check' ? 'check' : 'charge',
-          providerTxId: pay.provider_tx_id,
-          confirmationKey: pay.confirmation_key,
-        });
+        if (direct) {
+          const { data: t } = await admin.from('tickets').select('key').eq('id', pay.ticket_id).maybeSingle();
+          verdict = await p.adapter.findAttempt!({
+            credentials: p.credentials,
+            paymentId: pay.id,
+            label: t?.key ?? '',
+            amount: Number(pay.amount),
+            installments: Number(pay.installments),
+            at: pay.created_at,
+          });
+        } else {
+          verdict = await p.adapter.verify({
+            credentials: p.credentials,
+            paymentId: pay.id,
+            amount: Number(pay.amount),
+            installments: Number(pay.installments),
+            purpose: pay.purpose === 'check' ? 'check' : 'charge',
+            providerTxId: pay.provider_tx_id,
+            confirmationKey: pay.confirmation_key,
+          });
+        }
       } catch (e) {
         throw await tripOnAuth(admin, pay.garage_id, e);
       }
+      return await record(pay, verdict);
+    }
+
+    /* Writes a verdict onto its attempt. Only the provider's answer moves a
+       row (see the header): paid is final, declined may still be overturned
+       to paid, and no answer changes nothing but the note. */
+    // deno-lint-ignore no-explicit-any
+    async function record(pay: any, verdict: Verdict) {
       const patch: Record<string, unknown> = { raw: verdict.raw };
       if (verdict.status === 'paid') {
         Object.assign(patch, {
@@ -197,7 +223,10 @@ Deno.serve(async (req) => {
       }
       const unclaimed = settled.find((r) => r.status === 'paid' && !claimed.has(r.id));
       if (unclaimed) return json({ payment: publicOf(unclaimed), url: null, recovered: true });
-      const open = settled.find((r) => r.status === 'pending'
+      /* Still open: pending, recent, and not abandoned. An abandoned attempt
+         was re-checked just above like any other — paid would have been
+         handed back — but nobody is still paying on it, so it asks nothing. */
+      const open = settled.find((r) => r.status === 'pending' && !r.abandoned_at
         && Date.now() - new Date(r.created_at).getTime() < PAGE_TTL_MS);
       if (open && body.force !== true) {
         return json({ error: 'an earlier payment page on this ticket may still be completed', code: 'payment_open', payment: publicOf(open) }, 409);
@@ -250,6 +279,38 @@ Deno.serve(async (req) => {
         created_by: me?.user?.id ?? null,
       }).select('id').single();
       if (iErr) return json({ error: iErr.message }, 500);
+
+      /* ---- straight to the terminal, no page ----
+         Where the garage has a terminal and the provider a direct route. The
+         call waits for the customer at the terminal; its answer is the
+         verdict. No answer → pending, found later in the provider's report by
+         this attempt's own reference — never assumed either way. */
+      if (onTerminal && body.via !== 'page' && p.posShopNo && p.adapter.chargeOnTerminal) {
+        await admin.from('card_payments').update({ channel: 'direct', entry: 'terminal' }).eq('id', row.id);
+        let verdict: Verdict;
+        try {
+          verdict = await p.adapter.chargeOnTerminal({
+            credentials: p.credentials,
+            paymentId: row.id,
+            amount,
+            installments,
+            label: ticket.key,
+            posShopNo: p.posShopNo,
+          });
+        } catch (e) {
+          // Only a credential rejection is thrown: the provider refused to talk.
+          const err = await tripOnAuth(admin, ticket.garage_id, e);
+          const message = err instanceof Error ? err.message : String(err);
+          await admin.from('card_payments').update({ status: 'declined', message }).eq('id', row.id);
+          if (err instanceof PaymentsSuspended) return json({ error: message, code: 'payments_suspended' }, 423);
+          return json({ error: message, code: 'terminal_failed' }, 502);
+        }
+        const { data: fresh } = await admin.from('card_payments').select('*').eq('id', row.id).single();
+        const saved = await record(fresh, verdict);
+        // deno-lint-ignore no-explicit-any
+        const pub = Object.fromEntries(PUBLIC_COLUMNS.split(', ').map((k) => [k, (saved as any)[k]]));
+        return json({ payment: pub, url: null, direct: true });
+      }
 
       try {
         const started = await p.adapter.start({
@@ -333,6 +394,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============================ ABANDON ============================
+    /* The drawer left this attempt: cancelled on the provider's page, stopped
+       by the advisor, or expired. Nothing about the money changes — it stays
+       pending and is still checked with the provider before any new charge on
+       the ticket. It only stops the "an earlier page may still be paid?"
+       question, which the advisor has just answered. */
+    if (action === 'abandon') {
+      const paymentId = body.payment_id as string;
+      if (!paymentId) return json({ error: 'payment_id required' }, 400);
+      const { data: mine } = await userClient.from('card_payments').select('id').eq('id', paymentId).maybeSingle();
+      if (!mine) return json({ error: 'payment not found in your garage' }, 404);
+      const { error } = await admin.from('card_payments')
+        .update({ abandoned_at: new Date().toISOString() })
+        .eq('id', paymentId).eq('status', 'pending').is('abandoned_at', null);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     // ============================ VERIFY ============================
     if (action === 'verify') {
       const paymentId = body.payment_id as string;
@@ -344,7 +423,7 @@ Deno.serve(async (req) => {
 
       const { data: pay, error: pErr } = await admin.from('card_payments').select('*').eq('id', paymentId).single();
       if (pErr) return json({ error: pErr.message }, 500);
-      if (pay.status === 'paid' || !pay.provider_tx_id) return json({ payment: publicOf(pay) });
+      if (pay.status === 'paid' || (pay.channel !== 'direct' && !pay.provider_tx_id)) return json({ payment: publicOf(pay) });
 
       const p = await provider(pay.garage_id);
       return json({ payment: publicOf(await settle(p, pay)) });

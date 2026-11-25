@@ -1,5 +1,5 @@
 import {
-  CardStartError, DEFAULT_CARD_SETTINGS, cardPaymentReference, cardPaymentsActive, installmentsAllowed, money,
+  CardStartError, DEFAULT_CARD_SETTINGS, abandonCardPayment, cardPaymentReference, cardPaymentsActive, installmentsAllowed, money,
   startCardPayment, verifyCardPayment, type CardPayment, type CardSettings, type PayMethod,
   type PaymentPart,
 } from '@garage/shared';
@@ -127,7 +127,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
   const [reference, setReference] = useState('');
   /* 'card' — a hosted payment page is open in the drawer, waiting on the
      customer. Only reached when the garage charges cards through the system. */
-  const [state, setState] = useState<'form' | 'charging' | 'card' | 'done'>('form');
+  /* 'tap' — a charge sent straight to the terminal, waiting for the customer
+     to present the card. */
+  const [state, setState] = useState<'form' | 'charging' | 'tap' | 'card' | 'done'>('form');
 
   /* Does this garage charge cards through a clearing provider? Then picking
      the card method charges it for real; otherwise the card method records a
@@ -155,7 +157,13 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
     return () => { live = false; };
   }, []);
   useEffect(loadSettings, [loadSettings]);
-  const [card, setCard] = useState<{ url: string; payment: CardPayment; since: number; terminal: boolean } | null>(null);
+  /* `url` null: no page — a direct terminal charge whose answer was lost,
+     being looked up. */
+  const [card, setCard] = useState<{ url: string | null; payment: CardPayment; since: number; terminal: boolean } | null>(null);
+  /* The direct terminal charge failed for a reason the page may get past
+     (terminal not answering, a service error): offer the provider's page, with
+     its own terminal button, instead. */
+  const [offerPage, setOfferPage] = useState(false);
   /* A garage with a terminal: charge on it (the default — the customer is at
      the counter), or type the card on the page (a payment by phone). */
   const [onTerminal, setOnTerminal] = useState(true);
@@ -284,22 +292,43 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
 
   /* Opens a fresh hosted page. Each attempt is its own: a page is single-use
      and expires within minutes, so "try again" is always a new one. */
-  const startCard = async (force = false) => {
-    setState('charging');
+  const startCard = async (force = false, viaPage = false) => {
+    /* On the terminal, the server's call waits for the customer: the drawer
+       says so while it waits. */
+    setState(terminalRound && !viaPage ? 'tap' : 'charging');
     setCardError(null);
     setCardNote(null);
+    setOfferPage(false);
     try {
-      const started = await startCardPayment(ticketKey, asked, plan, window.location.origin, { claimed, force, terminal: terminalRound });
+      const started = await startCardPayment(ticketKey, asked, plan, window.location.origin, {
+        claimed, force, terminal: terminalRound, viaPage,
+      });
       if (started.recovered) {
         // Money already taken on an earlier attempt: that is this payment.
         setCardNote(t('close.cardOnline.recovered'));
         paidWith(started.payment);
         return;
       }
+      if (started.direct) {
+        const p = started.payment;
+        if (p.status === 'paid') { paidWith(p); return; }
+        if (p.status === 'declined') {
+          setState('form');
+          setCardError(p.message ?? t('close.cardOnline.declined'));
+          setOfferPage(true);
+          return;
+        }
+        /* No answer from the terminal call: the customer may have paid. Looked
+           up from here on, exactly as a page is. */
+        setCard({ url: null, payment: p, since: Date.now(), terminal: true });
+        setState('card');
+        return;
+      }
       setCard({ url: started.url, payment: started.payment, since: Date.now(), terminal: terminalRound });
       setState('card');
     } catch (e) {
       setState('form');
+      if (e instanceof CardStartError && e.code === 'terminal_failed') setOfferPage(true);
       if (e instanceof CardStartError && e.code === 'payments_suspended') loadSettings();
       if (e instanceof CardStartError && e.code === 'payment_open') {
         /* An earlier page on this ticket may still be completed. Opening a
@@ -342,6 +371,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
   const leaveCard = async (note: string) => {
     const p = await check();
     if (p?.status === 'paid' || p?.status === 'declined') return;
+    /* Left, not decided: still pending at the server, still re-checked before
+       the next charge — but the next attempt need not ask about it. */
+    if (card) void abandonCardPayment(card.payment.id);
     setCard(null);
     setState('form');
     setCardNote(note);
@@ -392,7 +424,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
     || (method?.code === 'card' && !settings)
     || suspended
     || (step === 2 && !amountValid)
-    || state === 'charging';
+    || state === 'charging' || state === 'tap';
 
   if (state === 'done' && method) {
     return (
@@ -455,7 +487,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
       onMouseDown={(e) => {
         if (e.target !== e.currentTarget) return;
         if (state === 'card') void abortCard();
-        else if (state !== 'charging') answer(null);
+        else if (state !== 'charging' && state !== 'tap') answer(null);
       }}
     >
       <aside className={styles.drawer} role="dialog" aria-modal="true">
@@ -464,7 +496,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
             type="button"
             className={styles.close}
             onClick={() => (state === 'card' ? void abortCard() : answer(null))}
-            disabled={state === 'charging'}
+            /* While the terminal waits, the server's call cannot be taken back
+               from here: the drawer stays until it answers. */
+            disabled={state === 'charging' || state === 'tap'}
             aria-label={t('common.close')}
           >
             ✕
@@ -491,7 +525,19 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           {/* ---------- the provider's payment page ----------
               Card details are typed there, or handed to the garage's terminal
               by its own button — never into this app. */}
-          {state === 'card' && card && (
+          {/* ---------- on the terminal: waiting for the card ---------- */}
+          {(state === 'tap' || (state === 'card' && card && !card.url)) && (
+            <div className={`${styles.card} ${styles.tap}`} role="status">
+              <span className={styles.tapIcon}>📟</span>
+              <h4>{t('close.cardOnline.title', { amount: money(amount) })}</h4>
+              <p className={styles.hint}>
+                {t(state === 'tap' ? 'close.cardOnline.tapNow' : 'close.cardOnline.lookingUp')}
+              </p>
+              <span className={styles.spinner} />
+            </div>
+          )}
+
+          {state === 'card' && card?.url && (
             <div className={`${styles.card} ${styles.cardFrame}`}>
               <h4>{t('close.cardOnline.title', { amount: money(amount) })}</h4>
               <p className={styles.hint}>{t(card.terminal ? 'close.cardOnline.waitingTerminal' : 'close.cardOnline.waitingTyped')}</p>
@@ -505,7 +551,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           )}
 
           {/* ---------- 1. which payment method ---------- */}
-          {state !== 'card' && step === 1 && (
+          {state !== 'card' && state !== 'tap' && step === 1 && (
             <>
               <div className={`${styles.card} ${styles.summary}`}>
                 <div>
@@ -576,7 +622,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           )}
 
           {/* ---------- 2. collect ---------- */}
-          {state !== 'card' && step === 2 && method && (
+          {state !== 'card' && state !== 'tap' && step === 2 && method && (
             <div className={styles.card}>
               <h4>
                 {method.paid ? t('close.collectWith', { method: t(method.label) }) : t('close.openCharge')}
@@ -684,7 +730,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
           )}
 
           {/* ---------- 3. confirm ---------- */}
-          {state !== 'card' && step === 3 && method && (
+          {state !== 'card' && state !== 'tap' && step === 3 && method && (
             <div className={styles.card}>
               <h4>{t('close.summary')}</h4>
               <p className={styles.hint}>{t(collecting ? 'close.checkBeforeCollect' : 'close.checkBefore')}</p>
@@ -724,6 +770,9 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
                   <div>
                     <b>{t('close.cardOnline.declined')}</b>
                     <p>{cardError}</p>
+                    {offerPage && terminalRound && (
+                      <p><Button onClick={() => void startCard(false, true)}>{t('close.cardOnline.viaPage')}</Button></p>
+                    )}
                   </div>
                 </div>
               )}
@@ -745,7 +794,7 @@ export default function CloseTicketModal({ props, onClose }: ModalComponentProps
         <footer className={styles.foot}>
           <Button
             onClick={step === 1 ? () => answer(null) : () => setStep(step - 1)}
-            disabled={state === 'charging'}
+            disabled={state === 'charging' || state === 'tap'}
           >
             {/* Once part of the bill is in, closing is not cancelling: what was
                 taken gets its receipt, and the rest stays owed. Said on the

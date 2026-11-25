@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Operator logic shared by scripts/ and the local admin console. Node only — never imported by the app.",
-  "main": "src/index.mjs",
+  "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": "./src/index.ts"
   },
   "peerDependencies": {
     "@supabase/supabase-js": ">=2"

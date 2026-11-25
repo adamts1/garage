@@ -62,7 +62,7 @@ export default function TerminalCheckModal({ props, isTop, stacked, onClose }: M
   /* The card check's answer, from the server — as for a payment. */
   useEffect(() => {
     if (step.kind !== 'card') return;
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
         const p = await verifyCardPayment(step.payment.id);
         if (p.status === 'paid') setStep({ kind: 'ok', what: 'card', payment: p });
@@ -71,7 +71,8 @@ export default function TerminalCheckModal({ props, isTop, stacked, onClose }: M
       } catch (e) {
         if (e instanceof Error && /suspended/.test(e.message)) setStep({ kind: 'failed', message: e.message, suspended: true });
       }
-    }, POLL_MS);
+    };
+    const timer = setInterval(() => void poll(), POLL_MS);
     return () => clearInterval(timer);
   }, [step, t]);
 

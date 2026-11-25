@@ -32,6 +32,13 @@ export interface InvoiceItem {
    *  so each adapter marks it the way its documents can show — the stored line
    *  keeps the plain name. */
   indent?: boolean;
+  /** The line's price INCLUDING VAT, when that is the figure that must come
+   *  out exactly: the provider takes the VAT out of it rather than adding VAT
+   *  to `unitprice`. Pre-VAT, ₪10.00 is unreachable at 18% (8.47 → 9.99,
+   *  8.48 → 10.01); VAT-inclusive, iCount issues 8.47 + 1.53 = 10.00
+   *  (demo doc 3098, 2026-11-24). `unitprice` is still set, as the stored
+   *  line's pre-VAT price. */
+  unitpriceIncVat?: number;
 }
 
 /** The two kinds of bill. A מס-קבלה is billed and settled at once; a חשבונית מס

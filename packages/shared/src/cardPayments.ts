@@ -4,7 +4,7 @@
    thing that decides whether a card was charged. These are thin calls to it,
    plus one cheap read of whether the garage has a provider at all. */
 import { getClient, invokeError } from './client';
-import type { CardType } from './payment';
+import type { CardType, PaymentPart } from './payment';
 
 export type CardPaymentStatus = 'pending' | 'paid' | 'declined';
 
@@ -102,10 +102,14 @@ export class CardStartError extends Error {
 
 export type CardStart =
   /** A page to show. */
-  | { payment: CardPayment; url: string; recovered: false }
+  | { payment: CardPayment; url: string; recovered: false; direct: false }
   /** No page: the customer already paid on an earlier attempt that no
    *  document records yet. This IS the payment — nothing new was charged. */
-  | { payment: CardPayment; url: null; recovered: true };
+  | { payment: CardPayment; url: null; recovered: true; direct: false }
+  /** Charged straight on the terminal: the call waited for the customer, and
+   *  this is the outcome — paid, declined, or pending when the answer was
+   *  lost (verify then finds it in the provider's records). */
+  | { payment: CardPayment; url: null; recovered: false; direct: true };
 
 /** Opens a hosted payment page for `amount` on a ticket — or hands back a
  *  payment already taken on it (see CardStart). The server charges the bill's
@@ -120,7 +124,7 @@ export const startCardPayment = async (
   amount: number,
   installments: number,
   returnOrigin: string,
-  opts: { claimed?: readonly string[]; force?: boolean; terminal?: boolean } = {},
+  opts: { claimed?: readonly string[]; force?: boolean; terminal?: boolean; viaPage?: boolean } = {},
 ): Promise<CardStart> => {
   const { data: t, error: tErr } = await getClient()
     .from('tickets').select('id').eq('key', ticketKey).single();
@@ -130,6 +134,9 @@ export const startCardPayment = async (
       action: 'start', ticket_id: t.id, amount, installments, return_origin: returnOrigin,
       claimed: opts.claimed ?? [], force: opts.force === true,
       mode: opts.terminal ? 'terminal' : 'page',
+      /* On the terminal, but through the provider's page and its terminal
+         button — the fallback when the direct call did not work. */
+      ...(opts.viaPage ? { via: 'page' } : {}),
     },
   });
   if (error) {
@@ -140,9 +147,10 @@ export const startCardPayment = async (
     }
     throw await invokeError(error);
   }
+  if (data.direct) return { payment: rowToPayment(data.payment), url: null, recovered: false, direct: true };
   return data.url
-    ? { payment: rowToPayment(data.payment), url: data.url, recovered: false }
-    : { payment: rowToPayment(data.payment), url: null, recovered: true };
+    ? { payment: rowToPayment(data.payment), url: data.url, recovered: false, direct: false }
+    : { payment: rowToPayment(data.payment), url: null, recovered: true, direct: false };
 };
 
 /** Asks the server — which asks the provider — what became of a payment. */
@@ -183,10 +191,52 @@ export const cardRefundable = async (
   return left.amount > 0 ? { ...left, unresolved } : null;
 };
 
+/** The drawer left this attempt (cancelled on the page, stopped, expired).
+ *  It stays pending and is still checked before any new charge; it just no
+ *  longer makes the next attempt ask whether it may still be paid. Best
+ *  effort: a failure here costs only that question. */
+export const abandonCardPayment = async (paymentId: string): Promise<void> => {
+  await getClient().functions.invoke('card-payment', { body: { action: 'abandon', payment_id: paymentId } }).catch(() => {});
+};
+
 /** What goes in the receipt's reference field for a card the provider charged. */
 export const cardPaymentReference = (p: CardPayment): string =>
   [p.cardLast4 ? `****${p.cardLast4}` : null, p.approvalNumber ? `אישור ${p.approvalNumber}` : null]
     .filter(Boolean).join(' · ');
+
+/** Cards charged for this ticket that no document records yet — the customer
+ *  paid, and the receipt failed (or was never issued). issue-invoice puts them
+ *  on the next receipt for the ticket and refuses one that leaves them off;
+ *  the ticket page warns while there are any. Only the columns every member
+ *  may read, under RLS. */
+export const unclaimedCardPayments = async (ticketKey: string): Promise<CardPayment[]> => {
+  const db = getClient();
+  const { data: t, error: tErr } = await db.from('tickets').select('id').eq('key', ticketKey).maybeSingle();
+  if (tErr) throw tErr;
+  if (!t) return [];
+  const { data, error } = await db.from('card_payments')
+    .select('id, invoice_id, ticket_id, amount, installments, status, approval_number, card_last4, card_brand, card_type, message')
+    .eq('ticket_id', t.id).eq('status', 'paid').eq('purpose', 'charge').is('invoice_id', null)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToPayment);
+};
+
+/** A charged card as one of a visit's payments — what the drawer returns for
+ *  it, so a receipt issued later reads exactly like one issued at the time. */
+export const chargedPart = (p: CardPayment): PaymentPart => {
+  const reference = cardPaymentReference(p);
+  return {
+    method: 'card',
+    amount: p.amount,
+    ...(reference ? { reference } : {}),
+    ...(p.installments > 1 ? { installments: p.installments } : {}),
+    cardPaymentId: p.id,
+    ...(p.cardLast4 ? { cardLast4: p.cardLast4 } : {}),
+    ...(p.cardType ? { cardType: p.cardType } : {}),
+    ...(p.approvalNumber ? { approvalNumber: p.approvalNumber } : {}),
+  };
+};
 
 /** The terminal check (admin). `credentials`: one call that only asks the
  *  provider whether it accepts the garage's credentials. `card`: a card check

@@ -24,9 +24,9 @@
  */
 
 /* The CLI lookup, the reply parsing and the "throw rather than report an
-   empty list" rule live in packages/ops (functions.mjs, cli.mjs), shared with
+   empty list" rule live in packages/ops (functions.ts, cli.ts), shared with
    the admin console. */
-import { deployedFunctions as deployed, localFunctions } from '../packages/ops/src/index.mjs';
+import { deployedFunctions as deployed, localFunctions } from '../packages/ops/src/index.ts';
 
 const ENVIRONMENTS = [
   { name: 'staging', ref: 'poksqsdklnhaumozriqd' },

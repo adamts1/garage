@@ -1,0 +1,61 @@
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px 22px;
+  margin-bottom: 18px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-d);
+  font-size: 15px;
+}
+
+.actions {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.note {
+  margin: 6px 0;
+  font-size: 15px;
+}
+
+.muted {
+  color: var(--muted-d);
+}
+
+.warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  padding: 8px 12px;
+  border-radius: 8px;
+}

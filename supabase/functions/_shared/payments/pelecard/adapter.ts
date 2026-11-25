@@ -25,8 +25,8 @@
 
 import { ProviderAuthError } from '../provider.ts';
 import type {
-  CardEntry, CardType, PaymentCredentials, PaymentProvider, RefundInput, RefundResult, StartInput, StartedPayment, Verdict,
-  VerifyInput,
+  CardEntry, CardType, FindAttemptInput, PaymentCredentials, PaymentProvider, RefundInput, RefundResult, StartInput,
+  StartedPayment, TerminalChargeInput, Verdict, VerifyInput,
 } from '../provider.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -88,6 +88,17 @@ export function guardAuth(code: unknown): void {
    19 characters of lowercase letters and digits; anything else is refused. */
 export const paramX = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 19);
 
+/* The ParamX of one attempt: the ticket, for a person reading Pelecard's back
+   office, then the first 8 characters of the attempt's own id, so a report
+   (GetCompleteTransData) can be searched for exactly this attempt — a ticket
+   may have several (a declined card, a part payment). The ticket part is
+   shortened to fit; the attempt code never is.  GAR-137 + 9a04aca5-… →
+   "gar1379a04aca5". */
+export const attemptParamX = (label: string, attemptId: string): string => {
+  const code = attemptId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+  return paramX(label).slice(0, 19 - code.length) + code;
+};
+
 // ---------------------------------------------------------------- start
 
 export function initBody(c: Creds, input: StartInput): Record<string, unknown> {
@@ -105,7 +116,7 @@ export function initBody(c: Creds, input: StartInput): Record<string, unknown> {
     Currency: '1',
     Total: agorot(input.amount),
     UserKey: input.paymentId,
-    ParamX: paramX(input.label),
+    ParamX: attemptParamX(input.label, input.paymentId),
     Language: 'HE',
     /* Exactly the number chosen in our drawer: min = max leaves the page
        nothing to choose. Credit (interest) plans start above anything we
@@ -148,7 +159,7 @@ const DECLINES: Record<string, string> = {
   '009': 'אין תקשורת עם המסוף. בדוק שהוא דלוק ומחובר, ונסה שוב',
   '010': 'הפעולה בוטלה במסוף',
   '070': 'המסוף לא מוגדר אצל פלאקארד',
-  '075': 'המסוף לא קיבל כרטיס בזמן',
+  '075': 'המסוף לא קיבל כרטיס תוך דקה. אפשר לנסות שוב',
   '500': 'המסוף באמצע שידור או עדכון. נסה שוב בעוד כמה דקות',
   '600': 'שגיאה במסוף. פנה לתמיכה של פלאקארד',
 };
@@ -157,9 +168,20 @@ const DECLINES: Record<string, string> = {
    id (Aid) and a card sequence number; a card typed on the page has neither
    (seen on the sandbox, 2026-11-19). NOT yet seen on a terminal payment —
    check on the first one, and fix here if the N6 answers otherwise. */
-export function entryOf(r: { Aid?: unknown; CardSeqNumber?: unknown } | null | undefined): CardEntry {
+export function entryOf(r: { Aid?: unknown; CardSeqNumber?: unknown; PanEntryMode?: unknown } | null | undefined): CardEntry {
+  /* The report says it outright: PanEntryMode 50 is a card typed in
+     (sandbox, 2026-11-23); anything else was read by a device. */
+  const mode = String(r?.PanEntryMode ?? '').trim();
+  if (mode) return mode === '50' ? 'page' : 'terminal';
   return String(r?.Aid ?? '').trim() || String(r?.CardSeqNumber ?? '').trim() ? 'terminal' : 'page';
 }
+
+/* Pelecard writes the same result as "000", "0" or 0 depending on the
+   answer (the report: "0"). Compared as a number, padded for the code maps. */
+const shvaCode = (v: unknown) => {
+  const t = String(v ?? '').trim();
+  return t === '' ? '' : t.padStart(3, '0');
+};
 
 /* The brand, from the issuer's own Hebrew name first (it is what the bank
    says), then Pelecard's brand code. Code 4 was American Express on the
@@ -273,37 +295,19 @@ export function readTransaction(
 
 // ---------------------------------------------------------------- refund
 //
-// Checked against the sandbox, 2026-11-20:
-//   CancelTransaction  000 → voided (same day, before the broadcast);
-//                      510 "Record not found" → already broadcast: refund it;
-//                      519 "עסקת ביטול קיימת" → it was already voided.
-//   RefundByID         000 with ShvaResult 000 → returned, partial or whole;
-//                      173 "double transaction" → refused (a whole refund the
-//                      same day — that is what cancel is for).
-//   Pelecard does NOT refuse refunds that add up to more than was charged.
-
-export type CancelAnswer =
-  | { outcome: 'cancelled'; id: string | null; approval: string | null }
-  | { outcome: 'already' }
-  | { outcome: 'broadcast' }
-  | { outcome: 'refused'; message: string };
-
-export function readCancel(data: unknown): CancelAnswer {
-  // deno-lint-ignore no-explicit-any
-  const d = data as any;
-  guardAuth(d?.StatusCode);
-  const code = String(d?.StatusCode ?? '');
-  if (code === '000' && String(d?.ResultData?.ShvaResult ?? '000') === '000') {
-    return {
-      outcome: 'cancelled',
-      id: String(d?.DebitTrxId ?? d?.ResultData?.PelecardTransactionId ?? '') || null,
-      approval: approvalOf(d?.ResultData),
-    };
-  }
-  if (code === '519') return { outcome: 'already' };
-  if (code === '510') return { outcome: 'broadcast' };
-  return { outcome: 'refused', message: `${d?.ErrorMessage || 'cancel refused'} (${code || '?'})` };
-}
+// One operation for every return of money: ReverseTransaction. Pelecard's own
+// advice (2026-11-22), for every status — before the nightly broadcast, after
+// it, a charge typed on the page or taken on the terminal, whole or partial.
+// It replaced CancelTransaction / RefundByID and their terminal (EMV) twins,
+// and with them the guesswork about which one a charge needed.
+//
+// Checked on the sandbox, 2026-11-23, against charges already broadcast:
+//   partial (50 of 159.30, 2 installments) → 000, a credit in 2 installments;
+//   whole (118 in 4 installments)          → 000;
+//   the same partial again                 → 173 "double transaction":
+//     Pelecard refuses a second refund with identical values on one card.
+// Pelecard does NOT cap refunds at the charge (it is up to the card company);
+// the cap is ours, in issue-invoice.
 
 // deno-lint-ignore no-explicit-any
 const approvalOf = (r: any): string | null =>
@@ -316,7 +320,7 @@ const REFUND_REFUSALS: Record<string, string> = {
 };
 
 export function readRefund(data: unknown):
-  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string } {
+  { ok: true; id: string | null; approval: string | null } | { ok: false; message: string; code: string } {
   // deno-lint-ignore no-explicit-any
   const d = data as any;
   guardAuth(d?.StatusCode);
@@ -327,7 +331,97 @@ export function readRefund(data: unknown):
   }
   const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
   const said = REFUND_REFUSALS[code] ?? (bank && bank !== 'תקין' ? bank : d?.ErrorMessage || 'refund refused');
-  return { ok: false, message: `${said} (${code || '?'})` };
+  return { ok: false, message: `${said} (${code || '?'})`, code };
+}
+
+// ---------------------------------------------------------------- terminal, direct
+//
+// Pelecard (2026-11-22): a charge sent to the services API with the terminal's
+// shop number and no card values goes to the N6. DebitRegularType for one
+// payment, DebitPaymentsType for regular installments. The call waits for the
+// customer at the terminal and answers with the result — for one minute: then
+// it answers 075 (timeout), the N6 shows "not approved" in red and returns to
+// ready (Pelecard, 2026-11-24). 075 is a definite no, so it is 'declined'.
+//
+// NOT yet run against a terminal. On the sandbox (no device behind any shop
+// number) the same call is taken as a typed card and refused for its missing
+// expiry date — 508, nothing charged — which is at least the shape of a
+// refusal.
+
+/** Pelecard's split of a total into equal installments: each one rounded down
+ *  to the agora, the remainder on the first (seen on real charges: 130.98 in
+ *  7 = 18.72 + 6 × 18.71). In agorot. */
+export function firstPaymentAgorot(total: number, installments: number): number {
+  const all = agorot(total);
+  return all - Math.floor(all / installments) * (installments - 1);
+}
+
+export function terminalBody(c: Creds, input: TerminalChargeInput): { method: string; body: Record<string, unknown> } {
+  const n = input.installments > 1 ? input.installments : 1;
+  return {
+    method: n > 1 ? 'DebitPaymentsType' : 'DebitRegularType',
+    body: {
+      terminalNumber: c.terminal,
+      user: c.user,
+      password: c.password,
+      shopNumber: input.posShopNo,
+      total: String(agorot(input.amount)),
+      currency: '1',
+      paramX: attemptParamX(input.label, input.paymentId),
+      ...(n > 1 ? { paymentsNumber: String(n), firstPayment: String(firstPaymentAgorot(input.amount, n)) } : {}),
+      /* No card: that is what sends it to the terminal. Every card field is
+         sent, empty — Pelecard's own example request (2026-11-24). */
+      creditCard: '', creditCardDateMmYy: '', token: '', cvv2: '', id: '', authorizationNumber: '',
+      QAResultStatus: '', eci: '', xid: '', cavv: '',
+    },
+  };
+}
+
+/** One transaction as Pelecard reports it — a direct charge's answer, or a
+ *  row of the transactions report — read as a verdict. Same rules as a page
+ *  payment: paid only on an approval for exactly the amount and the plan. */
+export function readCharge(
+  r: Record<string, unknown> | null | undefined,
+  expected: { amount: number; installments: number },
+  raw: unknown,
+  envelope?: { code: string; message: string },
+): Verdict {
+  const shva = shvaCode(r?.ShvaResult);
+  if (!shva) {
+    /* No transaction at all. A refusal with a code is a definite no; anything
+       else is no answer. */
+    return envelope && envelope.code && envelope.code !== '000'
+      ? { status: 'declined', message: DECLINES[envelope.code] ?? `${envelope.message || 'הפעולה נדחתה'} (${envelope.code})`, raw }
+      : { status: 'pending', message: null, raw };
+  }
+  if (shva !== '000') {
+    const bank = String(r?.ShvaResultEmvMessage ?? '').trim();
+    return { status: 'declined', message: bank && bank !== 'תקין' ? bank : DECLINES[shva] ?? `העסקה לא אושרה (קוד ${shva})`, raw };
+  }
+  const debited = Number(r?.DebitTotal);
+  if (debited !== agorot(expected.amount)) return { status: 'pending', message: `amount mismatch: debited ${r?.DebitTotal} agorot`, raw };
+  const plan = Number(r?.TotalPayments) || 1;
+  if (plan !== expected.installments) return { status: 'pending', message: `installments mismatch: charged in ${r?.TotalPayments}`, raw };
+  return {
+    status: 'paid',
+    amount: debited / 100,
+    installments: plan,
+    approvalNumber: String(r?.DebitApproveNumber ?? '').trim() || null,
+    cardLast4: last4(r?.CreditCardNumber),
+    cardBrand: String(r?.CardHebrewName ?? r?.CardHebName ?? '').trim() || null,
+    cardType: cardTypeOf({ CardHebrewName: r?.CardHebrewName ?? r?.CardHebName, CardEnName: r?.CardEnName, CreditCardBrand: r?.CreditCardBrand }),
+    providerRef: String(r?.PelecardTransactionId ?? '').trim() || null,
+    entry: entryOf(r as never),
+    raw,
+  };
+}
+
+/** dd/MM/yyyy HH:mm in Israel time — how the report wants its window. */
+export function reportTime(d: Date): string {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
 }
 
 // ---------------------------------------------------------------- transport
@@ -399,38 +493,75 @@ export const pelecardAdapter: PaymentProvider = {
     return verdict;
   },
 
+  async chargeOnTerminal(input: TerminalChargeInput): Promise<Verdict> {
+    const c = readCreds(input.credentials);
+    const { method, body } = terminalBody(c, input);
+    const answer = await service(c, method, body);
+    /* No answer: the customer may still have paid. Found later by its ParamX. */
+    if (answer == null) return { status: 'pending', message: 'no answer from the terminal call', raw: null };
+    // deno-lint-ignore no-explicit-any
+    const d = answer as any;
+    guardAuth(d?.StatusCode);
+    return readCharge(d?.ResultData, input, scrub(answer), { code: String(d?.StatusCode ?? ''), message: String(d?.ErrorMessage ?? '') });
+  },
+
+  async findAttempt(input: FindAttemptInput): Promise<Verdict> {
+    const c = readCreds(input.credentials);
+    const at = new Date(input.at);
+    const answer = await service(c, 'GetCompleteTransData', {
+      startDate: reportTime(new Date(at.getTime() - 2 * 60_000)),
+      endDate: reportTime(new Date(Math.max(Date.now(), at.getTime()) + 60_000)),
+    });
+    if (answer == null) return { status: 'pending', message: 'no answer from the transactions report', raw: null };
+    // deno-lint-ignore no-explicit-any
+    const d = answer as any;
+    guardAuth(d?.StatusCode);
+    const ours = attemptParamX(input.label, input.paymentId);
+    const rows: Record<string, unknown>[] = (Array.isArray(d?.ResultData) ? d.ResultData : [])
+      .filter((x: Record<string, unknown>) => String(x?.AdditionalDetailsParamX ?? '').trim() === ours);
+    if (!rows.length) return { status: 'pending', message: null, raw: null };
+    // An approval wins over an earlier refusal of the same attempt.
+    const row = rows.find((x) => shvaCode(x.ShvaResult) === '000') ?? rows[0];
+    return readCharge(row, input, scrub({ ResultData: row }));
+  },
+
   async refund(input: RefundInput): Promise<RefundResult> {
     const c = readCreds(input.credentials);
 
-    /* The whole charge, the same day: void it, so it never reaches the card.
-       Once broadcast it can only be refunded, which is the path below. */
-    /* A charge taken on the terminal is voided and refunded with the terminal
-       (EMV) operations — same fields, other names (sandbox tool, 2026-11-23).
-       NOT yet run against a terminal payment. */
-    const emv = input.entry === 'terminal';
-
+    /* One call, chosen by what is being returned:
+         the whole charge, nothing returned from it before → ReverseTransaction
+           (before the broadcast it voids the charge, after it it refunds it);
+         any part of it — including "the rest" after an earlier part →
+           RefundByID with the amount.
+       ReverseTransaction refuses a part of a charge still before its
+       broadcast: it acts as a cancel, all or nothing (999 "NewAmount must set
+       as original amount in Cancel operation", staging, 2026-11-23).
+       RefundByID took a part both the same day and after the broadcast
+       (sandbox, 2026-11-20). */
+    let method: string;
+    let body: Record<string, unknown>;
     if (input.whole) {
-      const answer = await service(c, emv ? 'EmvReversal' : 'CancelTransaction',
-        emv ? { debitTrxId: input.providerRef } : { DebitTrxId: input.providerRef });
-      if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the cancel', raw: null };
-      const cancel = readCancel(answer);
-      const raw = scrub(answer);
-      if (cancel.outcome === 'cancelled') {
-        return { status: 'refunded', kind: 'cancel', providerRefundId: cancel.id, approvalNumber: cancel.approval, raw };
+      if (!input.providerUid) {
+        return { status: 'failed', message: 'the charge carries no Pelecard Uid to reverse', raw: null };
       }
-      if (cancel.outcome === 'already') return { status: 'refunded', kind: 'cancel', providerRefundId: null, approvalNumber: null, raw };
-      if (cancel.outcome === 'refused') return { status: 'failed', message: cancel.message, raw };
+      method = 'ReverseTransaction';
+      body = {
+        uid: input.providerUid,
+        debittrxid: input.providerRef,
+        newamount: String(agorot(input.amount)),
+        newparamx: paramX(`refund${input.paymentId}`),
+      };
+    } else {
+      method = 'RefundByID';
+      body = { debitTrxId: input.providerRef, NewAmount: String(agorot(input.amount)) };
     }
 
-    const answer = await service(c, emv ? 'RefundByIdEmv' : 'RefundByID', {
-      debitTrxId: input.providerRef,
-      NewAmount: String(agorot(input.amount)),
-    });
+    const answer = await service(c, method, body);
     if (answer == null) return { status: 'unknown', message: 'no answer from Pelecard to the refund', raw: null };
     const refund = readRefund(answer);
-    const raw = scrub(answer);
     return refund.ok
-      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw }
-      : { status: 'failed', message: refund.message, raw };
+      ? { status: 'refunded', kind: 'refund', providerRefundId: refund.id, approvalNumber: refund.approval, raw: scrub(answer) }
+      : { status: 'failed', message: refund.message, raw: scrub(answer) };
   },
 };
+

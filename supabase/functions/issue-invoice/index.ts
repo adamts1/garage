@@ -210,38 +210,41 @@ async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: str
 
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
-/* A line is priced BEFORE VAT and the provider adds the VAT, so the gross a
-   customer sees is never chosen directly — it is whatever subtotal + round(
-   subtotal × rate) lands on. At 18% those grosses step in jumps with gaps
-   between them, and ₪100.00 is a gap: ₪84.75 grosses to ₪100.01, ₪84.74 to
-   ₪99.99, and nothing prices to ₪100.00 exactly.
+/** Money a card already gave for this ticket that no document records: paid
+ *  through the clearing provider, on no document yet. A charge whose receipt
+ *  failed — the customer has paid, and the next receipt for this ticket must
+ *  say so, with that card's details, or the books and the clearing statement
+ *  part ways (and the card can no longer be refunded through the system).
+ *  Only this garage's, only this ticket's: never another customer's card. */
+// deno-lint-ignore no-explicit-any
+async function unclaimedCards(admin: any, garageId: string, ticketId: string | null): Promise<PaymentPart[]> {
+  if (!ticketId) return [];
+  const { data, error } = await admin.from('card_payments').select('id, amount')
+    .eq('garage_id', garageId).eq('ticket_id', ticketId)
+    .eq('status', 'paid').eq('purpose', 'charge').is('invoice_id', null)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(`could not read the ticket's card payments: ${error.message}`);
+  return (data ?? []).map((r: { id: string; amount: number }) =>
+    ({ method: 'card', amount: round2(Number(r.amount)), cardPaymentId: r.id }));
+}
 
-   Storing the amount asked for while the provider prints another is the one
-   outcome worth ruling out — the row and the document would disagree, and every
-   sum built on the row would be wrong by the difference. So a credit is snapped
-   to a gross that can actually be issued: closest to what was asked, ties to
-   the lower, and never above `cap`. An agora short is a rounding artefact; an
-   agora over is money the garage did not agree to hand back, and on a final
-   credit it is a sum of notes larger than the invoice they credit.
+/** The refusal when a request would leave such a charge off its receipt. The
+ *  screen reads `code` and `charged`, and asks the advisor for the rest. */
+const unclaimedRefusal = (charged: PaymentPart[], message: string) => json({
+  error: message,
+  code: 'card_unclaimed',
+  charged: charged.map((p) => ({ card_payment_id: p.cardPaymentId, amount: p.amount })),
+}, 409);
 
-   Mirrored in packages/shared/src/invoices.ts so the dialog can name the real
-   figure. This copy is the authoritative one: it works from the stored invoice,
-   not from an amount a client sent. */
-function issuableCredit(requested: number, vatRate: number, cap: number):
-  { subtotal: number; vat: number; total: number } | null {
-  const start = round2(requested / (1 + vatRate));
-  let best: { subtotal: number; vat: number; total: number } | null = null;
-  for (let step = -2; step <= 2; step++) {
-    const subtotal = round2(start + step / 100);
-    if (subtotal <= 0) continue;
-    const vat = round2(subtotal * vatRate);
-    const total = round2(subtotal + vat);
-    if (total <= 0 || total > cap) continue;
-    if (!best || Math.abs(total - requested) < Math.abs(best.total - requested) - 1e-9) {
-      best = { subtotal, vat, total };
-    }
-  }
-  return best;
+/** A request's own payments, checked against the ticket's unclaimed charges.
+ *  A list that names payments must name every one of them — a receipt for
+ *  cash while a card charge for the same visit sits on no document is the
+ *  customer paying twice. A message to refuse with, or null. */
+function missingCharges(payments: PaymentPart[], charged: PaymentPart[]): string | null {
+  const listed = new Set(payments.map((p) => p.cardPaymentId).filter(Boolean));
+  const missing = charged.filter((c) => !listed.has(c.cardPaymentId));
+  if (!missing.length) return null;
+  return `card charges on this ticket are on no document yet (${missing.map((c) => c.amount).join(', ')}) — they belong on this receipt`;
 }
 
 Deno.serve(async (req) => {
@@ -395,8 +398,15 @@ Deno.serve(async (req) => {
       /* Several methods at one visit, when the caller sends them. Checked here,
          before anything is reserved; their sum is checked against the bill once
          the bill is priced, below. */
-      const payments = readPayments(body.payments);
-      if (typeof payments === 'string') return json({ error: payments }, 400);
+      const read = readPayments(body.payments);
+      if (typeof read === 'string') return json({ error: read }, 400);
+      let payments: PaymentPart[] | null = read;
+      /* Cards already charged for this visit and on no document — see
+         unclaimedCards. A list must carry them all; no list is settled below,
+         once the bill is priced. */
+      const charged = await unclaimedCards(admin, ticket.garage_id, ticket.id);
+      const missing = payments && missingCharges(payments, charged);
+      if (missing) return unclaimedRefusal(charged, missing);
       const unbound = payments && await bindCards(admin, payments, ticket.garage_id, ticket.id);
       if (unbound) return json({ error: unbound }, 400);
 
@@ -438,6 +448,29 @@ Deno.serve(async (req) => {
       }
       const { items, owners, subtotal, vat, total } = priced;
       const vehicle = vehicleOf(ticket);
+
+      /* An invoice-receipt asked for without a list ("issue the receipt", the
+         button after a failed one) while cards were charged for this visit:
+         those charges ARE the payment. Exactly the bill → they become the
+         receipt's payments, with each card's details. Anything else is a
+         question only the advisor can answer — how the rest was paid, or why a
+         card took more than the bill — so it is asked, never guessed. A tax
+         invoice records no payment; the charges wait for its receipt. */
+      if (!payments && charged.length && docType === 'invoice_receipt') {
+        const cards = sumOf(charged);
+        if (cards !== total) {
+          await release('card charges do not cover the bill');
+          return unclaimedRefusal(charged, cards < total
+            ? `${cards} was charged to a card for this ticket and is on no document; the bill is ${total} — say how the other ${round2(total - cards)} was paid`
+            : `card charges for this ticket (${cards}) are more than the bill (${total}) — check them before issuing`);
+        }
+        payments = charged;
+        const unboundNow = await bindCards(admin, payments, ticket.garage_id, ticket.id);
+        if (unboundNow) {
+          await release(unboundNow);
+          return json({ error: unboundNow }, 400);
+        }
+      }
 
       /* A tax invoice records no payment, so a list of them is a mistake in the
          caller. An invoice-receipt says the bill was paid — all of it — so the
@@ -683,10 +716,25 @@ Deno.serve(async (req) => {
       /* Every payment taken at this visit, on one receipt. Their sum is the
          amount; an `amount` sent beside them must agree, or one of the two is
          wrong and nobody can say which. */
-      const payments = readPayments(body.payments);
-      if (typeof payments === 'string') return json({ error: payments }, 400);
+      const read = readPayments(body.payments);
+      if (typeof read === 'string') return json({ error: read }, 400);
+      let payments: PaymentPart[] | null = read;
       if (payments && body.amount != null && round2(Number(body.amount)) !== sumOf(payments)) {
         return json({ error: `amount ${body.amount} does not match the payments (${sumOf(payments)})` }, 400);
+      }
+      /* Cards already charged for this visit and on no document (see
+         unclaimedCards) come first: a list must carry them, and no list means
+         they are this receipt — a bare "collect" while a card has already paid
+         would otherwise record the same money a second time. */
+      const charged = await unclaimedCards(admin, inv.garage_id, inv.ticket_id);
+      if (payments) {
+        const missing = missingCharges(payments, charged);
+        if (missing) return unclaimedRefusal(charged, missing);
+      } else if (charged.length) {
+        if (body.amount != null && round2(Number(body.amount)) !== sumOf(charged)) {
+          return unclaimedRefusal(charged, `${sumOf(charged)} was charged to a card for this bill and is on no document — collect it first, then the rest`);
+        }
+        payments = charged;
       }
       const asked = payments ? sumOf(payments) : body.amount == null ? null : round2(Number(body.amount));
       const unbound = payments && await bindCards(admin, payments, inv.garage_id, inv.ticket_id);
@@ -897,6 +945,7 @@ Deno.serve(async (req) => {
           credentials: provider.credentials,
           paymentId: card.id,
           providerRef: String(providerRef),
+          providerUid: card.raw?.ResultData?.Uid ? String(card.raw.ResultData.Uid) : null,
           chargedAmount: Number(card.amount),
           amount,
           whole: amount === round2(Number(card.amount)) && back(card.id) === 0,
@@ -990,17 +1039,16 @@ Deno.serve(async (req) => {
 
       /* A full credit of an untouched invoice copies its own lines, so the two
          documents are the same money written twice — no rounding to argue
-         about later. Anything else is one line for the amount agreed, with the
-         reason on it, priced pre-VAT the way every other line is: the provider
-         adds VAT, and what the customer gets back is the gross typed in. */
+         about later. Anything else is one line for exactly the amount agreed,
+         VAT included: the line is sent VAT-inclusive and the provider takes
+         the VAT out of it, so ₪10.00 is ₪10.00 (8.47 + 1.53), not the 9.99 or
+         10.01 a pre-VAT price would land on. What is stored is what the
+         provider issues: the net to the agora, the VAT as the difference. */
       const untouched = full && Number(creditedSoFar ?? 0) === 0;
+      const exactNet = round2(requested / (1 + vatRate));
       const priced = untouched
         ? { subtotal: Number(inv.subtotal), vat: Number(inv.vat), total: Number(inv.total) }
-        : issuableCredit(requested, vatRate, remaining);
-      if (!priced) {
-        await release('no issuable amount');
-        return json({ error: 'no credit can be issued for that amount' }, 400);
-      }
+        : { subtotal: exactNet, vat: round2(requested - exactNet), total: requested };
       const { subtotal, vat, total } = priced;
 
       /* ---- money back to the card, BEFORE the document ----
@@ -1022,7 +1070,7 @@ Deno.serve(async (req) => {
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
             description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
-        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1 }];
+        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
 
       const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({

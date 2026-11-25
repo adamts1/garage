@@ -1,0 +1,55 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 20px;
+  margin-bottom: 8px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.subhead {
+  margin: 18px 0 2px;
+  font-size: 15px;
+}
+
+.subnote {
+  margin: 0 0 10px;
+  color: var(--muted-d);
+  font-size: 14px;
+}
+
+.plan {
+  margin: 0 0 16px;
+  padding-inline-start: 22px;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.submit {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.detail {
+  color: var(--muted-d);
+  font-size: 13px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}

@@ -1,5 +1,5 @@
 import {
-  assignableWorkers, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
+  assignableWorkers, cardPaymentReference, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
 import { Fragment, useState, type CSSProperties } from 'react';
@@ -104,6 +104,8 @@ export default function TicketPage({
   const billLocked = cancelled || invoice?.status === 'issued';
   const closed = isClosed(draft);
   const settled = isSettled(draft);
+  /** The ticket's bill, while it stands — a fully credited one no longer bills anything. */
+  const liveBill = invoice?.status === 'issued' ? invoice : null;
   const wa = waNumber(draft.phone);
   const chip = workerChip(workerChips, draft.who);
   const worker = chip.n;
@@ -481,10 +483,14 @@ export default function TicketPage({
 
           <section className="card">
             <h3 className="card-title"><IconCard /> {t('ticket.billing')}</h3>
-            <div className={`bill-note${draft.paid ? ' ok' : ''}`}>
-              {draft.doc
-                ? t(draft.paid ? 'ticket.billPaid' : 'ticket.billOpen')
-                : t('ticket.billNone')}
+            {/* Read off the document that exists, not off the ticket's `doc`
+                column: that is written when the ticket is closed, BEFORE the
+                document is issued — and stays when issuing fails, which is how
+                a ticket with no document at all read "הופקה חשבונית מס-קבלה". */}
+            <div className={`bill-note${draft.paid && liveBill ? ' ok' : ''}`}>
+              {liveBill
+                ? t(page.owed > 0 ? 'ticket.billOpen' : 'ticket.billPaid')
+                : t(draft.paid ? 'ticket.billPaidNoDoc' : 'ticket.billNone')}
             </div>
             <dl className="kv">
               <dt>{t('ticket.fields.status')}</dt>
@@ -509,6 +515,19 @@ export default function TicketPage({
                 closed while the drawer was issuing nothing and settling the
                 ticket anyway; disabling on `settled` alone would leave those
                 with a debt at the provider and no way in the app to collect it. */}
+            {/* Money a card already gave for this visit with no document behind
+                it — the receipt failed when it was taken. Said until a document
+                records it: the next receipt for this ticket includes it, and the
+                one thing nobody should do is charge the card again. */}
+            {page.unclaimed.length > 0 && (
+              <div className="tp-warn" role="alert">
+                {t('ticket.unclaimedCharge', {
+                  amount: money(page.unclaimed.reduce((s, p) => s + p.amount, 0)),
+                  card: page.unclaimed.map(cardPaymentReference).filter(Boolean).join(', ') || '-',
+                })}
+              </div>
+            )}
+
             <button
               className="btn primary block"
               onClick={() => void page.close()}
