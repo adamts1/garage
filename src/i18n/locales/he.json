@@ -47,15 +47,19 @@
     "none": "0"
   },
   "archive": {
-    "title": "ארכיון",
-    "subtitle": "כרטיסים ששולמו, מהיום שלאחר התשלום, וכרטיסים שבוטלו",
-    "search": "חיפוש בארכיון",
+    "title": "כרטיסי עבודה",
+    "subtitle": "כל הכרטיסים של המוסך, כולל אלה שבארכיון ושבוטלו",
+    "tabAll": "הכל",
+    "tabLegacy": "מערכות קודמות",
+    "search": "חיפוש כרטיס",
     "searchPlaceholder": "מספר כרטיס, לקוח, רכב או מספר רישוי",
-    "empty": "אין כרטיסים בארכיון",
+    "empty": "אין כרטיסים",
     "noMatch": "לא נמצאו כרטיסים תואמים",
+    "export": "ייצוא לאקסל",
     "fields": {
       "key": "מספר",
       "title": "תיאור",
+      "status": "סטטוס",
       "customer": "לקוח",
       "plate": "מספר רישוי",
       "car": "רכב",
@@ -64,8 +68,9 @@
       "amount": "סכום"
     },
     "status": "סטטוס",
-    "statusAll": "הכול",
-    "statusPaid": "שולם",
+    "statusAll": "הכל",
+    "statusActive": "פעילים",
+    "statusArchived": "ארכיון",
     "cancelled": "בוטל"
   },
   "reports": {
@@ -482,7 +487,7 @@
     "confirm": "הפק חשבונית זיכוי",
     "doneFull": "הופקה חשבונית זיכוי {{docnum}} על {{amount}} · החשבונית בוטלה",
     "donePartial": "הופקה חשבונית זיכוי {{docnum}} על {{amount}}",
-    "alreadyOnInvoice": "זוכו {{credited}} · נותרו {{remaining}}",
+    "alreadyOnInvoice": "זוכו {{credited}}",
     "toCard": "החזר לכרטיס האשראי {{last4}}",
     "willRefund": "יוחזרו {{amount}} לכרטיס, לפני הפקת חשבונית הזיכוי.",
     "restOtherwise": "את היתרה, {{rest}}, יש להחזיר בדרך אחרת.",
@@ -668,7 +673,7 @@
     "works": "עבודות",
     "items": "פריטים",
     "reports": "דוחות",
-    "archive": "ארכיון",
+    "archive": "כ. עבודה",
     "open": "פתוח",
     "activeTickets": "{{count}} כרטיסים פעילים",
     "signOut": "התנתקות",
@@ -1024,7 +1029,7 @@
     },
     "filter": "סטטוס",
     "filters": {
-      "all": "הכול ({{count}})",
+      "all": "הכל ({{count}})",
       "open": "פתוחים ({{count}})",
       "closed": "סגורים ({{count}})",
       "cancelled": "בוטלו ({{count}})"

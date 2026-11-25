@@ -5,7 +5,7 @@ import { Button } from '../../components/Button';
 import { Filter, FilterBar } from '../../components/FilterBar';
 import { KpiCard, KpiRow } from '../../components/KpiCard';
 import { Table, useTable, type Column } from '../../components/Table';
-import { IconCard, IconCustomers, IconReports } from '../../icons';
+import { IconCard, IconCustomers, IconReports, IconExcel } from '../../icons';
 import { downloadXlsx } from '../../lib/xlsx';
 import { showError, useAppDispatch } from '../../store';
 import { today } from './localDay';
@@ -152,7 +152,7 @@ export default function AgingReport({ tickets }: { tickets: Ticket[] }) {
       <section className={styles.tableCard}>
         <h3 className={styles.tableTitle}>
           {t(`reports.aging.breakdown.${side}`, { count: rows.length })}
-          <Button onClick={exportSheet}>⭳ {t('reports.export')}</Button>
+          <Button onClick={exportSheet}><IconExcel /> {t('reports.export')}</Button>
         </h3>
 
         <Table

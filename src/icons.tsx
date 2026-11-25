@@ -221,3 +221,14 @@ export const IconDownload = () => (
     <path d="M4 19h16" />
   </svg>
 );
+
+/** The export-to-Excel button. Filled in spreadsheet green rather than
+ *  currentColor: it is recognised by its colour first, and it must still read
+ *  as "a spreadsheet" on a navy primary button. */
+export const IconExcel = ({ size = base.width }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="2" y="3" width="20" height="18" rx="3" fill="#1f7244" />
+    <path d="M12 7h7M12 12h7M12 17h7" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="m5 8 5 8M10 8l-5 8" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
