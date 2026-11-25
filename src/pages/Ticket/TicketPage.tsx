@@ -104,6 +104,8 @@ export default function TicketPage({
   const billLocked = cancelled || invoice?.status === 'issued';
   const closed = isClosed(draft);
   const settled = isSettled(draft);
+  /** The ticket's bill, while it stands — a fully credited one no longer bills anything. */
+  const liveBill = invoice?.status === 'issued' ? invoice : null;
   const wa = waNumber(draft.phone);
   const chip = workerChip(workerChips, draft.who);
   const worker = chip.n;
@@ -481,10 +483,14 @@ export default function TicketPage({
 
           <section className="card">
             <h3 className="card-title"><IconCard /> {t('ticket.billing')}</h3>
-            <div className={`bill-note${draft.paid ? ' ok' : ''}`}>
-              {draft.doc
-                ? t(draft.paid ? 'ticket.billPaid' : 'ticket.billOpen')
-                : t('ticket.billNone')}
+            {/* Read off the document that exists, not off the ticket's `doc`
+                column: that is written when the ticket is closed, BEFORE the
+                document is issued — and stays when issuing fails, which is how
+                a ticket with no document at all read "הופקה חשבונית מס-קבלה". */}
+            <div className={`bill-note${draft.paid && liveBill ? ' ok' : ''}`}>
+              {liveBill
+                ? t(page.owed > 0 ? 'ticket.billOpen' : 'ticket.billPaid')
+                : t(draft.paid ? 'ticket.billPaidNoDoc' : 'ticket.billNone')}
             </div>
             <dl className="kv">
               <dt>{t('ticket.fields.status')}</dt>
