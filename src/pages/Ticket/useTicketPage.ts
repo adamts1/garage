@@ -891,6 +891,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
            money is taken. Closing again finds that payment (card-payment
            hands it back) rather than charging the card a second time. */
         if (parts.some((p) => p.cardPaymentId)) dispatch(showErrorKey('ticket.cardChargedNotSaved'));
+        void refreshUnclaimed();
         return;
       }
 
@@ -937,6 +938,8 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
          it has at most one.) */
       if (!invoicing) {
         dispatch(showInfo(paid ? 'ticket.paidNoInvoicing' : 'ticket.closedNoInvoicing'));
+        // A card charged here has no document: the warning says so at once.
+        void refreshUnclaimed();
         return;
       }
 
@@ -949,9 +952,12 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         await billTaken(parts, total);
       } finally {
         setBusy(false);
+        /* Whatever became of the document, the warning reads the charges
+           afresh rather than waiting for the page to be opened again. */
+        void refreshUnclaimed();
       }
     },
-    [billTaken, collect, dirty, dispatch, draft, gather, invoice, issue, openCloseDrawer, owed, save, t, totals.total, unclaimed.length],
+    [billTaken, collect, dirty, dispatch, draft, gather, invoice, issue, openCloseDrawer, owed, refreshUnclaimed, save, t, totals.total, unclaimed.length],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button

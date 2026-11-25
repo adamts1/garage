@@ -646,6 +646,32 @@ describe('a card charged with no document', () => {
     ]);
   });
 
+  /* Invoicing switched off before the drawer opened: nothing is issued, so
+     no failure is reported either — the warning is the only thing that says
+     the card paid with no document, and it must not wait for a reload. */
+  it('warns at once after a close that issued nothing', async () => {
+    invoicingActive.mockResolvedValue(false);
+    await renderPage();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    unclaimedCardPayments.mockResolvedValue([charge(1180)]);
+    await closeAndCharge('מזומן');
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByRole('alert').textContent).toMatch(/חויב בכרטיס/);
+  });
+
+  /* The ticket's `doc` column is written when it is closed — before any
+     document is issued. The billing line reads the document itself. */
+  it('says paid with no document when nothing was issued', async () => {
+    invoicingActive.mockResolvedValue(false);
+    await renderPage();
+    await closeAndCharge('מזומן');
+
+    expect(screen.queryByText('שולם - הופקה חשבונית מס-קבלה')).toBeNull();
+    expect(screen.getByText('שולם - לא הופק מסמך')).toBeTruthy();
+  });
+
   it('leaves the rest owed when the drawer is closed: the bill, and a receipt for the card', async () => {
     unclaimedCardPayments.mockResolvedValue([charge(500)]);
     issueInvoice.mockResolvedValue(invoice({ docType: 'tax_invoice' }));

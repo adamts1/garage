@@ -520,6 +520,7 @@
     "billPaid": "שולם - הופקה חשבונית מס-קבלה",
     "billOpen": "הופקה חשבונית מס - יתרה פתוחה",
     "billNone": "לא הונפק מסמך / לא שולם",
+    "billPaidNoDoc": "שולם - לא הופק מסמך",
     "paidWith": "שולם · {{method}}",
     "openCharge": "חיוב פתוח",
     "alreadySettled": "שולם · הכרטיס סגור",
