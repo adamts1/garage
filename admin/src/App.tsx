@@ -1,66 +1,83 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EnvironmentInfo } from './api/types';
 import styles from './App.module.css';
-import { LoadState, TabPanel, Tabs, type TabDef } from './components';
+import { LoadState } from './components';
+import { IconCar, IconCode, IconLayers, IconLogo, IconPhone, IconPlusSquare } from './components/icons';
 import { FunctionsPage } from './features/functions/FunctionsPage';
 import { GaragesPage } from './features/garages/GaragesPage';
 import { MigrationsPage } from './features/migrations/MigrationsPage';
 import { MobilePage } from './features/mobile/MobilePage';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
 import { useLoad } from './hooks/useLoad';
+import type { PageId } from './lib/nav';
 
-type TabId = 'garages' | 'onboard' | 'migrations' | 'functions' | 'mobile';
 
-const TABS: readonly TabDef<TabId>[] = [
-  { id: 'garages', label: 'console.tabs.garages' },
-  { id: 'onboard', label: 'console.tabs.onboard' },
-  { id: 'migrations', label: 'console.tabs.migrations' },
-  { id: 'functions', label: 'console.tabs.functions' },
-  { id: 'mobile', label: 'console.tabs.mobile' },
+const PAGES: readonly { id: PageId; label: string; icon: ReactNode }[] = [
+  { id: 'garages', label: 'console.tabs.garages', icon: <IconCar /> },
+  { id: 'onboard', label: 'console.tabs.onboard', icon: <IconPlusSquare /> },
+  { id: 'migrations', label: 'console.tabs.migrations', icon: <IconLayers /> },
+  { id: 'functions', label: 'console.tabs.functions', icon: <IconCode /> },
+  { id: 'mobile', label: 'console.tabs.mobile', icon: <IconPhone /> },
 ];
 
-const isTab = (v: string): v is TabId => TABS.some((tab) => tab.id === v);
-const tabFromHash = (): TabId => {
+const isPage = (v: string): v is PageId => PAGES.some((p) => p.id === v);
+const pageFromHash = (): PageId => {
   const h = window.location.hash.slice(1);
-  return isTab(h) ? h : 'garages';
+  return isPage(h) ? h : 'garages';
 };
 
 export function App() {
   const { t } = useTranslation();
-  /* The tab lives in the address (#onboard), so a refresh — or the dev
-     server's own reload after an edit — keeps you where you were. */
-  const [tab, setTab] = useState<TabId>(tabFromHash);
+  const [page, setPage] = useState<PageId>(pageFromHash);
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => setPage(pageFromHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  const select = (id: TabId) => {
-    window.location.hash = id;
-    setTab(id);
-  };
   const envs = useLoad<EnvironmentInfo[]>('/api/environments');
+  const current = PAGES.find((p) => p.id === page);
 
   return (
     <div className={styles.shell}>
-      <header className={styles.top}>
-        <h1 className={styles.title}>{t('console.title')}</h1>
-        <Tabs tabs={TABS} selected={tab} onSelect={select} label="console.tabs.label" />
-        <span className={styles.hint}>{t('console.localOnly')}</span>
-      </header>
+      <aside className={styles.sidebar}>
+        <div className={styles.brand} dir="ltr">
+          <IconLogo />
+          <span>Garagiox</span>
+        </div>
+        <nav className={styles.nav} aria-label={t('console.tabs.label')}>
+          {PAGES.map((p) => (
+            <a
+              key={p.id}
+              href={`#${p.id}`}
+              className={`${styles.navItem} ${p.id === page ? styles.active : ''}`}
+              aria-current={p.id === page ? 'page' : undefined}
+            >
+              {p.icon}
+              <span>{t(p.label)}</span>
+            </a>
+          ))}
+        </nav>
+        <div className={styles.footer}>
+          <strong>{t('console.title')}</strong>
+          <span>{t('console.localOnly')}</span>
+        </div>
+      </aside>
 
-      <LoadState load={envs}>
-        {(list) => (
-          <TabPanel id={tab}>
-            {tab === 'garages' && <GaragesPage envs={list} />}
-            {tab === 'onboard' && <OnboardingPage envs={list} />}
-            {tab === 'migrations' && <MigrationsPage envs={list} />}
-            {tab === 'functions' && <FunctionsPage envs={list} />}
-            {tab === 'mobile' && <MobilePage />}
-          </TabPanel>
-        )}
-      </LoadState>
+      <main className={styles.main}>
+        <LoadState load={envs}>
+          {(list) => (
+            <>
+              {page === 'garages' && <GaragesPage envs={list} />}
+              {page !== 'garages' && <h1 className={styles.pageTitle}>{current && t(current.label)}</h1>}
+              {page === 'onboard' && <OnboardingPage envs={list} />}
+              {page === 'migrations' && <MigrationsPage envs={list} />}
+              {page === 'functions' && <FunctionsPage envs={list} />}
+              {page === 'mobile' && <MobilePage />}
+            </>
+          )}
+        </LoadState>
+      </main>
     </div>
   );
 }

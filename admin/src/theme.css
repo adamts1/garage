@@ -1,0 +1,29 @@
+/* The console's own tones over the app's tokens: a cooler page, a deeper
+   blue for actions. Loaded after src/styles.css, and only by the console —
+   the app never sees this file. On :root, so dialogs portalled to <body>
+   get it too. */
+:root {
+  --bg: #f1f4f9;
+  --surface-2: #f5f7fb;
+  --border: #dfe4ec;
+  --border-soft: #eceff5;
+  --primary: #26398c;
+  --primary-d: #1b2a6b;
+  --primary-soft: #e8ecf8;
+  --navy: #13213f;
+  --shadow: 0 4px 18px rgba(19, 33, 63, 0.06);
+  /* A full viewport under the zoom: 100vh is scaled with everything else. */
+  --viewport-h: calc(100vh / var(--console-zoom, 1));
+}
+
+body {
+  background: var(--bg);
+}
+
+/* The console reads best at what the browser calls 80%: a table of garages
+   wants width more than it wants large type. Set here so 100% looks like
+   that, rather than asking everyone to zoom out. */
+html {
+  --console-zoom: 0.8;
+  zoom: var(--console-zoom);
+}

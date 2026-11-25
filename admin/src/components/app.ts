@@ -11,6 +11,8 @@ export { EmptyState } from '../../../src/components/EmptyState';
 export { CheckboxField, SelectField, TextAreaField, TextField } from '../../../src/components/Field';
 export { KpiCard, KpiRow } from '../../../src/components/KpiCard';
 export type { KpiTone } from '../../../src/components/KpiCard';
+export { default as Modal } from '../../../src/components/Modal/Modal';
+export { default as SearchBar } from '../../../src/components/SearchBar/SearchBar';
 export { PageHeader } from '../../../src/components/PageHeader';
 export { Pill } from '../../../src/components/Pill';
 export type { PillTone } from '../../../src/components/Pill';

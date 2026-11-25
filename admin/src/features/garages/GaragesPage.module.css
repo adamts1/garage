@@ -1,50 +1,211 @@
-.table td,
-.table th {
-  padding: 10px 14px;
-  font-size: 15px;
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 26px;
 }
 
-.details {
+.titleBlock {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
-  padding: 6px 4px;
-  text-align: start;
+  gap: 16px;
+  justify-items: start;
 }
 
-.details h4 {
-  margin: 14px 0 6px;
+.title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 20px;
+  font-size: 16px;
+}
+
+.actions .newGarage {
+  background: var(--primary);
+  color: #fff;
+}
+
+.actions .newGarage:hover:not(:disabled) {
+  background: var(--primary-d);
+}
+
+.list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 22px 22px 24px;
+}
+
+.listHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.listHead h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filters > label {
+  width: 370px;
+  flex-shrink: 1;
+}
+
+.filter {
+  white-space: nowrap;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+}
+
+.filter:hover {
+  border-color: var(--steel);
+}
+
+.filter:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.filterOn {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-d);
+}
+
+/* A garage with something to fix: the row itself is warm, not just its pill. */
+.attentionRow td {
+  background: #fdf6e7;
+}
+
+.attentionRow:hover td {
+  background: #faefd6;
+}
+
+.table {
+  margin-top: 12px;
+}
+
+.table td {
+  padding: 12px 16px;
+}
+
+.nameCell {
+  display: grid;
+  gap: 3px;
+}
+
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--navy);
+}
+
+.sub {
   font-size: 13px;
   color: var(--muted-d);
 }
 
-.details h4:first-child {
-  margin-top: 0;
+.admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.members {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  font-size: 15px;
+.email {
+  font-size: 14px;
+  unicode-bidi: isolate;
 }
 
-.members li {
-  padding: 3px 0;
+.more {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-d);
+  background: var(--primary-soft);
+  border-radius: 8px;
+  padding: 1px 6px;
 }
 
 .muted {
+  color: var(--muted);
+}
+
+.chevron {
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
   color: var(--muted-d);
 }
 
-.switch {
-  margin-top: 10px;
-  display: grid;
-  gap: 8px;
-  max-width: 360px;
+/* InvoicingSwitch: the switch and what it means, on one line. */
+.switchRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
 }
 
-.switchButtons {
-  display: flex;
-  gap: 8px;
+.on {
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.off {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.none {
+  color: var(--muted);
+  font-size: 14px;
 }

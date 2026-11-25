@@ -1,27 +1,103 @@
+/* RTL: the first column is the right-hand one — the sidebar. */
 .shell {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 0 24px 48px;
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  min-height: var(--viewport-h, 100vh);
 }
 
-.top {
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: var(--viewport-h, 100vh);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 26px 16px 20px;
+  background: linear-gradient(180deg, #0f1a33 0%, #16254a 100%);
+  color: #fff;
+}
+
+.brand {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-  padding: 18px 0;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border);
+  justify-content: center;
+  gap: 10px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.title {
-  margin: 0;
-  font-size: 22px;
+.nav {
+  display: grid;
+  gap: 6px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 17px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.navItem:focus-visible {
+  outline: 2px solid #8ea2e8;
+  outline-offset: 1px;
+}
+
+.active,
+.active:hover {
+  background: #2f4590;
+  color: #fff;
+}
+
+.footer {
+  margin-top: auto;
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.footer strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+}
+
+.main {
+  min-width: 0;
+  padding: 28px 32px 48px;
+}
+
+.pageTitle {
+  margin: 0 0 22px;
+  font-size: 32px;
+  font-weight: 800;
   color: var(--navy);
 }
 
-.hint {
-  margin-inline-start: auto;
-  color: var(--muted-d);
-  font-size: 14px;
+.navItem svg {
+  width: 23px;
+  height: 23px;
+  flex: none;
+}
+
+.brand svg {
+  width: 40px;
+  height: 40px;
 }
