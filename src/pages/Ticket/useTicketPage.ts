@@ -1,5 +1,5 @@
 import {
-  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, chargedPart, unclaimedCardPayments, type CardPayment, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -146,14 +146,28 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     return () => { alive = false; off(); };
   }, [ticket.k]);
 
+  /* Cards charged for this ticket that no document records — the customer
+     paid and the receipt failed. Shown as a warning while there are any, and
+     put on the next receipt. Read again whenever the documents change, since
+     a receipt is what takes a charge off this list. */
+  const [unclaimed, setUnclaimed] = useState<CardPayment[]>([]);
+  const refreshUnclaimed = useCallback(
+    () => unclaimedCardPayments(ticket.k).then(setUnclaimed).catch(() => {}),
+    [ticket.k],
+  );
+
   useEffect(() => {
     let alive = true;
-    const load = () =>
-      listInvoices()
+    const load = () => {
+      void listInvoices()
         .then((all) => { if (alive) setTicketDocs(all.filter((i) => i.ticketKey === ticket.k)); })
         .catch(() => {});   // an absent invoice panel beats a broken page
-    void load();
-    const off = subscribeToInvoices(() => void load());
+      void unclaimedCardPayments(ticket.k)
+        .then((u) => { if (alive) setUnclaimed(u); })
+        .catch(() => {});
+    };
+    load();
+    const off = subscribeToInvoices(load);
     return () => { alive = false; off(); };
   }, [ticket.k]);
 
@@ -472,34 +486,6 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     return inv;
   }, [dispatch, draft.finalPrice, draft.works, run, t, ticket.k]);
 
-  /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
-   *  the copy names the amount and says the document cannot be deleted. */
-  const issue = useCallback(async (docType: BillDocType = 'invoice_receipt') => {
-    /* The server builds the document from the stored row, so unsaved works
-       would be missing from a real tax document. Refuse rather than silently
-       invoice a version of the ticket nobody is looking at. */
-    if (dirty) {
-      dispatch(showErrorKey('ticket.saveBeforeInvoice'));
-      return;
-    }
-
-    const ok = await openModal('issueInvoice', {
-      amount: money(totals.total),
-      customer: ticket.customer,
-      docType,
-    });
-    if (!ok) return;
-
-    setBusy(true);
-    try {
-      await issueNow(docType);
-    } catch (e) {
-      dispatch(showError(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [dirty, dispatch, issueNow, openModal, ticket.customer, totals.total]);
-
   /* One visit's payments, gathered before anything is issued.
 
      A customer paying in parts is usually still at the counter — some cash,
@@ -523,6 +509,66 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     }
     return parts;
   }, [draft, openCollectDrawer]);
+
+  /* The document for a visit's money, decided by how much of it arrived:
+     - all of it → one מס-קבלה, naming every method used;
+     - part of it → a חשבונית מס for the job, and one קבלה for what arrived,
+       naming every method — the rest is then an open bill like any other;
+     - none of it → the חשבונית מס alone.
+     Safe to call again after a failure: the server hands back a bill already
+     issued for the ticket rather than issuing a second. */
+  const billFor = useCallback(async (parts: PaymentPart[], total: number) => {
+    const paid = parts.length > 0 && paymentsTotal(parts) >= round2(total - settledWithin(parts));
+    if (paid) {
+      /* One method is the ordinary document, read off the saved ticket as it
+         always was; several are sent, and the server checks they add up to
+         the bill. A single card with installments or card details is sent as
+         a part too: the ticket's columns name a method and a reference, not a
+         payment plan or an approval number. */
+      await issueNow('invoice_receipt', parts.length > 1 || parts.some(partHasCardDetails) ? parts : undefined);
+      return;
+    }
+    const bill = await issueNow('tax_invoice');
+    if (parts.length === 0) return;
+    const { receipt, owed: stillOwed } = await run('busy.collecting', () => collectInvoice(bill.id, parts));
+    setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
+    dispatch(showSuccess('collect.donePartial', {
+      docnum: receipt.docnum,
+      amount: money(receipt.total),
+      left: money(stillOwed),
+    }));
+  }, [dispatch, issueNow, run, ticket.k]);
+
+  /* billFor, for money that has ALREADY been taken. A failure here is a
+     customer who paid with nothing on paper, so it is not a toast that fades:
+     a dialog says so and offers to try again, with the same payments — which
+     exist only on this screen until a document records them (cash typed into
+     the drawer is gone with a refresh). Most failures are a provider that did
+     not answer in time, and the second try is the whole fix. Declining leaves
+     the ticket warning about any card charge (see `unclaimed`). True when the
+     document was issued. */
+  const billTaken = useCallback(async (parts: PaymentPart[], total: number): Promise<boolean> => {
+    for (;;) {
+      try {
+        await billFor(parts, total);
+        return true;
+      } catch (e) {
+        if (parts.length === 0) {
+          dispatch(showError(e));
+          return false;
+        }
+        const again = await confirm({
+          titleKey: 'ticket.receiptFailed.title',
+          bodyKey: 'ticket.receiptFailed.body',
+          values: { amount: money(paymentsTotal(parts)), error: e instanceof Error ? e.message : String(e) },
+        });
+        if (!again) {
+          void refreshUnclaimed();
+          return false;
+        }
+      }
+    }
+  }, [billFor, confirm, dispatch, refreshUnclaimed]);
 
   /* Money arriving against a חשבונית מס, as one קבלה for the visit.
 
@@ -567,8 +613,84 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   }, [dispatch, gather, run, save, ticket.k]);
 
   const collect = useCallback(async () => {
-    if (invoice) await collectOn(invoice, owed);
-  }, [collectOn, invoice, owed]);
+    if (!invoice) return;
+    /* A card already charged for this visit and on no document is part of
+       this receipt before anything else is taken — the drawer then asks only
+       for the rest. (The server refuses a receipt that leaves it off.) */
+    let charges: CardPayment[];
+    try {
+      charges = await unclaimedCardPayments(ticket.k);
+    } catch (e) {
+      dispatch(showError(e));
+      return;
+    }
+    await collectOn(invoice, owed, charges.map(chargedPart));
+  }, [collectOn, dispatch, invoice, owed, ticket.k]);
+
+  /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
+   *  the copy names the amount and says the document cannot be deleted. */
+  const issue = useCallback(async (docType: BillDocType = 'invoice_receipt') => {
+    /* The server builds the document from the stored row, so unsaved works
+       would be missing from a real tax document. Refuse rather than silently
+       invoice a version of the ticket nobody is looking at. */
+    if (dirty) {
+      dispatch(showErrorKey('ticket.saveBeforeInvoice'));
+      return;
+    }
+
+    /* A card already charged for this visit with no document — the receipt
+       failed when the money was taken. That charge IS the payment, so the
+       document follows the money, not the button: the card's own receipt when
+       it covered the bill, and otherwise the drawer asks how the rest was paid
+       (or leaves it owed), exactly as it would have at the counter. */
+    let charges: CardPayment[];
+    try {
+      charges = await unclaimedCardPayments(ticket.k);
+    } catch (e) {
+      dispatch(showError(e));
+      return;
+    }
+    const total = round2(totals.total);
+    if (charges.length > 0) {
+      const parts = charges.map(chargedPart);
+      const covered = paymentsTotal(parts) >= round2(total - settledWithin(parts));
+      if (covered) {
+        const ok = await openModal('issueInvoice', { amount: money(total), customer: ticket.customer, docType: 'invoice_receipt' });
+        if (!ok) return;
+      } else {
+        // The drawer is the confirmation here, as it is when closing.
+        await gather(parts, total, '');
+      }
+      const paid = paymentsTotal(parts) >= round2(total - settledWithin(parts));
+      setBusy(true);
+      try {
+        const done = await billTaken(parts, total);
+        /* The ticket follows the money it now has documents for. */
+        if (done && paid !== draft.paid) {
+          await save({ st: paid ? 'paid' : 'done', paid, payMethod: mainPayMethod(parts) ?? undefined });
+        }
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    const ok = await openModal('issueInvoice', {
+      amount: money(totals.total),
+      customer: ticket.customer,
+      docType,
+    });
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      await issueNow(docType);
+    } catch (e) {
+      dispatch(showError(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [billTaken, dirty, dispatch, draft.paid, gather, issueNow, openModal, save, ticket.customer, ticket.k, totals.total]);
 
   /* Give the customer money back — all of what is left on the invoice, or part
      of it. The dialog opens on the whole remaining amount, because that is the
@@ -712,6 +834,15 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         return;
       }
 
+      /* A card was already charged for this visit and its receipt failed. The
+         customer has paid (some or all of it); closing again would offer to
+         take the money a second time. The document is what is missing, so
+         that is what this does — see issue(). */
+      if (!invoice && unclaimed.length > 0) {
+        await issue('invoice_receipt');
+        return;
+      }
+
       /* Unsaved works are saved BEFORE the drawer opens. A card is charged
          from inside it, and the server prices that charge from the stored
          ticket — never from the screen — so a work added and not yet saved
@@ -809,45 +940,18 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         return;
       }
 
+      /* The close is recorded; the document follows (see billFor). If it
+         fails, money that was taken is never left at a toast: billTaken says
+         so and offers to try again with the same payments. Never reported as
+         taken in the books until a document says so. */
       setBusy(true);
       try {
-        if (paid) {
-          /* One method is the ordinary document, read off the saved ticket as
-             it always was; several are sent, and the server checks they add up
-             to the bill. */
-          /* A single card with installments or card details is sent as a part
-             too: the ticket's columns name a method and a reference, not a
-             payment plan or an approval number. */
-          await issueNow('invoice_receipt', parts.length > 1 || parts.some(partHasCardDetails) ? parts : undefined);
-        } else {
-          const bill = await issueNow('tax_invoice');
-          if (partPaid) {
-            /* If this fails the bill stands with all of it owed, which is what
-               the screen will then say — the button offers to collect it again.
-               Never reported as taken: a receipt nobody issued is not a payment
-               the books know about. */
-            const { receipt, owed: stillOwed } = await run('busy.collecting', () => collectInvoice(bill.id, parts));
-            setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
-            dispatch(showSuccess('collect.donePartial', {
-              docnum: receipt.docnum,
-              amount: money(receipt.total),
-              left: money(stillOwed),
-            }));
-          }
-        }
-      } catch (e) {
-        /* The close is recorded and the document is not. Both facts are already
-           on screen — the drawer's own message stands, and this says what is
-           missing and implies the button that fixes it. Never swallowed: a
-           closed ticket whose document nobody was told about is the one outcome
-           worse than either message, and it reads the same whether the money
-           arrived or was left on the customer's account. */
-        dispatch(showError(e));
+        await billTaken(parts, total);
       } finally {
         setBusy(false);
       }
     },
-    [collect, dirty, dispatch, draft, gather, invoice, issueNow, openCloseDrawer, owed, run, save, t, ticket.k, totals.total],
+    [billTaken, collect, dirty, dispatch, draft, gather, invoice, issue, openCloseDrawer, owed, save, t, totals.total, unclaimed.length],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button
@@ -878,6 +982,8 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     /** What is still owed on an open חשבונית מס. Zero for every other document,
      *  which is what decides whether a payment can be recorded at all. */
     owed,
+    /** Cards charged for this ticket that no document records yet. */
+    unclaimed,
     patch, setWorks, assign, save, discard, issue, collect, credit, cancel, close, leave,
     setBoardHidden,
     /* מחיר סופי לכרטיס — admins only, enforced in the database. */

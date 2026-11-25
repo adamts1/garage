@@ -38,6 +38,8 @@
     "connect-payments:prod": "node --env-file=.env.production.local scripts/connect-payments.mjs",
     "resolve-card-refund": "node --env-file=.env.local scripts/resolve-card-refund.mjs",
     "resolve-card-refund:prod": "node --env-file=.env.production.local scripts/resolve-card-refund.mjs",
+    "link-card-payment": "node --env-file=.env.local scripts/link-card-payment.mjs",
+    "link-card-payment:prod": "node --env-file=.env.production.local scripts/link-card-payment.mjs",
     "bookkeeping-software": "node --env-file=.env.local scripts/set-bookkeeping-software.mjs",
     "bookkeeping-software:prod": "node --env-file=.env.production.local scripts/set-bookkeeping-software.mjs",
     "resend-key": "zsh scripts/set-resend-key.sh poksqsdklnhaumozriqd",

@@ -1,5 +1,5 @@
 import {
-  assignableWorkers, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
+  assignableWorkers, cardPaymentReference, COLUMNS, isCancelled, money, VAT, waMessage, waNumber, workerChip,
   type Ticket, type TicketPhoto, type Worker, type WorkerMap,
 } from '@garage/shared';
 import { Fragment, useState, type CSSProperties } from 'react';
@@ -509,6 +509,19 @@ export default function TicketPage({
                 closed while the drawer was issuing nothing and settling the
                 ticket anyway; disabling on `settled` alone would leave those
                 with a debt at the provider and no way in the app to collect it. */}
+            {/* Money a card already gave for this visit with no document behind
+                it — the receipt failed when it was taken. Said until a document
+                records it: the next receipt for this ticket includes it, and the
+                one thing nobody should do is charge the card again. */}
+            {page.unclaimed.length > 0 && (
+              <div className="tp-warn" role="alert">
+                {t('ticket.unclaimedCharge', {
+                  amount: money(page.unclaimed.reduce((s, p) => s + p.amount, 0)),
+                  card: page.unclaimed.map(cardPaymentReference).filter(Boolean).join(', ') || '-',
+                })}
+              </div>
+            )}
+
             <button
               className="btn primary block"
               onClick={() => void page.close()}

@@ -210,6 +210,43 @@ async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: str
 
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
+/** Money a card already gave for this ticket that no document records: paid
+ *  through the clearing provider, on no document yet. A charge whose receipt
+ *  failed — the customer has paid, and the next receipt for this ticket must
+ *  say so, with that card's details, or the books and the clearing statement
+ *  part ways (and the card can no longer be refunded through the system).
+ *  Only this garage's, only this ticket's: never another customer's card. */
+// deno-lint-ignore no-explicit-any
+async function unclaimedCards(admin: any, garageId: string, ticketId: string | null): Promise<PaymentPart[]> {
+  if (!ticketId) return [];
+  const { data, error } = await admin.from('card_payments').select('id, amount')
+    .eq('garage_id', garageId).eq('ticket_id', ticketId)
+    .eq('status', 'paid').eq('purpose', 'charge').is('invoice_id', null)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(`could not read the ticket's card payments: ${error.message}`);
+  return (data ?? []).map((r: { id: string; amount: number }) =>
+    ({ method: 'card', amount: round2(Number(r.amount)), cardPaymentId: r.id }));
+}
+
+/** The refusal when a request would leave such a charge off its receipt. The
+ *  screen reads `code` and `charged`, and asks the advisor for the rest. */
+const unclaimedRefusal = (charged: PaymentPart[], message: string) => json({
+  error: message,
+  code: 'card_unclaimed',
+  charged: charged.map((p) => ({ card_payment_id: p.cardPaymentId, amount: p.amount })),
+}, 409);
+
+/** A request's own payments, checked against the ticket's unclaimed charges.
+ *  A list that names payments must name every one of them — a receipt for
+ *  cash while a card charge for the same visit sits on no document is the
+ *  customer paying twice. A message to refuse with, or null. */
+function missingCharges(payments: PaymentPart[], charged: PaymentPart[]): string | null {
+  const listed = new Set(payments.map((p) => p.cardPaymentId).filter(Boolean));
+  const missing = charged.filter((c) => !listed.has(c.cardPaymentId));
+  if (!missing.length) return null;
+  return `card charges on this ticket are on no document yet (${missing.map((c) => c.amount).join(', ')}) — they belong on this receipt`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -361,8 +398,15 @@ Deno.serve(async (req) => {
       /* Several methods at one visit, when the caller sends them. Checked here,
          before anything is reserved; their sum is checked against the bill once
          the bill is priced, below. */
-      const payments = readPayments(body.payments);
-      if (typeof payments === 'string') return json({ error: payments }, 400);
+      const read = readPayments(body.payments);
+      if (typeof read === 'string') return json({ error: read }, 400);
+      let payments: PaymentPart[] | null = read;
+      /* Cards already charged for this visit and on no document — see
+         unclaimedCards. A list must carry them all; no list is settled below,
+         once the bill is priced. */
+      const charged = await unclaimedCards(admin, ticket.garage_id, ticket.id);
+      const missing = payments && missingCharges(payments, charged);
+      if (missing) return unclaimedRefusal(charged, missing);
       const unbound = payments && await bindCards(admin, payments, ticket.garage_id, ticket.id);
       if (unbound) return json({ error: unbound }, 400);
 
@@ -404,6 +448,29 @@ Deno.serve(async (req) => {
       }
       const { items, owners, subtotal, vat, total } = priced;
       const vehicle = vehicleOf(ticket);
+
+      /* An invoice-receipt asked for without a list ("issue the receipt", the
+         button after a failed one) while cards were charged for this visit:
+         those charges ARE the payment. Exactly the bill → they become the
+         receipt's payments, with each card's details. Anything else is a
+         question only the advisor can answer — how the rest was paid, or why a
+         card took more than the bill — so it is asked, never guessed. A tax
+         invoice records no payment; the charges wait for its receipt. */
+      if (!payments && charged.length && docType === 'invoice_receipt') {
+        const cards = sumOf(charged);
+        if (cards !== total) {
+          await release('card charges do not cover the bill');
+          return unclaimedRefusal(charged, cards < total
+            ? `${cards} was charged to a card for this ticket and is on no document; the bill is ${total} — say how the other ${round2(total - cards)} was paid`
+            : `card charges for this ticket (${cards}) are more than the bill (${total}) — check them before issuing`);
+        }
+        payments = charged;
+        const unboundNow = await bindCards(admin, payments, ticket.garage_id, ticket.id);
+        if (unboundNow) {
+          await release(unboundNow);
+          return json({ error: unboundNow }, 400);
+        }
+      }
 
       /* A tax invoice records no payment, so a list of them is a mistake in the
          caller. An invoice-receipt says the bill was paid — all of it — so the
@@ -649,10 +716,25 @@ Deno.serve(async (req) => {
       /* Every payment taken at this visit, on one receipt. Their sum is the
          amount; an `amount` sent beside them must agree, or one of the two is
          wrong and nobody can say which. */
-      const payments = readPayments(body.payments);
-      if (typeof payments === 'string') return json({ error: payments }, 400);
+      const read = readPayments(body.payments);
+      if (typeof read === 'string') return json({ error: read }, 400);
+      let payments: PaymentPart[] | null = read;
       if (payments && body.amount != null && round2(Number(body.amount)) !== sumOf(payments)) {
         return json({ error: `amount ${body.amount} does not match the payments (${sumOf(payments)})` }, 400);
+      }
+      /* Cards already charged for this visit and on no document (see
+         unclaimedCards) come first: a list must carry them, and no list means
+         they are this receipt — a bare "collect" while a card has already paid
+         would otherwise record the same money a second time. */
+      const charged = await unclaimedCards(admin, inv.garage_id, inv.ticket_id);
+      if (payments) {
+        const missing = missingCharges(payments, charged);
+        if (missing) return unclaimedRefusal(charged, missing);
+      } else if (charged.length) {
+        if (body.amount != null && round2(Number(body.amount)) !== sumOf(charged)) {
+          return unclaimedRefusal(charged, `${sumOf(charged)} was charged to a card for this bill and is on no document — collect it first, then the rest`);
+        }
+        payments = charged;
       }
       const asked = payments ? sumOf(payments) : body.amount == null ? null : round2(Number(body.amount));
       const unbound = payments && await bindCards(admin, payments, inv.garage_id, inv.ticket_id);

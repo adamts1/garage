@@ -28,6 +28,10 @@ const invoicingActive = vi.fn();
 const listInvoices = vi.fn();
 const collectInvoice = vi.fn();
 
+/* Cards charged for the ticket that no document records — none, unless a
+   test says otherwise. */
+const unclaimedCardPayments = vi.fn(async (): Promise<unknown[]> => []);
+
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
   return {
@@ -43,6 +47,7 @@ vi.mock('@garage/shared', async (importActual) => {
     subscribeToTable: vi.fn(() => () => {}),
     isGarageAdmin: () => true,
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
+    unclaimedCardPayments: () => unclaimedCardPayments(),
     collectInvoice: (...a: unknown[]) => collectInvoice(...a),
     invoicingActive: () => invoicingActive(),
     /* No clearing provider: the card method records a card taken on a
@@ -550,13 +555,106 @@ describe('when no document can be issued', () => {
     expect(toasts(store)).toContain('ticket.paidNoInvoicing');
   });
 
-  it('keeps the payment message when the provider refuses', async () => {
+  it('keeps the payment message when the provider refuses, and says so in a dialog', async () => {
     issueInvoice.mockRejectedValue(new Error('iCount rejected the document'));
     const store = await renderPage();
     await closeAndCharge('מזומן');
 
-    // The payment stands on its own; the error is about the document only.
+    // The payment stands on its own; the failure is about the document only,
+    // and it is not a toast that fades — money was taken with nothing on paper.
     expect(toasts(store)).toContain('ticket.paymentTaken');
-    expect(toasts(store).length).toBeGreaterThan(1);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('התשלום התקבל, הקבלה לא הופקה')).toBeTruthy();
+    expect(within(dialog).getByText(/iCount rejected the document/)).toBeTruthy();
+  });
+
+  /* The payments exist only on this screen until a document records them —
+     cash typed into the drawer is gone with a refresh. So the retry sends the
+     very same ones. */
+  it('tries again with the same payments when asked', async () => {
+    issueInvoice.mockRejectedValueOnce(new Error('timeout')).mockResolvedValue(invoice());
+    await renderPage();
+    await closeAndCharge('מזומן');
+
+    await act(async () => { within(screen.getByRole('dialog')).getByText('אישור').click(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(issueInvoice).toHaveBeenCalledTimes(2);
+    expect(issueInvoice.mock.calls[1]).toEqual(issueInvoice.mock.calls[0]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('stops when the advisor declines, issuing nothing more', async () => {
+    issueInvoice.mockRejectedValue(new Error('timeout'));
+    await renderPage();
+    await closeAndCharge('מזומן');
+
+    await act(async () => { within(screen.getByRole('dialog')).getByText('ביטול').click(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(issueInvoice).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+/* A card the clearing provider charged for this visit, with no document behind
+   it: the receipt failed when the money was taken (staging, GAR-150). The next
+   document for the ticket must carry that charge — with the card's details,
+   and tied to it so it can be refunded — and nothing may charge it again. */
+describe('a card charged with no document', () => {
+  const charge = (amount: number) => ({
+    id: 'cp1', invoiceId: null, ticketId: 't1', amount, installments: 1, status: 'paid',
+    approvalNumber: '5310153', cardLast4: '0772', cardBrand: 'מאסטרקארד', cardType: 'mastercard', message: null,
+  });
+  const cardPart = (amount: number) => ({
+    method: 'card', amount, reference: '****0772 · אישור 5310153',
+    cardPaymentId: 'cp1', cardLast4: '0772', cardType: 'mastercard', approvalNumber: '5310153',
+  });
+
+  afterEach(() => { unclaimedCardPayments.mockReset().mockResolvedValue([]); });
+
+  it('warns on the ticket while it has no document', async () => {
+    unclaimedCardPayments.mockResolvedValue([charge(1180)]);
+    await renderPage();
+
+    expect(screen.getByRole('alert').textContent).toMatch(/חויב בכרטיס.*1,180.*0772/);
+  });
+
+  it('issues the receipt with that charge when it covers the bill — no drawer, no new charge', async () => {
+    unclaimedCardPayments.mockResolvedValue([charge(1180)]);
+    await renderPage();
+
+    await act(async () => { screen.getByText('גבה תשלום').click(); });
+    expect(document.querySelectorAll('aside').length).toBe(1);   // the page's own, no drawer
+    await act(async () => { screen.getByText('הפק חשבונית').click(); });
+
+    expect(issueInvoice).toHaveBeenCalledTimes(1);
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'invoice_receipt', [cardPart(1180)]);
+  });
+
+  it('asks only for the rest when the charge was part of the bill', async () => {
+    unclaimedCardPayments.mockResolvedValue([charge(500)]);
+    await renderPage();
+
+    await act(async () => { screen.getByText('גבה תשלום').click(); });
+    await payRound('מזומן');
+
+    expect(issueInvoice).toHaveBeenCalledTimes(1);
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'invoice_receipt', [
+      cardPart(500),
+      expect.objectContaining({ method: 'cash', amount: 680 }),
+    ]);
+  });
+
+  it('leaves the rest owed when the drawer is closed: the bill, and a receipt for the card', async () => {
+    unclaimedCardPayments.mockResolvedValue([charge(500)]);
+    issueInvoice.mockResolvedValue(invoice({ docType: 'tax_invoice' }));
+    await renderPage();
+
+    await act(async () => { screen.getByText('גבה תשלום').click(); });
+    await finish();   // the drawer opened on the rest, with the card already counted
+
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'tax_invoice');
+    expect(collectInvoice).toHaveBeenCalledWith('inv1', [cardPart(500)]);
   });
 });
