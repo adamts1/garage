@@ -1,0 +1,50 @@
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted-d);
+}
+
+.value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--navy);
+  text-align: right;
+}
+
+.sub {
+  font-size: 14px;
+  color: var(--muted-d);
+}
+
+.ok .value {
+  color: var(--ok);
+}
+
+.attention {
+  background: #fdf6e7;
+  border-color: #efd7a6;
+}
+
+.attention .label,
+.attention .value {
+  color: var(--warn);
+}

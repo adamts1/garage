@@ -3,6 +3,7 @@ import type { EnvironmentInfo, Migration, MigrationStatus } from '../../api/type
 import { EnvSection, LoadState, Note, Pill, type PillTone } from '../../components';
 import { useLoad } from '../../hooks/useLoad';
 import { formatVersion } from '../../lib/format';
+import { MigrationPush } from './MigrationPush';
 import styles from './MigrationsPage.module.css';
 
 export function MigrationsPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
@@ -10,7 +11,6 @@ export function MigrationsPage({ envs }: { envs: readonly EnvironmentInfo[] }) {
   return (
     <>
       <Note>{t('console.migrations.intro')}</Note>
-      <pre className={styles.cmd}>git fetch origin</pre>
       {envs.map((env) => <EnvMigrations key={env.id} env={env} />)}
     </>
   );
@@ -67,6 +67,7 @@ function EnvMigrations({ env }: { env: EnvironmentInfo }) {
               items={s.pendingFromTree}
             />
             <MigrationGroup tone="danger" label="console.migrations.unknown" items={s.unknown} />
+            <MigrationPush env={env} onPushed={load.reload} />
           </>
         )}
       </LoadState>

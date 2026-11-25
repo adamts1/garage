@@ -1,0 +1,44 @@
+.track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease;
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.track:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.on {
+  background: var(--ok);
+}
+
+/* As drawn: off at the left, on slides right. Physical sides, so the page's
+   direction does not flip it. */
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(13, 19, 33, 0.25);
+  transition: left 0.15s ease;
+}
+
+.on .knob {
+  left: 23px;
+}

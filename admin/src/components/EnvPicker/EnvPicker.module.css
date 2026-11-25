@@ -1,0 +1,49 @@
+.group {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted-d);
+  cursor: pointer;
+}
+
+.option:hover {
+  color: var(--text);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.selected {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(13, 19, 33, 0.1);
+}
+
+.count {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary-d);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}

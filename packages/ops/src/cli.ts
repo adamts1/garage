@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -139,6 +139,17 @@ function linkedWorkdir(ref: string): Promise<string> {
     // A failed link is not cached: the next request tries again.
     work.catch(() => linked.delete(ref));
   }
+  return work;
+}
+
+/** A fresh workdir linked to `ref` — a copy of the cached link, so whatever
+ *  the caller puts in it (a migrations folder to push) is its alone. The
+ *  caller removes it. */
+export async function freshLinkedWorkdir(ref: string): Promise<string> {
+  const linkedDir = await linkedWorkdir(ref);
+  const work = mkdtempSync(join(tmpdir(), `ops-push-${ref}-`));
+  mkdirSync(join(work, 'supabase'), { recursive: true });
+  cpSync(join(linkedDir, 'supabase', '.temp'), join(work, 'supabase', '.temp'), { recursive: true });
   return work;
 }
 

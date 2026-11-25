@@ -1,14 +1,3 @@
-.cmd {
-  direction: ltr;
-  text-align: left;
-  background: var(--ink);
-  color: var(--sand);
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin: 4px 0 18px;
-  font-size: 13px;
-}
-
 .group {
   margin: 10px 0;
 }
@@ -31,4 +20,43 @@
 
 .muted {
   color: var(--muted-d);
+}
+
+.push {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.pushBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.sources {
+  display: flex;
+  gap: 14px;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.plan {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.planHead {
+  margin: 0 0 6px;
+  font-weight: 600;
 }
