@@ -22,6 +22,7 @@ import {
   onboardGarage,
   OnboardingInvalid,
   serviceClient,
+  setInvoicingActive,
 } from '../../packages/ops/src/index.ts';
 import type { EnvId, OnboardingInput } from '../../packages/ops/src/types.ts';
 
@@ -94,6 +95,18 @@ const GET: Record<string, Get> = {
 };
 
 const POST: Record<string, Post> = {
+  /* Invoicing on or off for one garage. Production needs its name typed —
+     checked here, not only on the page: switching a live garage off means
+     its next receipts are not issued. */
+  '/api/invoicing': async (body) => {
+    const b = body as { env?: unknown; garageId?: unknown; active?: unknown; confirmEnv?: unknown };
+    if (!isEnvId(b?.env)) throw new HttpError(400, 'unknown environment');
+    if (typeof b.garageId !== 'string' || !/^[0-9a-f-]{36}$/i.test(b.garageId)) throw new HttpError(400, 'garageId is not an id');
+    if (typeof b.active !== 'boolean') throw new HttpError(400, 'active must be true or false');
+    if (b.env === 'production' && b.confirmEnv !== 'production') throw new HttpError(400, 'type "production" to confirm');
+    const { db } = await serviceClient(b.env);
+    return setInvoicingActive(db, b.garageId, b.active);
+  },
   /* The body is checked again in ops (validateOnboarding) whatever the page
      did — the page's own checks are for the person typing, not a guard. */
   '/api/onboard': async (body) => {

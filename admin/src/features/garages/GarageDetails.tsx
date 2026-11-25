@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import type { GarageOverview, Letterhead } from '../../api/types';
+import type { EnvId, GarageOverview, Letterhead } from '../../api/types';
 import { CopyValue, KeyValue } from '../../components';
 import { formatDate } from '../../lib/format';
 import styles from './GaragesPage.module.css';
+import { InvoicingSwitch } from './InvoicingSwitch';
 import { providerName } from './serviceStatus';
 
 const LETTERHEAD_LABELS: Record<keyof Letterhead, string> = {
@@ -17,7 +18,7 @@ const LETTERHEAD_LABELS: Record<keyof Letterhead, string> = {
 };
 
 /** Everything known about one garage, under its row. */
-export function GarageDetails({ garage: g }: { garage: GarageOverview }) {
+export function GarageDetails({ garage: g, env, onChanged }: { garage: GarageOverview; env: EnvId; onChanged: () => void }) {
   const { t } = useTranslation();
   const yesNo = (v: boolean) => t(v ? 'console.common.yes' : 'console.common.no');
 
@@ -65,6 +66,9 @@ export function GarageDetails({ garage: g }: { garage: GarageOverview }) {
             ]}
           />
         ) : <p className={styles.muted}>{t('console.services.notConnected')}</p>}
+        {g.invoicing && (
+          <InvoicingSwitch env={env} garageId={g.id} active={g.invoicing.active} onChanged={onChanged} />
+        )}
 
         <h4>{t('console.services.payments')}</h4>
         {g.payments ? (

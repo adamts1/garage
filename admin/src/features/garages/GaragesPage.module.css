@@ -36,3 +36,15 @@
 .muted {
   color: var(--muted-d);
 }
+
+.switch {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.switchButtons {
+  display: flex;
+  gap: 8px;
+}

@@ -42,6 +42,8 @@
     "link-card-payment:prod": "node --env-file=.env.production.local scripts/link-card-payment.mjs",
     "bookkeeping-software": "node --env-file=.env.local scripts/set-bookkeeping-software.mjs",
     "bookkeeping-software:prod": "node --env-file=.env.production.local scripts/set-bookkeeping-software.mjs",
+    "invoicing": "node --env-file=.env.local scripts/invoicing-switch.mjs",
+    "invoicing:prod": "node --env-file=.env.production.local scripts/invoicing-switch.mjs",
     "resend-key": "zsh scripts/set-resend-key.sh poksqsdklnhaumozriqd",
     "resend-key:prod": "zsh scripts/set-resend-key.sh farpgkljbmlaeiocrore"
   },

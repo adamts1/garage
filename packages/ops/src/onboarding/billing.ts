@@ -108,3 +108,31 @@ export async function setBookkeeping(
     accountantEmail: after.accountant_email == null ? null : String(after.accountant_email),
   };
 }
+
+/** Turns a garage's invoicing on or off, keeping its provider and credentials.
+ *
+ *  Off is what the app reads as "no invoicing connected": closing a ticket
+ *  issues no document, and issue-invoice refuses ("invoicing is not configured
+ *  for this garage"). Used to pause a garage, and on staging to make a
+ *  document fail on purpose — a card charged with no receipt behind it.
+ *  Read back after writing, like every write here. */
+export async function setInvoicingActive(
+  db: SupabaseClient,
+  garageId: string,
+  active: boolean,
+): Promise<{ active: boolean }> {
+  const { data: billing, error: bErr } = await db
+    .from('garage_billing').select('garage_id').eq('garage_id', garageId).maybeSingle();
+  if (bErr) throw new Error(`Could not read garage_billing: ${bErr.message}`);
+  if (!billing) throw new Error('The garage is not connected to an accounting provider — there is nothing to switch.');
+
+  const { error } = await db.from('garage_billing')
+    .update({ active, updated_at: new Date().toISOString() }).eq('garage_id', garageId);
+  if (error) throw new Error(`Could not write: ${error.message}`);
+
+  const { data: after, error: aErr } = await db
+    .from('garage_billing').select('active').eq('garage_id', garageId).single();
+  if (aErr) throw new Error(`Written, but could not read it back: ${aErr.message}`);
+  if (Boolean(after.active) !== active) throw new Error(`Read back active=${String(after.active)} — expected ${String(active)}.`);
+  return { active };
+}

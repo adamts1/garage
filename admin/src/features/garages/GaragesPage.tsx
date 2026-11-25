@@ -62,7 +62,7 @@ function EnvGarages({ env }: { env: EnvironmentInfo }) {
               emptyKey="console.garages.empty"
               onRowClick={(g) => setOpen(open === g.id ? null : g.id)}
               isRowSelected={(g) => g.id === open}
-              renderExpanded={(g) => (g.id === open ? <GarageDetails garage={g} /> : null)}
+              renderExpanded={(g) => (g.id === open ? <GarageDetails garage={g} env={env.id} onChanged={load.reload} /> : null)}
             />
           </>
         )}
