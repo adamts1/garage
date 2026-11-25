@@ -20,11 +20,13 @@ import {
   migrationStatus,
   mobileStatus,
   onboardGarage,
+  planMigrationPush,
+  pushMigrations,
   OnboardingInvalid,
   serviceClient,
   setInvoicingActive,
 } from '../../packages/ops/src/index.ts';
-import type { EnvId, OnboardingInput } from '../../packages/ops/src/types.ts';
+import type { EnvId, MigrationSource, OnboardingInput } from '../../packages/ops/src/types.ts';
 
 /** A request is served only when it was addressed to this machine by name.
  *  The server binds 127.0.0.1, which keeps the network out; this keeps out a
@@ -72,6 +74,8 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+const isSource = (v: unknown): v is MigrationSource => v === 'branch' || v === 'tree';
+
 const envParam = (q: URLSearchParams): EnvId => {
   const id = q.get('env');
   if (!isEnvId(id)) throw new HttpError(400, `unknown environment: ${String(id)}`);
@@ -85,6 +89,12 @@ const GET: Record<string, Get> = {
   '/api/environments': async () => ENVIRONMENTS.map(environmentInfo),
   '/api/garages': async (q) => listGarages(envParam(q)),
   '/api/migrations': async (q) => migrationStatus(envParam(q)),
+  /* A dry run: reads only, but slow (it links and connects). */
+  '/api/migrations/plan': async (q) => {
+    const source = q.get('source');
+    if (!isSource(source)) throw new HttpError(400, 'source must be branch or tree');
+    return planMigrationPush(envParam(q), source);
+  },
   '/api/functions': async () => functionsOverview(),
   '/api/functions/drift': async (q) => {
     const env = environment(envParam(q));
@@ -106,6 +116,19 @@ const POST: Record<string, Post> = {
     if (b.env === 'production' && b.confirmEnv !== 'production') throw new HttpError(400, 'type "production" to confirm');
     const { db } = await serviceClient(b.env);
     return setInvoicingActive(db, b.garageId, b.active);
+  },
+  /* Applies exactly the files the page showed — ops re-runs the dry run and
+     refuses if the list moved. Production needs its name typed, and ops
+     accepts only origin/main as its source. */
+  '/api/migrations/push': async (body) => {
+    const b = body as { env?: unknown; source?: unknown; files?: unknown; confirmEnv?: unknown };
+    if (!isEnvId(b?.env)) throw new HttpError(400, 'unknown environment');
+    if (!isSource(b.source)) throw new HttpError(400, 'source must be branch or tree');
+    if (!Array.isArray(b.files) || !b.files.every((f) => typeof f === 'string' && /^\d{14}_[\w.-]+\.sql$/.test(f))) {
+      throw new HttpError(400, 'files must be migration file names');
+    }
+    if (b.env === 'production' && b.confirmEnv !== 'production') throw new HttpError(400, 'type "production" to confirm');
+    return pushMigrations(b.env, b.source, b.files as string[]);
   },
   /* The body is checked again in ops (validateOnboarding) whatever the page
      did — the page's own checks are for the person typing, not a guard. */

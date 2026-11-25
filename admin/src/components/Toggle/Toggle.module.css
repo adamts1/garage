@@ -1,0 +1,43 @@
+.track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s ease;
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.track:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.on {
+  background: var(--ok);
+}
+
+/* RTL: off sits at the start (right), on slides to the end (left). */
+.knob {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(13, 19, 33, 0.25);
+  transition: inset-inline-start 0.15s ease;
+}
+
+.on .knob {
+  inset-inline-start: 21px;
+}

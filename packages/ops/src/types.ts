@@ -117,6 +117,32 @@ export interface MigrationStatus {
   unknown: Migration[];
 }
 
+/** Where the migrations pushed to an environment come from. 'branch' is the
+ *  branch it deploys from (origin/main, origin/staging); 'tree' is the files
+ *  you have now — never offered for production. */
+export type MigrationSource = 'branch' | 'tree';
+
+/** What `db push --dry-run` said it would apply. */
+export interface MigrationPushPlan {
+  env: EnvId;
+  source: MigrationSource;
+  /** The git ref, or "working tree". */
+  sourceLabel: string;
+  /** File names (20261125090000_name.sql), in the order they would run. */
+  files: string[];
+  /** Some of them are older than the last applied migration, so the push
+   *  needs --include-all. Not wrong in itself (a stacked PR merged late), but
+   *  worth seeing before saying yes. */
+  outOfOrder: boolean;
+}
+
+export interface MigrationPushResult {
+  env: EnvId;
+  applied: string[];
+  /** What the CLI printed, for when something needs reading. */
+  log: string;
+}
+
 /* ---------- functions ---------- */
 
 export interface DeployedFunction {
