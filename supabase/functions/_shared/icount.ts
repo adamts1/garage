@@ -79,13 +79,19 @@ const DOCTYPE = {
    collected against an invoice that may be months old, so this stays until
    those rows are gone. Nothing writes them any more.
 
-   'bit' has no iCount key of its own and lands in cash, which is what an
-   instant transfer settles as in the till. */
-function paymentBlock(method: string | null, total: number): Record<string, unknown> {
+   'bit' goes out as iCount's payment app, brand "bit", so the receipt says
+   ביט rather than מזומן. That is the generic `payments` map, keyed by method
+   code (payment_method/get_list: `payment_app`, brands bit/paybox/kashcash/
+   other, one per document; read 2026-11-26 off a live account). An account
+   that refuses it gets the document again with Bit as cash — what it was
+   before — rather than no document; see `issueWith`. `apps: false` is that
+   second try. */
+function paymentBlock(method: string | null, total: number, apps = true): Record<string, unknown> {
   const m = (method ?? '').trim().toLowerCase();
   if (m === 'card' || m.includes('אשראי') || m.includes('credit')) return { cc: { sum: total } };
   if (m === 'bank_transfer' || m.includes('העברה') || m.includes('transfer')) return { banktransfer: { sum: total } };
   if (m === 'cheque' || m.includes('צ׳ק') || m.includes("צ'ק") || m.includes('check')) return { cheques: [{ sum: total }] };
+  if (apps && (m === 'bit' || m.includes('ביט'))) return { payments: { payment_app: { sum: total, card_brand: 'bit' } } };
   return { cash: { sum: total } };
 }
 
@@ -108,8 +114,9 @@ function ccDetails(p: PaymentPart): Record<string, unknown> {
    cheque, because a cheque is a piece of paper and iCount lists them. The
    block still balances the document, since the parts add up to it — the
    function checks that before anything reaches here. */
-function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
+function paymentsBlock(parts: PaymentPart[], apps = true): Record<string, unknown> {
   const sums: Record<'cash' | 'cc' | 'banktransfer', number> = { cash: 0, cc: 0, banktransfer: 0 };
+  let app = 0;
   /* A card's details — installments, last four, brand, approval number — are
      printed only when ONE card paid: iCount's cc block is a single object and
      is summed here, so two cards have no single set of details to show.
@@ -118,8 +125,10 @@ function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
   const details = cards.length === 1 ? ccDetails(cards[0]) : {};
   const cheques: Array<{ sum: number }> = [];
   for (const p of parts) {
-    const one = paymentBlock(p.method, p.amount);
+    const one = paymentBlock(p.method, p.amount, apps);
     if ('cheques' in one) cheques.push({ sum: p.amount });
+    // One payment app per document (allow_multiple 0): Bit parts add up.
+    else if ('payments' in one) app = Math.round((app + p.amount) * 100) / 100;
     else for (const key of Object.keys(sums) as Array<keyof typeof sums>) {
       if (key in one) sums[key] = Math.round((sums[key] + p.amount) * 100) / 100;
     }
@@ -128,13 +137,67 @@ function paymentsBlock(parts: PaymentPart[]): Record<string, unknown> {
   for (const [key, sum] of Object.entries(sums)) if (sum > 0) block[key] = { sum };
   if (block.cc) block.cc = { ...(block.cc as object), ...details };
   if (cheques.length > 0) block.cheques = cheques;
+  if (app > 0) block.payments = { payment_app: { sum: app, card_brand: 'bit' } };
   return block;
 }
 
 /** The payment block for a document: every part when there are several, else
  *  the single method. */
-const payBlock = (payments: PaymentPart[] | undefined, method: string | null, total: number) =>
-  payments && payments.length > 0 ? paymentsBlock(payments) : paymentBlock(method, total);
+const payBlock = (payments: PaymentPart[] | undefined, method: string | null, total: number, apps = true) =>
+  payments && payments.length > 0 ? paymentsBlock(payments, apps) : paymentBlock(method, total, apps);
+
+/** Does this document's money include a payment app? Then a refusal may be
+ *  the account not taking one, and there is a second form to try. */
+const usesApp = (payments: PaymentPart[] | undefined, method: string | null, total: number) =>
+  'payments' in payBlock(payments, method, total);
+
+/* Two cards on one document: iCount's cc block is ONE card, so they are summed
+   there with no details (above), and each card is listed in the remark
+   instead — amount, brand, last four, approval, installments — so the
+   customer and the bookkeeper can still tell them apart. Nothing for one card:
+   its details are in the cc block itself. */
+function cardsNote(payments: PaymentPart[] | undefined): string | undefined {
+  const cards = (payments ?? []).filter((p) => 'cc' in paymentBlock(p.method, p.amount));
+  if (cards.length < 2) return undefined;
+  return 'פירוט אשראי: ' + cards.map((p) => [
+    `₪${p.amount.toFixed(2)}`,
+    p.cardType ? ICOUNT_CARD_TYPE[p.cardType] ?? p.cardType : null,
+    p.cardLast4 ? `המסתיים ב-${p.cardLast4}` : null,
+    (p.installments ?? 1) > 1 ? `${p.installments} תשלומים` : null,
+    p.approvalNumber ? `אישור ${p.approvalNumber}` : null,
+  ].filter(Boolean).join(' ')).join(' | ');
+}
+
+/* Creates a document, falling back form by form on iCount's definite "no"
+   (NotIssued: nothing was created, so another try cannot duplicate it): first
+   as asked; then without the remark, which is never worth a document; then
+   with Bit as cash, for an account that takes no payment app. Anything else —
+   a timeout, a dropped line — is thrown at once: the document may exist. */
+async function issueWith(
+  create: (note: string | undefined, apps: boolean) => Promise<Record<string, unknown>>,
+  note: string | undefined,
+  app: boolean,
+): Promise<Record<string, unknown>> {
+  const forms: Array<[string | undefined, boolean]> = [[note, true]];
+  if (note) forms.push([undefined, true]);
+  if (app) {
+    if (note) forms.push([note, false]);
+    forms.push([undefined, false]);
+  }
+  let last: unknown;
+  for (const [n, a] of forms) {
+    try {
+      return await create(n, a);
+    } catch (e) {
+      if (!(e instanceof NotIssued)) throw e;
+      last = e;
+      console.warn(`iCount refused the document (${n ? 'with' : 'without'} remark, ${a ? 'payment app' : 'Bit as cash'}): ${e.message}`);
+    }
+  }
+  throw last;
+}
+
+const joinNotes = (...notes: Array<string | undefined>) => notes.filter(Boolean).join(' · ') || undefined;
 
 /** doc/create returns only docnum + doc_url; doc/info has doc_id + allocation. */
 async function docInfo(c: IcountCreds, doctype: string, docnum: string) {
@@ -179,7 +242,8 @@ export const icountAdapter: InvoiceProvider = {
   async issue(input: IssueInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
     const doctype = DOCTYPE[input.docType];
-    const create = (note?: string) => call(c, 'doc/create', {
+    const paying = input.docType === 'invoice_receipt';
+    const create = (note: string | undefined, apps: boolean) => call(c, 'doc/create', {
       ...(note ? { [NOTE_FIELD]: note } : {}),
       doctype,
       client_name: input.customer.name,
@@ -192,18 +256,15 @@ export const icountAdapter: InvoiceProvider = {
          rejected without one; a plain invoice describes money not yet received,
          and claiming it was paid is the one thing that would make the document
          a lie. */
-      ...(input.docType === 'invoice_receipt' ? payBlock(input.payments, input.payMethod, input.total) : {}),
+      ...(paying ? payBlock(input.payments, input.payMethod, input.total, apps) : {}),
       email_to_client: false,
       send_email: false,
     });
-    let data;
-    try {
-      data = await create(input.note);
-    } catch (e) {
-      if (!(input.note && e instanceof NotIssued)) throw e;
-      console.warn(`iCount refused the document with a remark; issuing without it: ${e.message}`);
-      data = await create();
-    }
+    const data = await issueWith(
+      create,
+      joinNotes(input.note, paying ? cardsNote(input.payments) : undefined),
+      paying && usesApp(input.payments, input.payMethod, input.total),
+    );
     const docnum = String(data.docnum);
     const info = await docInfo(c, doctype, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
@@ -224,7 +285,8 @@ export const icountAdapter: InvoiceProvider = {
      which is the balance it was refusing on. */
   async collect(input: CollectInput): Promise<IssuedDoc> {
     const c = readCreds(input.credentials);
-    const data = await call(c, 'doc/create', {
+    const create = (note: string | undefined, apps: boolean) => call(c, 'doc/create', {
+      ...(note ? { [NOTE_FIELD]: note } : {}),
       doctype: DOCTYPE.receipt,
       client_name: input.customer.name,
       client_idno: input.customer.idNo || undefined,
@@ -235,11 +297,12 @@ export const icountAdapter: InvoiceProvider = {
         unitprice: input.amount,
         quantity: 1,
       }],
-      ...payBlock(input.payments, input.payMethod, input.amount),
+      ...payBlock(input.payments, input.payMethod, input.amount, apps),
       based_on: [{ doctype: DOCTYPE.tax_invoice, docnum: input.basedOnDocnum }],
       email_to_client: false,
       send_email: false,
     });
+    const data = await issueWith(create, cardsNote(input.payments), usesApp(input.payments, input.payMethod, input.amount));
     const docnum = String(data.docnum);
     const info = await docInfo(c, DOCTYPE.receipt, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };

@@ -1,5 +1,5 @@
 import {
-  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, chargedPart, unclaimedCardPayments, type CardPayment, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
+  finalPriceExcess, netFromGross, VAT as VAT_RATE, addressLabel, cardRefundable, chargedPart, unclaimedCardPayments, pendingPayments, setPendingPayments, type CardPayment, collectInvoice, createCustomer, creditInvoice, creditableRemainder, customerHoldingIdNumber, customersWithPhone, getCustomer, idNumberConflict, invoicingActive, mainPayMethod, partHasCardDetails, paymentsTotal, isBill, isGarageAdmin, isUsablePhone, issueInvoice, listInvoices, listTicketPhotos, money, normalizeIdNumber, owedRemainder, phoneDigits, subscribeToInvoices, subscribeToTable, subscribeToTicketPhotos, updateCustomer, type BillDocType, type CardRefundDone, type Customer, type Invoice, type PaymentPart, type PhoneConflict, type Ticket, type TicketPhoto, type TicketWork,
 } from '@garage/shared';
 import {
   useCallback, useEffect, useMemo, useRef, useState,
@@ -152,8 +152,15 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
      put on the next receipt. Read again whenever the documents change, since
      a receipt is what takes a charge off this list. */
   const [unclaimed, setUnclaimed] = useState<CardPayment[]>([]);
+  /* The rest of that money: cash, Bit, cheques taken in the same visit, which
+     have no row of their own — see pendingPayments(). Same warning, same fate:
+     the next document carries them. */
+  const [pending, setPending] = useState<PaymentPart[]>([]);
   const refreshUnclaimed = useCallback(
-    () => unclaimedCardPayments(ticket.k).then(setUnclaimed).catch(() => {}),
+    () => Promise.all([
+      unclaimedCardPayments(ticket.k).then(setUnclaimed).catch(() => {}),
+      pendingPayments(ticket.k).then(setPending),
+    ]),
     [ticket.k],
   );
 
@@ -166,6 +173,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       void unclaimedCardPayments(ticket.k)
         .then((u) => { if (alive) setUnclaimed(u); })
         .catch(() => {});
+      void pendingPayments(ticket.k).then((p) => { if (alive) setPending(p); });
     };
     load();
     const off = subscribeToInvoices(load);
@@ -629,7 +637,10 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       dispatch(showError(e));
       return;
     }
-    await collectOn(invoice, owed, charges.map(chargedPart));
+    /* The same for money taken without a card and on no receipt yet — a
+       receipt that failed after the tax invoice was issued. */
+    const waiting = await pendingPayments(ticket.k);
+    await collectOn(invoice, owed, [...charges.map(chargedPart), ...waiting]);
   }, [collectOn, dispatch, invoice, owed, ticket.k]);
 
   /** Issuing by hand is guarded by its own dialog, not by the generic confirm:
@@ -655,9 +666,13 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
       dispatch(showError(e));
       return;
     }
+    /* …and the cash, Bit or cheques taken beside it, which have no row of
+       their own: without them a visit paid in full came out as a tax invoice
+       and a receipt for the card alone. */
+    const waiting = await pendingPayments(ticket.k);
     const total = round2(totals.total);
-    if (charges.length > 0) {
-      const parts = charges.map(chargedPart);
+    if (charges.length > 0 || waiting.length > 0) {
+      const parts = [...charges.map(chargedPart), ...waiting];
       const covered = paymentsTotal(parts) >= round2(total - settledWithin(parts));
       if (covered) {
         const ok = await openModal('issueInvoice', { amount: money(total), customer: ticket.customer, docType: 'invoice_receipt' });
@@ -843,7 +858,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
          customer has paid (some or all of it); closing again would offer to
          take the money a second time. The document is what is missing, so
          that is what this does — see issue(). */
-      if (!invoice && unclaimed.length > 0) {
+      if (!invoice && (unclaimed.length > 0 || pending.length > 0)) {
         await issue('invoice_receipt');
         return;
       }
@@ -954,6 +969,15 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
          taken in the books until a document says so. */
       setBusy(true);
       try {
+        /* Written down BEFORE the document is asked for. A card charge has its
+           own row; cash and the rest existed only on this screen, so a receipt
+           that failed and was issued later carried the card alone — a tax
+           invoice and a receipt for 600 of a 1,000 visit paid in full. Cleared
+           by the server once a document records them. Best effort: failing to
+           write it costs only the retry's memory, as before. */
+        if (parts.some((p) => !p.cardPaymentId)) {
+          await setPendingPayments(ticket.k, parts).catch(() => {});
+        }
         await billTaken(parts, total);
       } finally {
         setBusy(false);
@@ -962,7 +986,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
         void refreshUnclaimed();
       }
     },
-    [billTaken, collect, dirty, dispatch, draft, gather, invoice, issue, openCloseDrawer, owed, refreshUnclaimed, save, t, totals.total, unclaimed.length],
+    [billTaken, collect, dirty, dispatch, draft, gather, invoice, issue, openCloseDrawer, owed, refreshUnclaimed, pending.length, save, t, ticket.k, totals.total, unclaimed.length],
   );
 
   /* Leaving with something unsaved asks first — but not here. The close button
@@ -995,6 +1019,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
     owed,
     /** Cards charged for this ticket that no document records yet. */
     unclaimed,
+    pending,
     patch, setWorks, assign, save, discard, issue, collect, credit, cancel, close, leave,
     setBoardHidden,
     /* מחיר סופי לכרטיס — admins only, enforced in the database. */

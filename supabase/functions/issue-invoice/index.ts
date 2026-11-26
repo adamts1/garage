@@ -208,6 +208,17 @@ async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: str
   if (error) console.error(`card payments ${ids.join(',')} not linked to ${invoiceId}`, error.message);
 }
 
+/** The visit's money now has a document: what the ticket held while waiting
+ *  for one (tickets.pending_payments — cash, Bit, cheques) is cleared, so the
+ *  next receipt does not count it again. Cleared here rather than only by the
+ *  app, because the app may never hear back. Logged, never thrown. */
+// deno-lint-ignore no-explicit-any
+async function clearPending(admin: any, ticketId: string | null) {
+  if (!ticketId) return;
+  const { error } = await admin.from('tickets').update({ pending_payments: null }).eq('id', ticketId);
+  if (error) console.error(`pending payments on ticket ${ticketId} not cleared`, error.message);
+}
+
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
 
 /** Money a card already gave for this ticket that no document records: paid
@@ -550,6 +561,8 @@ Deno.serve(async (req) => {
       await stored(inserted?.id ?? null, iErr?.message);
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
       await linkCards(admin, payments, inserted.id);
+      // A חשבונית מס records no money; its receipt (collect) clears them.
+      if (docType === 'invoice_receipt') await clearPending(admin, ticket.id);
       return json({ invoice: inserted });
     }
 
@@ -819,6 +832,7 @@ Deno.serve(async (req) => {
       await stored(receipt?.id ?? null, nErr?.message);
       if (nErr) return json({ error: `receipt issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
       await linkCards(admin, payments, receipt.id);
+      await clearPending(admin, inv.ticket_id);
 
       return json({ receipt, collected: requested, owed: round2(owed - requested) });
     }

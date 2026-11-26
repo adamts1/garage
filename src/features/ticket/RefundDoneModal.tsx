@@ -59,6 +59,14 @@ export default function RefundDoneModal({ props, onClose }: ModalComponentProps)
             {t(cancel ? 'refundDone.lineCancel' : 'refundDone.line')}
             {docnum && ` · ${t('refundDone.noteIssued', { docnum, total: money(noteTotal) })}`}
           </p>
+          {/* A visit paid partly in cash and credited in full: only the card's
+              share can go back to the card. The rest is the advisor's to hand
+              over, and the screen that celebrates the refund must say so. */}
+          {noteTotal - amount > 0.005 && (
+            <p className={styles.docLine} role="alert">
+              {t('refundDone.restOtherwise', { amount: money(amount), rest: money(Math.round((noteTotal - amount) * 100) / 100) })}
+            </p>
+          )}
 
           <dl className={`kv ${styles.approval}`}>
             <dt>{t('refundDone.kind')}</dt>
