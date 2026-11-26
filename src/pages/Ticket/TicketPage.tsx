@@ -528,6 +528,15 @@ export default function TicketPage({
                 })}
               </div>
             )}
+            {/* The same for cash, Bit, cheques: taken, on no document yet. */}
+            {page.pending.length > 0 && (
+              <div className="tp-warn" role="alert">
+                {t('ticket.unrecordedPayment', {
+                  amount: money(page.pending.reduce((s, p) => s + p.amount, 0)),
+                  methods: [...new Set(page.pending.map((p) => payMethodLabel(t, p.method) ?? '-'))].join(' + '),
+                })}
+              </div>
+            )}
 
             <button
               className="btn primary block"

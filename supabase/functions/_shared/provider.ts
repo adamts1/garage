@@ -95,6 +95,8 @@ export interface CollectInput {
   amount: number;
   /** The tax invoice being settled. */
   basedOnDocnum: string;
+  /** Free text for the document's remark — the work order it belongs to. */
+  note?: string;
 }
 
 export interface CancelInput {

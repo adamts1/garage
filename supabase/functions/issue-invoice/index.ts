@@ -50,7 +50,12 @@ interface VehicleSnapshot {
   closed_at: string | null;
 }
 
-const blank = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+/* "-" is how a ticket says "not given" (no car name, say), and it printed on
+   the document as "· - ·". It is no value, like the empty string. */
+const blank = (v: unknown) => {
+  const s = v == null ? '' : String(v).trim();
+  return s === '' || s === '-' || s === '—' ? null : s;
+};
 
 function vehicleOf(t: { plate?: unknown; car?: unknown; km?: unknown; created_at?: unknown; closed_at?: unknown }): VehicleSnapshot | null {
   const v: VehicleSnapshot = {
@@ -80,6 +85,17 @@ function vehicleNote(v: VehicleSnapshot | null): string | undefined {
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : undefined;
 }
+
+/** The work order a document belongs to, as the garage reads it on the
+ *  ticket ("כרטיס עבודה #183" for GAR-183). Nothing for a counter sale, which
+ *  has no ticket. */
+function ticketNote(key: string | null | undefined): string | undefined {
+  if (!key) return undefined;
+  return `כרטיס עבודה: ${key.split('-')[1] ?? key}`;
+}
+
+/** Remark pieces on one line; nothing when there are none. */
+const joinNote = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(' · ') || undefined;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -206,6 +222,17 @@ async function linkCards(admin: any, parts: PaymentPart[] | null, invoiceId: str
   if (!ids.length || !invoiceId) return;
   const { error } = await admin.from('card_payments').update({ invoice_id: invoiceId }).in('id', ids).is('invoice_id', null);
   if (error) console.error(`card payments ${ids.join(',')} not linked to ${invoiceId}`, error.message);
+}
+
+/** The visit's money now has a document: what the ticket held while waiting
+ *  for one (tickets.pending_payments — cash, Bit, cheques) is cleared, so the
+ *  next receipt does not count it again. Cleared here rather than only by the
+ *  app, because the app may never hear back. Logged, never thrown. */
+// deno-lint-ignore no-explicit-any
+async function clearPending(admin: any, ticketId: string | null) {
+  if (!ticketId) return;
+  const { error } = await admin.from('tickets').update({ pending_payments: null }).eq('id', ticketId);
+  if (error) console.error(`pending payments on ticket ${ticketId} not cleared`, error.message);
 }
 
 const sumOf = (parts: PaymentPart[]) => round2(parts.reduce((s, p) => s + p.amount, 0));
@@ -510,7 +537,7 @@ Deno.serve(async (req) => {
         payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
         payments: payments ?? undefined,
         total,
-        note: vehicleNote(vehicle),
+        note: joinNote(ticketNote(ticket.key), vehicleNote(vehicle)),
       }));
       if (doc instanceof Response) return doc;
 
@@ -550,6 +577,8 @@ Deno.serve(async (req) => {
       await stored(inserted?.id ?? null, iErr?.message);
       if (iErr) return json({ error: `invoice issued at provider (docnum ${doc.docnum}) but not stored: ${iErr.message}` }, 500);
       await linkCards(admin, payments, inserted.id);
+      // A חשבונית מס records no money; its receipt (collect) clears them.
+      if (docType === 'invoice_receipt') await clearPending(admin, ticket.id);
       return json({ invoice: inserted });
     }
 
@@ -784,6 +813,7 @@ Deno.serve(async (req) => {
         payments: payments ?? undefined,
         amount: requested,
         basedOnDocnum: inv.provider_docnum,
+        note: ticketNote(inv.ticket_key),
       }));
       if (doc instanceof Response) return doc;
 
@@ -819,6 +849,7 @@ Deno.serve(async (req) => {
       await stored(receipt?.id ?? null, nErr?.message);
       if (nErr) return json({ error: `receipt issued at provider (docnum ${doc.docnum}) but not stored: ${nErr.message}` }, 500);
       await linkCards(admin, payments, receipt.id);
+      await clearPending(admin, inv.ticket_id);
 
       return json({ receipt, collected: requested, owed: round2(owed - requested) });
     }
@@ -1070,7 +1101,7 @@ Deno.serve(async (req) => {
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
             description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
-        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
+        : [{ description: reason ? `זיכוי - ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
 
       const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({
@@ -1079,7 +1110,7 @@ Deno.serve(async (req) => {
         items,
         reason,
         basedOnDocnum: inv.provider_docnum,
-        note: refundInfo ? refundNote(refundInfo) : undefined,
+        note: joinNote(ticketNote(inv.ticket_key), refundInfo ? refundNote(refundInfo) : undefined),
       }));
       if (doc instanceof Response) return doc;
 
