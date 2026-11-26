@@ -238,6 +238,36 @@ export const chargedPart = (p: CardPayment): PaymentPart => {
   };
 };
 
+/** The other half of what a visit took with no document yet: cash, Bit, a
+ *  cheque, a transfer — every part that is not a provider charge (those are
+ *  card_payments rows, above). Written when the ticket closes, cleared once a
+ *  document records them, so a receipt that failed is issued again with ALL of
+ *  the visit's money on it rather than the card alone. Never throws: an empty
+ *  list is the old behaviour, not a broken page. */
+export const pendingPayments = async (ticketKey: string): Promise<PaymentPart[]> => {
+  let data, error;
+  try {
+    ({ data, error } = await getClient().from('tickets')
+      .select('pending_payments').eq('key', ticketKey).maybeSingle());
+  } catch {
+    return [];
+  }
+  if (error || !Array.isArray(data?.pending_payments)) return [];
+  return (data.pending_payments as PaymentPart[])
+    .filter((p) => p && typeof p.method === 'string' && Number(p.amount) > 0)
+    .map((p) => ({ ...p, amount: Number(p.amount) }));
+};
+
+/** Records (or, with none, clears) the parts pendingPayments() reads. Provider
+ *  charges are left out: card_payments already holds them, and a copy here
+ *  would put the same card on the receipt twice. */
+export const setPendingPayments = async (ticketKey: string, parts: readonly PaymentPart[]): Promise<void> => {
+  const kept = parts.filter((p) => !p.cardPaymentId);
+  const { error } = await getClient().from('tickets')
+    .update({ pending_payments: kept.length > 0 ? kept : null }).eq('key', ticketKey);
+  if (error) throw error;
+};
+
 /** The terminal check (admin). `credentials`: one call that only asks the
  *  provider whether it accepts the garage's credentials. `card`: a card check
  *  (nothing charged) sent to the terminal — show the page, then verify the

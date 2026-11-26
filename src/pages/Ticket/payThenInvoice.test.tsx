@@ -31,6 +31,10 @@ const collectInvoice = vi.fn();
 /* Cards charged for the ticket that no document records — none, unless a
    test says otherwise. */
 const unclaimedCardPayments = vi.fn(async (): Promise<unknown[]> => []);
+/* Cash, Bit, cheques taken for the visit and on no document — none, unless a
+   test says otherwise. And what the close writes there. */
+const pendingPayments = vi.fn(async (): Promise<unknown[]> => []);
+const setPendingPayments = vi.fn(async () => {});
 
 vi.mock('@garage/shared', async (importActual) => {
   const actual = await importActual<typeof import('@garage/shared')>();
@@ -48,6 +52,8 @@ vi.mock('@garage/shared', async (importActual) => {
     isGarageAdmin: () => true,
     issueInvoice: (...a: unknown[]) => issueInvoice(...a),
     unclaimedCardPayments: () => unclaimedCardPayments(),
+    pendingPayments: () => pendingPayments(),
+    setPendingPayments: (...a: unknown[]) => setPendingPayments(...(a as [])),
     collectInvoice: (...a: unknown[]) => collectInvoice(...a),
     invoicingActive: () => invoicingActive(),
     /* No clearing provider: the card method records a card taken on a
@@ -611,7 +617,45 @@ describe('a card charged with no document', () => {
     cardPaymentId: 'cp1', cardLast4: '0772', cardType: 'mastercard', approvalNumber: '5310153',
   });
 
-  afterEach(() => { unclaimedCardPayments.mockReset().mockResolvedValue([]); });
+  afterEach(() => {
+    unclaimedCardPayments.mockReset().mockResolvedValue([]);
+    pendingPayments.mockReset().mockResolvedValue([]);
+    setPendingPayments.mockClear();
+  });
+
+  /* Staging, GAR-183 (test 5.2): cash 400 + card 600, the receipt failed, and
+     the retry issued a tax invoice and a receipt for the card alone. The cash
+     lived only on the screen. It is written down when the ticket closes, and
+     the retry puts it back on the one document. */
+  it('writes the cash part down before the document is asked for', async () => {
+    issueInvoice.mockRejectedValueOnce(new Error('timeout'));
+    await renderPage();
+
+    await closeAndCharge('מזומן');
+
+    expect(setPendingPayments).toHaveBeenCalledWith('GAR-7', [
+      expect.objectContaining({ method: 'cash', amount: 1180 }),
+    ]);
+  });
+
+  it('issues one invoice-receipt for the card AND the cash after a failure', async () => {
+    unclaimedCardPayments.mockResolvedValue([charge(600)]);
+    pendingPayments.mockResolvedValue([{ method: 'cash', amount: 580 }]);
+    await renderPage();
+
+    expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/התקבלו מהלקוח.*580.*מזומן/);
+
+    await act(async () => { screen.getByText('גבה תשלום').click(); });
+    expect(document.querySelectorAll('aside').length).toBe(1);   // all of it is known: no drawer
+    await act(async () => { screen.getByText('הפק חשבונית').click(); });
+
+    expect(issueInvoice).toHaveBeenCalledTimes(1);
+    expect(issueInvoice).toHaveBeenCalledWith('GAR-7', 'invoice_receipt', [
+      cardPart(600),
+      { method: 'cash', amount: 580 },
+    ]);
+    expect(collectInvoice).not.toHaveBeenCalled();
+  });
 
   it('warns on the ticket while it has no document', async () => {
     unclaimedCardPayments.mockResolvedValue([charge(1180)]);
