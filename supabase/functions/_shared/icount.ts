@@ -302,7 +302,7 @@ export const icountAdapter: InvoiceProvider = {
       email_to_client: false,
       send_email: false,
     });
-    const data = await issueWith(create, cardsNote(input.payments), usesApp(input.payments, input.payMethod, input.amount));
+    const data = await issueWith(create, joinNotes(input.note, cardsNote(input.payments)), usesApp(input.payments, input.payMethod, input.amount));
     const docnum = String(data.docnum);
     const info = await docInfo(c, DOCTYPE.receipt, docnum).catch(() => null);
     return { docnum, docId: info?.docId ?? null, pdfUrl: data.doc_url ?? null, allocationNumber: info?.allocationNumber ?? null, issueDate: info?.issueDate ?? null };
