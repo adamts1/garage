@@ -14,6 +14,7 @@ import {
   showError, showErrorKey, showInfo, showSuccess, useAppDispatch, useBusyRun, useConfirm,
   useModalResult, usePrompt,
 } from '../../store';
+import { ticketDocuments } from './ticketDocuments';
 
 
 export interface UseTicketPageOptions {
@@ -174,6 +175,10 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   /** The receipt the panel is about. Derived rather than stored, so a credit
    *  note landing over realtime updates the figures beside it too. */
   const invoice = useMemo(() => currentInvoice(ticketDocs, ticket.k), [ticketDocs, ticket.k]);
+
+  /** Every tax document on the ticket: the one the panel leads with, and the
+   *  rest listed under it. See ticketDocuments. */
+  const documents = useMemo(() => ticketDocuments(ticketDocs, invoice), [ticketDocs, invoice]);
 
   /** What is left to hand back on it: nothing once it is fully credited, which
    *  is also when the button stops being offered. */
@@ -979,7 +984,7 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
   }, [dirty]);
 
   return {
-    draft, photos, invoice, busy, totals, works, dirty,
+    draft, photos, invoice, documents, busy, totals, works, dirty,
     customer, idNumber, setIdNumber, idConflict, switchCustomer,
     /* What is still creditable, and whether this user may. Both are needed to
        decide the button: a fully credited invoice offers nothing to anybody,
