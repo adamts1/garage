@@ -752,7 +752,10 @@ export function useTicketPage({ ticket, saveTicket, onBack, onCancelTicket, onDi
 
     setBusy(true);
     try {
-      const { cancelled, note, refunded } = await run('busy.crediting',
+      /* A refund waits on the card company, often 20 seconds and sometimes
+         most of a minute (staging, 2026-11-26: Pelecard 2-43 s, iCount ~1 s).
+         The wait says so, rather than blaming the invoice for it. */
+      const { cancelled, note, refunded } = await run(answer.refundToCard ? 'busy.refundingCard' : 'busy.crediting',
         () => creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard));
       setTicketDocs((await listInvoices()).filter((i) => i.ticketKey === ticket.k));
 

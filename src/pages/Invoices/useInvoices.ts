@@ -3,7 +3,7 @@ import {
   subscribeToInvoices, type CardRefundDone, type Invoice,
 } from '@garage/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { showError, showSuccess, useAppDispatch, useModalResult } from '../../store';
+import { showError, showSuccess, useAppDispatch, useBusyRun, useModalResult } from '../../store';
 import { headline, netTotal } from './invoiceTotals';
 
 export type StatusFilter = 'all' | Invoice['status'];
@@ -11,6 +11,7 @@ export type DocTypeFilter = 'all' | Invoice['docType'];
 
 export function useInvoices() {
   const dispatch = useAppDispatch();
+  const run = useBusyRun();
   const openModal = useModalResult<{ amount: number; reason: string; refundToCard: boolean } | null>();
   const openCounterSale = useModalResult<Invoice>();
   const openRefundDoneModal = useModalResult<boolean>();
@@ -83,7 +84,9 @@ export function useInvoices() {
 
       setCrediting(true);
       try {
-        const { cancelled, note, refunded } = await creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard);
+        // The same wait message as the ticket page (see useTicketPage's credit).
+        const { cancelled, note, refunded } = await run(answer.refundToCard ? 'busy.refundingCard' : 'busy.crediting',
+          () => creditInvoice(invoice.id, answer.amount, answer.reason, answer.refundToCard));
         setInvoices(await listInvoices());
         /* Money that went back to a card gets the same confirmation a payment
            does — the approval is what the customer will ask for. */
@@ -101,7 +104,7 @@ export function useInvoices() {
         setCrediting(false);
       }
     },
-    [dispatch, invoices, openModal, openRefundDone],
+    [dispatch, invoices, openModal, openRefundDone, run],
   );
 
   const shown = useMemo(() => {

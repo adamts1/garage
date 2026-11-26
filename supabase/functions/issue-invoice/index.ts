@@ -81,6 +81,17 @@ function vehicleNote(v: VehicleSnapshot | null): string | undefined {
   return parts.length ? parts.join(' · ') : undefined;
 }
 
+/** The work order a document belongs to, as the garage reads it on the
+ *  ticket ("כרטיס עבודה #183" for GAR-183). Nothing for a counter sale, which
+ *  has no ticket. */
+function ticketNote(key: string | null | undefined): string | undefined {
+  if (!key) return undefined;
+  return `כרטיס עבודה: ${key.split('-')[1] ?? key}`;
+}
+
+/** Remark pieces on one line; nothing when there are none. */
+const joinNote = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(' · ') || undefined;
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /* Mirrors PAY_METHODS in packages/shared/src/payment.ts. Deno does not import
@@ -521,7 +532,7 @@ Deno.serve(async (req) => {
         payMethod: docType === 'invoice_receipt' ? ticket.pay_method : null,
         payments: payments ?? undefined,
         total,
-        note: vehicleNote(vehicle),
+        note: joinNote(ticketNote(ticket.key), vehicleNote(vehicle)),
       }));
       if (doc instanceof Response) return doc;
 
@@ -797,6 +808,7 @@ Deno.serve(async (req) => {
         payments: payments ?? undefined,
         amount: requested,
         basedOnDocnum: inv.provider_docnum,
+        note: ticketNote(inv.ticket_key),
       }));
       if (doc instanceof Response) return doc;
 
@@ -1084,7 +1096,7 @@ Deno.serve(async (req) => {
         ? (inv.lines as Array<{ desc: string; qty: number; unit_price: number; kind?: string }>).map((l) => ({
             description: l.desc, unitprice: l.unit_price, quantity: l.qty, indent: l.kind === 'part',
           }))
-        : [{ description: reason ? `זיכוי — ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
+        : [{ description: reason ? `זיכוי - ${reason}` : 'זיכוי', unitprice: subtotal, quantity: 1, unitpriceIncVat: total }];
 
       const refundInfo = refund ? await refundDetails(refund) : null;
       const doc = await provide(() => adapter.cancel({
@@ -1093,7 +1105,7 @@ Deno.serve(async (req) => {
         items,
         reason,
         basedOnDocnum: inv.provider_docnum,
-        note: refundInfo ? refundNote(refundInfo) : undefined,
+        note: joinNote(ticketNote(inv.ticket_key), refundInfo ? refundNote(refundInfo) : undefined),
       }));
       if (doc instanceof Response) return doc;
 
