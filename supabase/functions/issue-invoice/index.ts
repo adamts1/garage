@@ -50,7 +50,12 @@ interface VehicleSnapshot {
   closed_at: string | null;
 }
 
-const blank = (v: unknown) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+/* "-" is how a ticket says "not given" (no car name, say), and it printed on
+   the document as "· - ·". It is no value, like the empty string. */
+const blank = (v: unknown) => {
+  const s = v == null ? '' : String(v).trim();
+  return s === '' || s === '-' || s === '—' ? null : s;
+};
 
 function vehicleOf(t: { plate?: unknown; car?: unknown; km?: unknown; created_at?: unknown; closed_at?: unknown }): VehicleSnapshot | null {
   const v: VehicleSnapshot = {
